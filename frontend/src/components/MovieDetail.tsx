@@ -456,11 +456,37 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted 
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-gray-500 dark:text-gray-400">TMDB ID:</span>
-                <p className="text-gray-900 dark:text-white">{movie.tmdb_id || 'Not scraped'}</p>
+                <p className="text-gray-900 dark:text-white">
+                  {movie.tmdb_id ? (
+                    <a
+                      href={`https://www.themoviedb.org/movie/${movie.tmdb_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary-600 dark:text-primary-400 hover:underline"
+                    >
+                      {movie.tmdb_id}
+                    </a>
+                  ) : (
+                    'Not scraped'
+                  )}
+                </p>
               </div>
               <div>
                 <span className="text-gray-500 dark:text-gray-400">IMDB ID:</span>
-                <p className="text-gray-900 dark:text-white">{movie.imdb_id || 'Not scraped'}</p>
+                <p className="text-gray-900 dark:text-white">
+                  {movie.imdb_id ? (
+                    <a
+                      href={`https://www.imdb.com/title/${movie.imdb_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary-600 dark:text-primary-400 hover:underline"
+                    >
+                      {movie.imdb_id}
+                    </a>
+                  ) : (
+                    'Not scraped'
+                  )}
+                </p>
               </div>
             </div>
           </div>

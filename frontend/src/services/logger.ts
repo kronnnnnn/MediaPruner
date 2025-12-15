@@ -285,9 +285,45 @@ export function logPagination(page: number, totalPages: number, component?: stri
 }
 
 /**
- * Log an error
+ * Log an error with enhanced details including stack trace
  */
 export function logError(error: string, component?: string, metadata?: Record<string, unknown>): void {
+  // Try to extract stack trace if metadata contains an error object
+  const enhancedMetadata = { ...metadata }
+  
+  // If metadata contains an error object, extract useful information
+  if (metadata?.error) {
+    const err = metadata.error as any
+    if (err instanceof Error) {
+      enhancedMetadata.errorName = err.name
+      enhancedMetadata.errorMessage = err.message
+      enhancedMetadata.stack = err.stack
+    } else if (typeof err === 'object') {
+      // Handle axios or API errors
+      if (err.response) {
+        enhancedMetadata.statusCode = err.response.status
+        enhancedMetadata.statusText = err.response.statusText
+        enhancedMetadata.responseData = err.response.data
+        enhancedMetadata.url = err.config?.url
+        enhancedMetadata.method = err.config?.method
+      }
+      if (err.stack) {
+        enhancedMetadata.stack = err.stack
+      }
+      // Capture any other error properties
+      enhancedMetadata.errorDetails = JSON.stringify(err, null, 2).substring(0, 1000)
+    }
+  }
+  
+  // Capture current stack trace if not already present
+  if (!enhancedMetadata.stack) {
+    try {
+      throw new Error('Stack trace')
+    } catch (e: any) {
+      enhancedMetadata.stack = e.stack
+    }
+  }
+  
   queueLog({
     level: 'ERROR',
     category: 'error',
@@ -295,7 +331,7 @@ export function logError(error: string, component?: string, metadata?: Record<st
     details: error,
     component,
     page: getCurrentPage(),
-    metadata,
+    metadata: enhancedMetadata,
   })
 }
 

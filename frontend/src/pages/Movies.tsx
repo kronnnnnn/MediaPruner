@@ -166,7 +166,7 @@ export default function Movies() {
     }
   }, [filters])
 
-  const { data, isLoading } = useQuery({
+  const { data, isPending: isLoading } = useQuery({
     queryKey: ['movies', page, pageSize, sortBy, sortOrder, searchQuery],
     queryFn: () => moviesApi.getMovies({
       page,
@@ -175,6 +175,7 @@ export default function Movies() {
       sort_order: sortOrder,
       search: searchQuery || undefined,
     }).then(res => res.data),
+    placeholderData: (previousData) => previousData,
   })
 
   const refreshMutation = useMutation({
@@ -197,7 +198,10 @@ export default function Movies() {
       }
     },
     onError: (error: any) => {
-      logger.error('Refresh library failed', 'Movies', { error: error?.response?.data?.detail || error?.message })
+      logger.error('Refresh library failed', 'Movies', { 
+        error,
+        errorMessage: error?.response?.data?.detail || error?.message 
+      })
       showMessage('Refresh Failed', error?.response?.data?.detail || 'Failed to refresh library', 'error')
     }
   })
@@ -215,7 +219,10 @@ export default function Movies() {
       )
     },
     onError: (error: any) => {
-      logger.error('Analyze movies failed', 'Movies', { error: error?.response?.data?.detail || error?.message })
+      logger.error('Analyze movies failed', 'Movies', { 
+        error,
+        errorMessage: error?.response?.data?.detail || error?.message 
+      })
       showMessage('Analysis Failed', error?.response?.data?.detail || 'Failed to analyze movies', 'error')
     }
   })
@@ -233,7 +240,10 @@ export default function Movies() {
       )
     },
     onError: (error: any) => {
-      logger.error('Metadata refresh failed', 'Movies', { error: error?.response?.data?.detail || error?.message })
+      logger.error('Metadata refresh failed', 'Movies', { 
+        error,
+        errorMessage: error?.response?.data?.detail || error?.message 
+      })
       showMessage('Metadata Refresh Failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
     }
   })
@@ -251,7 +261,10 @@ export default function Movies() {
       )
     },
     onError: (error: any) => {
-      logger.error('OMDb fetch failed', 'Movies', { error: error?.response?.data?.detail || error?.message })
+      logger.error('OMDb fetch failed', 'Movies', { 
+        error,
+        errorMessage: error?.response?.data?.detail || error?.message 
+      })
       showMessage('OMDb Fetch Failed', error?.response?.data?.detail || 'Failed to fetch OMDb ratings', 'error')
     }
   })
@@ -272,7 +285,10 @@ export default function Movies() {
       )
     },
     onError: (error: any) => {
-      logger.error('Delete movies failed', 'Movies', { error: error?.response?.data?.detail || error?.message })
+      logger.error('Delete movies failed', 'Movies', { 
+        error,
+        errorMessage: error?.response?.data?.detail || error?.message 
+      })
       showMessage('Delete Failed', error?.response?.data?.detail || 'Failed to delete movies', 'error')
     }
   })
@@ -293,7 +309,11 @@ export default function Movies() {
       )
     },
     onError: (error: any) => {
-      logger.error('Rename files failed', 'Movies', { error: error?.response?.data?.detail || error?.message })
+      logger.error('Rename files failed', 'Movies', { 
+        error,
+        count: selectedIds.size,
+        errorMessage: error?.response?.data?.detail || error?.message 
+      })
       showMessage('Rename Failed', error?.response?.data?.detail || 'Failed to rename files', 'error')
     }
   })
@@ -314,7 +334,11 @@ export default function Movies() {
       )
     },
     onError: (error: any) => {
-      logger.error('Rename folders failed', 'Movies', { error: error?.response?.data?.detail || error?.message })
+      logger.error('Rename folders failed', 'Movies', { 
+        error,
+        count: selectedIds.size,
+        errorMessage: error?.response?.data?.detail || error?.message 
+      })
       showMessage('Rename Failed', error?.response?.data?.detail || 'Failed to rename folders', 'error')
     }
   })
@@ -355,6 +379,12 @@ export default function Movies() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
+    // Require at least 3 characters for search
+    const trimmedInput = searchInput.trim()
+    if (trimmedInput.length > 0 && trimmedInput.length < 3) {
+      showMessage('Search Too Short', 'Please enter at least 3 characters to search.', 'info')
+      return
+    }
     logger.search(searchInput, 'Movies')
     setSearchQuery(searchInput)
     setPage(1)
@@ -520,12 +550,7 @@ export default function Movies() {
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="flex flex-col gap-4 mb-4">
-        {/* Top row: Title only */}
-        <div className="flex items-center">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Movies</h1>
-        </div>
-
-        {/* Second row: Search, Sort, Filter, Status, and Action buttons */}
+        {/* Search, Sort, Filter, Status, and Action buttons */}
         <div className="flex flex-wrap items-center gap-3">
           {/* Search */}
           <form onSubmit={handleSearch} className="relative flex-1 min-w-[200px] max-w-md">
@@ -619,6 +644,14 @@ export default function Movies() {
                 </span>
               )}
             </button>
+          )}
+
+          {/* Stats - showing count */}
+          {data && (
+            <div className="ml-auto text-gray-500 dark:text-gray-400 text-sm">
+              Showing {movies.length} of {data.total} movies
+              {activeFilterCount > 0 && ` (${activeFilterCount} filter${activeFilterCount > 1 ? 's' : ''} applied)`}
+            </div>
           )}
         </div>
 
@@ -839,16 +872,6 @@ export default function Movies() {
               </div>
             </div>
           </div>
-        )}
-      </div>
-
-      {/* Stats Bar */}
-      <div className="mb-4 text-gray-500 dark:text-gray-400 text-sm">
-        {data && (
-          <span>
-            Showing {movies.length} of {data.total} movies
-            {activeFilterCount > 0 && ` (${activeFilterCount} filter${activeFilterCount > 1 ? 's' : ''} applied)`}
-          </span>
         )}
       </div>
 
