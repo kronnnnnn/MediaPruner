@@ -1,0 +1,39 @@
+{
+  "name": "mediapruner",
+  "version": "0.1.0",
+  "description": "A modern web-based media management tool",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -k -n \"BACKEND,FRONTEND\" -c \"yellow,cyan\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "C:/apps/MediaPruner/.venv/Scripts/python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend",
+    "build": "cd frontend && npm run build",
+    "build:prod": "cd frontend && npm run build && xcopy /E /I /Y dist ..\\backend\\static",
+    "start:prod": "cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000",
+    "docker:build": "docker build -t mediapruner:latest .",
+    "docker:run": "docker run -p 8000:8000 -v mediapruner_data:/app/data mediapruner:latest",
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && pip install -r requirements.txt",
+    "clean": "cd frontend && rmdir /s /q dist 2>nul & cd ../backend && rmdir /s /q static 2>nul",
+    "start": "npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YOUR_USERNAME/MediaPruner.git"
+  },
+  "keywords": [
+    "media",
+    "manager",
+    "movies",
+    "tvshows",
+    "metadata",
+    "tmdb"
+  ],
+  "author": "",
+  "license": "MIT"
+}

@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  mediapruner:
+    build: .
+    container_name: mediapruner
+    ports:
+      - "8000:8000"
+    environment:
+      - MB_DEBUG=false
+      - MB_LOG_LEVEL=INFO
+      - MB_TMDB_API_KEY=${MB_TMDB_API_KEY:-}
+      - MB_OMDB_API_KEY=${MB_OMDB_API_KEY:-}
+    volumes:
+      # Mount your media directories here (read-only for safety)
+      # - /path/to/movies:/media/movies:ro
+      # - /path/to/tvshows:/media/tvshows:ro
+      # Persist database and logs
+      - mediapruner_data:/app/data
+      - mediapruner_logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  mediapruner_data:
+  mediapruner_logs:
