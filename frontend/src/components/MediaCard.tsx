@@ -14,7 +14,7 @@ export default function MediaCard({ title, year, posterUrl, rating, mediaType = 
   
   return (
     <div 
-      className="group relative bg-white dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary-500 shadow-sm dark:shadow-none transition-shadow"
+      className="group relative bg-white dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary-500 shadow-sm dark:shadow-none transition-all"
       onClick={onClick}
     >
       <div className="aspect-[2/3] bg-gray-200 dark:bg-gray-700">
@@ -48,9 +48,9 @@ export default function MediaCard({ title, year, posterUrl, rating, mediaType = 
       )}
       
       {/* Title below (always visible) */}
-      <div className="p-2 bg-white dark:bg-gray-800">
+      <div className="p-1.5 bg-white dark:bg-gray-800">
         <h3 className="text-gray-900 dark:text-white font-medium text-xs line-clamp-1">{title}</h3>
-        {year && <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">{year}</p>}
+        {year && <p className="text-gray-500 dark:text-gray-400 text-xs">{year}</p>}
       </div>
     </div>
   )

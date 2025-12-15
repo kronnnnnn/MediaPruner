@@ -39,7 +39,7 @@ export default function MediaGrid({ items, onItemClick, isLoading, mediaType = '
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 260, // Smaller row height for compact cards
+    estimateSize: () => 240, // Adjusted row height for compact cards
     overscan: 2,
   })
   

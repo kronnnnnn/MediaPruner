@@ -6,7 +6,7 @@ import logger from '../services/logger'
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/movies', icon: Film, label: 'Movies' },
-  { path: '/tvshows', icon: Tv, label: 'TV Shows' },
+  { path: '/tvshows', icon: Tv, label: 'TV' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ]
 

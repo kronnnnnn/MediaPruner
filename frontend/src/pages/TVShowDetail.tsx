@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, RefreshCw, Edit2, FileText, Star, ChevronDown, ChevronUp,
@@ -54,6 +54,7 @@ export default function TVShowDetailPage() {
   const [muxProgress, setMuxProgress] = useState<{ current: number; total: number } | null>(null)
   const [isMuxing, setIsMuxing] = useState(false)
   const [metadataProvider, setMetadataProvider] = useState<'auto' | 'tmdb' | 'omdb'>('auto')
+  const seasonRefs = useRef<Record<number, HTMLDivElement | null>>({})
 
   // Fetch show details
   const { data: show, isLoading: showLoading, error: showError } = useQuery({
@@ -87,7 +88,11 @@ export default function TVShowDetailPage() {
       showMessage('Metadata Updated', `Show${episodeMsg} metadata has been refreshed from ${data?.source?.toUpperCase() || 'external source'}${episodeSource}.`, 'success')
     },
     onError: (error: any) => {
-      logger.error('Refresh metadata failed', 'TVShowDetail', { error: error?.response?.data?.detail })
+      logger.error('Refresh metadata failed', 'TVShowDetail', { 
+        error,
+        showId,
+        errorMessage: error?.response?.data?.detail || error?.message 
+      })
       showMessage('Refresh Failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
     }
   })
@@ -101,7 +106,11 @@ export default function TVShowDetailPage() {
       showMessage('NFO Generated', 'Show NFO file has been created.', 'success')
     },
     onError: (error: any) => {
-      logger.error('Generate NFO failed', 'TVShowDetail', { error: error?.response?.data?.detail })
+      logger.error('Generate NFO failed', 'TVShowDetail', { 
+        error,
+        showId,
+        errorMessage: error?.response?.data?.detail || error?.message 
+      })
       showMessage('NFO Failed', error?.response?.data?.detail || 'Failed to generate NFO', 'error')
     }
   })
@@ -125,7 +134,11 @@ export default function TVShowDetailPage() {
       )
     },
     onError: (error: any) => {
-      logger.error('Analyze episodes failed', 'TVShowDetail', { error: error?.response?.data?.detail })
+      logger.error('Analyze episodes failed', 'TVShowDetail', { 
+        error,
+        showId,
+        errorMessage: error?.response?.data?.detail || error?.message 
+      })
       showMessage('Analysis Failed', error?.response?.data?.detail || 'Failed to analyze episodes', 'error')
     }
   })
@@ -227,7 +240,15 @@ export default function TVShowDetailPage() {
 
   const toggleSeasonExpand = (seasonNum: number) => {
     logger.uiInteraction('season', expandedSeason === seasonNum ? 'collapse' : 'expand', 'TVShowDetail', { season: seasonNum })
+    const isExpanding = expandedSeason !== seasonNum
     setExpandedSeason(expandedSeason === seasonNum ? null : seasonNum)
+    
+    // Scroll to the top of the season when expanding
+    if (isExpanding) {
+      setTimeout(() => {
+        seasonRefs.current[seasonNum]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 100)
+    }
   }
 
   if (showLoading) {
@@ -464,7 +485,11 @@ export default function TVShowDetailPage() {
               ).length
               
               return (
-                <div key={seasonNum} className="bg-gray-700/50 rounded-lg overflow-hidden">
+                <div 
+                  key={seasonNum} 
+                  className="bg-gray-700/50 rounded-lg overflow-hidden"
+                  ref={(el) => seasonRefs.current[seasonNum] = el}
+                >
                   <button
                     onClick={() => toggleSeasonExpand(seasonNum)}
                     className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-700 transition-colors"
