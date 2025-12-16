@@ -33,10 +33,11 @@ class RenameRequest(BaseModel):
 @router.get("", response_model=MovieListResponse)
 async def get_movies(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=500),
     search: Optional[str] = None,
     genre: Optional[str] = None,
     year: Optional[int] = None,
+    watched: Optional[bool] = None,
     sort_by: str = Query("title"),
     sort_order: str = Query("asc", pattern="^(asc|desc)$"),
     db: AsyncSession = Depends(get_db)
@@ -50,7 +51,9 @@ async def get_movies(
         'tmdb_id', 'imdb_id', 'genres', 'scraped', 'media_info_scanned', 'has_nfo',
         'original_title', 'votes', 'folder_name',
         # Additional rating sources
-        'imdb_rating', 'imdb_votes', 'rotten_tomatoes_score', 'rotten_tomatoes_audience', 'metacritic_score'
+        'imdb_rating', 'imdb_votes', 'rotten_tomatoes_score', 'rotten_tomatoes_audience', 'metacritic_score',
+        # Watch history
+        'watched', 'watch_count', 'last_watched_date'
     ]
     if sort_by not in allowed_sort_columns:
         sort_by = 'title'
@@ -81,6 +84,9 @@ async def get_movies(
     if year:
         query = query.where(Movie.year == year)
     
+    if watched is not None:
+        query = query.where(Movie.watched == watched)
+    
     # Get total count
     count_query = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_query)).scalar() or 0
@@ -108,6 +114,125 @@ async def get_movies(
         page_size=page_size,
         total_pages=total_pages
     )
+
+
+@router.get("/ids/list")
+async def get_movie_ids_list(
+    search: Optional[str] = None,
+    genre: Optional[str] = None,
+    year: Optional[int] = None,
+    watched: Optional[bool] = None,
+    scraped: Optional[str] = None,
+    analyzed: Optional[str] = None,
+    hasNfo: Optional[str] = None,
+    resolution: Optional[str] = None,
+    minRating: Optional[float] = None,
+    maxRating: Optional[float] = None,
+    minImdbRating: Optional[float] = None,
+    maxImdbRating: Optional[float] = None,
+    minRottenTomatoes: Optional[int] = None,
+    maxRottenTomatoes: Optional[int] = None,
+    minMetacritic: Optional[int] = None,
+    maxMetacritic: Optional[int] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Return a list of movie ids matching the provided filters (no pagination).
+
+    This endpoint mirrors the client-side filters so the frontend can request
+    a full set of matching IDs that respects `scraped`, `analyzed`, `hasNfo`,
+    rating ranges, resolution, and other filters.
+    """
+    query = select(Movie.id)
+
+    # Basic text search
+    if search:
+        search_term = f"%{search}%"
+        from sqlalchemy import or_
+        query = query.where(
+            or_(
+                Movie.title.ilike(search_term),
+                Movie.original_title.ilike(search_term),
+                Movie.genres.ilike(search_term),
+                Movie.release_group.ilike(search_term),
+                Movie.quality.ilike(search_term),
+                Movie.video_codec.ilike(search_term),
+                Movie.audio_codec.ilike(search_term),
+                Movie.folder_name.ilike(search_term),
+                Movie.file_name.ilike(search_term),
+            )
+        )
+
+    # Straightforward filters
+    if genre:
+        query = query.where(Movie.genres.ilike(f"%{genre}%"))
+
+    if year:
+        query = query.where(Movie.year == year)
+
+    if watched is not None:
+        query = query.where(Movie.watched == watched)
+
+    # Client-only filters now supported server-side
+    if scraped == 'yes':
+        query = query.where(Movie.scraped.is_(True))
+    elif scraped == 'no':
+        query = query.where(Movie.scraped.is_(False))
+
+    if analyzed == 'yes':
+        query = query.where(Movie.media_info_scanned.is_(True))
+    elif analyzed == 'no':
+        query = query.where(Movie.media_info_scanned.is_(False))
+    elif analyzed == 'failed':
+        query = query.where(Movie.media_info_failed.is_(True))
+
+    if hasNfo == 'yes':
+        query = query.where(Movie.has_nfo.is_(True))
+    elif hasNfo == 'no':
+        query = query.where(Movie.has_nfo.is_(False))
+
+    # Resolution filters
+    if resolution:
+        r = resolution.lower()
+        if r == '4k':
+            query = query.where(
+                Movie.video_resolution.ilike('%2160%') | Movie.video_resolution.ilike('%4k%')
+            )
+        elif r == '1080p':
+            query = query.where(Movie.video_resolution.ilike('%1080%'))
+        elif r == '720p':
+            query = query.where(Movie.video_resolution.ilike('%720%'))
+        elif r == 'sd':
+            from sqlalchemy import not_, or_
+            query = query.where(~or_(
+                Movie.video_resolution.ilike('%2160%'),
+                Movie.video_resolution.ilike('%1080%'),
+                Movie.video_resolution.ilike('%720%')
+            ))
+
+    # Rating ranges
+    if minRating is not None:
+        query = query.where(Movie.rating >= minRating)
+    if maxRating is not None:
+        query = query.where(Movie.rating <= maxRating)
+
+    if minImdbRating is not None:
+        query = query.where(Movie.imdb_rating >= minImdbRating)
+    if maxImdbRating is not None:
+        query = query.where(Movie.imdb_rating <= maxImdbRating)
+
+    if minRottenTomatoes is not None:
+        query = query.where(Movie.rotten_tomatoes_score >= minRottenTomatoes)
+    if maxRottenTomatoes is not None:
+        query = query.where(Movie.rotten_tomatoes_score <= maxRottenTomatoes)
+
+    if minMetacritic is not None:
+        query = query.where(Movie.metacritic_score >= minMetacritic)
+    if maxMetacritic is not None:
+        query = query.where(Movie.metacritic_score <= maxMetacritic)
+
+    result = await db.execute(query)
+    ids = [r[0] for r in result.all()]
+    return {"ids": ids, "total": len(ids)}
 
 
 @router.get("/rename-presets")
@@ -293,17 +418,39 @@ async def scrape_movie_metadata(movie_id: int, db: AsyncSession = Depends(get_db
             search_method = f"Title without year: '{movie.title}'"
     
     if not tmdb_result:
-        # Provide helpful error message
+        # Attempt OMDb fallback if an API key is configured
+        from app.services.omdb import fetch_omdb_ratings, get_omdb_api_key_from_db
+        api_key = await get_omdb_api_key_from_db(db)
+        omdb_ratings = None
+        if api_key:
+            omdb_ratings = await fetch_omdb_ratings(db, title=movie.title, year=movie.year)
+            if omdb_ratings:
+                # Persist OMDb ratings and mark as scraped (best-effort fallback)
+                movie.imdb_rating = omdb_ratings.imdb_rating or movie.imdb_rating
+                movie.imdb_votes = omdb_ratings.imdb_votes or movie.imdb_votes
+                movie.rotten_tomatoes_score = omdb_ratings.rotten_tomatoes_score or movie.rotten_tomatoes_score
+                movie.rotten_tomatoes_audience = omdb_ratings.rotten_tomatoes_audience or movie.rotten_tomatoes_audience
+                movie.metacritic_score = omdb_ratings.metacritic_score or movie.metacritic_score
+                movie.scraped = True
+                await db.commit()
+                logger.info(f"OMDb fallback succeeded for movie_id={movie.id}: applied OMDb ratings")
+                return {
+                    "message": "Metadata updated from OMDb (fallback)",
+                    "omdb_ratings_fetched": True
+                }
+
+        # Provide helpful error message and log it for analysis
         details = [f"Filename: {movie.file_name}"]
         if movie.folder_name:
             details.append(f"Folder: {movie.folder_name}")
         details.append(f"Parsed title: {movie.title}")
         if movie.year:
             details.append(f"Year: {movie.year}")
-        
+        msg = f"Movie not found on TMDB for movie_id={movie.id}. Tried: {'; '.join(details)}"
+        logger.warning(f"Scrape failed for movie_id={movie.id}: {msg}")
         raise HTTPException(
             status_code=404, 
-            detail=f"Movie not found on TMDB. Tried: {'; '.join(details)}"
+            detail=msg
         )
     
     # Update movie with TMDB data
@@ -321,6 +468,10 @@ async def scrape_movie_metadata(movie_id: int, db: AsyncSession = Depends(get_db
     movie.rating = tmdb_result.rating
     movie.votes = tmdb_result.votes
     movie.scraped = True
+
+    # If TMDB provides no detected video codec but media file exists, log for diagnosis
+    if not movie.video_codec:
+        logger.debug(f"After TMDB update, movie_id={movie.id} has no video_codec stored; file_path={movie.file_path}")
     
     if tmdb_result.release_date:
         movie.year = tmdb_result.release_date.year
@@ -986,11 +1137,42 @@ async def analyze_movie_file(movie_id: int, db: AsyncSession = Depends(get_db)):
         )
     
     # Analyze the file
-    info = mediainfo.analyze_file(movie.file_path)
+    logger.info(f"Starting media analysis for movie_id={movie.id}, path={movie.file_path}")
+    try:
+        info = mediainfo.analyze_file(movie.file_path)
+    except Exception as e:
+        logger.error(f"Exception while analyzing movie_id={movie.id}, path={movie.file_path}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error analyzing file: {str(e)}")
     
     if not info.success:
+        # Mark as failed for follow-up and log details
+        movie.media_info_failed = True
+        await db.commit()
+
+        # Insert a dedicated log entry so failures are always visible in Settings -> Logs
+        from app.models import LogEntry
+        from datetime import datetime
+        try:
+            track_summary = getattr(info, 'error', None) or 'No tracks found'
+            log_entry = LogEntry(
+                timestamp=datetime.utcnow(),
+                level='WARNING',
+                logger_name='app.services.mediainfo',
+                message=f"Analyze failed for movie_id={movie.id}, path={movie.file_path}: {info.error}",
+                module='app.services.mediainfo',
+                function='analyze_file',
+                exception=track_summary,
+            )
+            db.add(log_entry)
+            await db.commit()
+        except Exception:
+            # If DB logging fails, still emit a warning to the normal logger
+            logger.warning(f"Media analysis failed for movie_id={movie.id}, path={movie.file_path}: {info.error}")
+
+        logger.warning(f"Media analysis failed for movie_id={movie.id}, path={movie.file_path}: {info.error}")
         raise HTTPException(status_code=400, detail=info.error or "Failed to analyze file")
     
+    logger.info(f"Media analysis succeeded for movie_id={movie.id}")
     # Update movie with media info
     movie.duration = info.duration
     movie.video_codec = info.video_codec
@@ -1013,6 +1195,7 @@ async def analyze_movie_file(movie_id: int, db: AsyncSession = Depends(get_db)):
     movie.overall_bitrate = info.overall_bitrate
     movie.file_size = info.file_size
     movie.media_info_scanned = True
+    movie.media_info_failed = False
     
     await db.commit()
     
@@ -1062,8 +1245,10 @@ async def analyze_movies_batch(
     
     for movie in movies:
         if not movie.file_path:
+            logger.warning(f"Skipping analyze for movie_id={movie.id} because file_path is empty")
             continue
         
+        logger.info(f"Analyzing movie_id={movie.id}, path={movie.file_path}")
         try:
             info = mediainfo.analyze_file(movie.file_path)
             
@@ -1090,9 +1275,12 @@ async def analyze_movies_batch(
                 movie.file_size = info.file_size
                 movie.media_info_scanned = True
                 analyzed += 1
+                logger.info(f"Analyze succeeded for movie_id={movie.id}")
             else:
+                logger.warning(f"Analyze failed for movie_id={movie.id}: {info.error}")
                 errors.append(f"{movie.title}: {info.error}")
         except Exception as e:
+            logger.error(f"Exception analyzing movie_id={movie.id}, path={movie.file_path}: {e}")
             errors.append(f"{movie.title}: {str(e)}")
     
     await db.commit()
@@ -1124,8 +1312,10 @@ async def analyze_all_movies(db: AsyncSession = Depends(get_db)):
     
     for movie in movies:
         if not movie.file_path:
+            logger.warning(f"Skipping analyze for movie_id={movie.id} because file_path is empty")
             continue
         
+        logger.info(f"Analyzing movie_id={movie.id}, path={movie.file_path}")
         try:
             info = mediainfo.analyze_file(movie.file_path)
             
@@ -1152,9 +1342,12 @@ async def analyze_all_movies(db: AsyncSession = Depends(get_db)):
                 movie.file_size = info.file_size
                 movie.media_info_scanned = True
                 analyzed += 1
+                logger.info(f"Analyze succeeded for movie_id={movie.id}")
             else:
+                logger.warning(f"Analyze failed for movie_id={movie.id}: {info.error}")
                 errors.append(f"{movie.title}: {info.error}")
         except Exception as e:
+            logger.error(f"Exception analyzing movie_id={movie.id}, path={movie.file_path}: {e}")
             errors.append(f"{movie.title}: {str(e)}")
     
     await db.commit()
@@ -1187,6 +1380,7 @@ async def scrape_movies_batch(
     
     scraped = 0
     errors = []
+    omdb_fallbacks = 0
     
     for movie in movies:
         try:
@@ -1253,10 +1447,35 @@ async def scrape_movies_batch(
                 
                 scraped += 1
             else:
-                errors.append(f"{movie.title}: Not found on TMDB")
+                # Try OMDb fallback if available
+                from app.services.omdb import fetch_omdb_ratings, get_omdb_api_key_from_db
+                api_key = await get_omdb_api_key_from_db(db)
+                omdb_ratings = None
+                if api_key:
+                    omdb_ratings = await fetch_omdb_ratings(db, title=movie.title, year=movie.year)
+                    if omdb_ratings:
+                        movie.imdb_rating = omdb_ratings.imdb_rating or movie.imdb_rating
+                        movie.imdb_votes = omdb_ratings.imdb_votes or movie.imdb_votes
+                        movie.rotten_tomatoes_score = omdb_ratings.rotten_tomatoes_score or movie.rotten_tomatoes_score
+                        movie.rotten_tomatoes_audience = omdb_ratings.rotten_tomatoes_audience or movie.rotten_tomatoes_audience
+                        movie.metacritic_score = omdb_ratings.metacritic_score or movie.metacritic_score
+                        movie.scraped = True
+                        scraped += 1
+                        omdb_fallbacks += 1
+                        logger.info(f"OMDb fallback succeeded for movie_id={movie.id}: applied OMDb ratings")
+                    else:
+                        err_msg = f"{movie.title}: Not found on TMDB"
+                        errors.append(err_msg)
+                        logger.warning(f"Scrape failed for movie_id={movie.id}: {err_msg}; filename={movie.file_name}; folder={movie.folder_name}; parsed_title={movie.title}; year={movie.year}")
+                else:
+                    err_msg = f"{movie.title}: Not found on TMDB"
+                    errors.append(err_msg)
+                    logger.warning(f"Scrape failed for movie_id={movie.id}: {err_msg}; filename={movie.file_name}; folder={movie.folder_name}; parsed_title={movie.title}; year={movie.year}")
                 
         except Exception as e:
-            errors.append(f"{movie.title}: {str(e)}")
+            err_msg = f"{movie.title}: {str(e)}"
+            errors.append(err_msg)
+            logger.error(f"Exception scraping movie_id={movie.id}: {str(e)}")
     
     await db.commit()
     
@@ -1282,6 +1501,7 @@ async def scrape_all_movies(db: AsyncSession = Depends(get_db)):
     
     scraped = 0
     errors = []
+    omdb_fallbacks = 0
     
     for movie in movies:
         try:
@@ -1348,10 +1568,35 @@ async def scrape_all_movies(db: AsyncSession = Depends(get_db)):
                 
                 scraped += 1
             else:
-                errors.append(f"{movie.title}: Not found on TMDB")
+                # Try OMDb fallback if available
+                from app.services.omdb import fetch_omdb_ratings, get_omdb_api_key_from_db
+                api_key = await get_omdb_api_key_from_db(db)
+                omdb_ratings = None
+                if api_key:
+                    omdb_ratings = await fetch_omdb_ratings(db, title=movie.title, year=movie.year)
+                    if omdb_ratings:
+                        movie.imdb_rating = omdb_ratings.imdb_rating or movie.imdb_rating
+                        movie.imdb_votes = omdb_ratings.imdb_votes or movie.imdb_votes
+                        movie.rotten_tomatoes_score = omdb_ratings.rotten_tomatoes_score or movie.rotten_tomatoes_score
+                        movie.rotten_tomatoes_audience = omdb_ratings.rotten_tomatoes_audience or movie.rotten_tomatoes_audience
+                        movie.metacritic_score = omdb_ratings.metacritic_score or movie.metacritic_score
+                        movie.scraped = True
+                        scraped += 1
+                        omdb_fallbacks += 1
+                        logger.info(f"OMDb fallback succeeded for movie_id={movie.id}: applied OMDb ratings")
+                    else:
+                        err_msg = f"{movie.title}: Not found on TMDB"
+                        errors.append(err_msg)
+                        logger.warning(f"Scrape failed for movie_id={movie.id}: {err_msg}; filename={movie.file_name}; folder={movie.folder_name}; parsed_title={movie.title}; year={movie.year}")
+                else:
+                    err_msg = f"{movie.title}: Not found on TMDB"
+                    errors.append(err_msg)
+                    logger.warning(f"Scrape failed for movie_id={movie.id}: {err_msg}; filename={movie.file_name}; folder={movie.folder_name}; parsed_title={movie.title}; year={movie.year}")
                 
         except Exception as e:
-            errors.append(f"{movie.title}: {str(e)}")
+            err_msg = f"{movie.title}: {str(e)}"
+            errors.append(err_msg)
+            logger.error(f"Exception scraping movie_id={movie.id}: {str(e)}")
     
     await db.commit()
     
@@ -1529,4 +1774,211 @@ async def mux_subtitle_into_movie(
         "success": True,
         "message": "Subtitle successfully embedded into video",
         "new_file_path": mux_result.output_path
+    }
+
+
+@router.post("/{movie_id}/sync-watch-history")
+async def sync_movie_watch_history(movie_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Sync watch history for a specific movie from Tautulli to the database
+    """
+    from app.services.tautulli import get_tautulli_service
+    from datetime import datetime
+    
+    # Get movie
+    result = await db.execute(select(Movie).where(Movie.id == movie_id))
+    movie = result.scalar_one_or_none()
+    
+    if not movie:
+        raise HTTPException(status_code=404, detail="Movie not found")
+    
+    # Check if movie has been scraped (has metadata)
+    if not movie.scraped or not movie.title:
+        raise HTTPException(
+            status_code=400, 
+            detail="Movie must be scraped first. Please refresh metadata before syncing watch history."
+        )
+    
+    # Get Tautulli service
+    tautulli = await get_tautulli_service(db)
+    if not tautulli:
+        raise HTTPException(status_code=400, detail="Tautulli not configured")
+    
+    # If we already have a stored rating_key for this movie, prefer using it (fast and reliable)
+    if movie.rating_key:
+        history = await tautulli.get_history(rating_key=movie.rating_key)
+        resolved_rating_key = movie.rating_key
+    else:
+        # Search for watch history (include imdb_id when available for more reliable matching)
+        history, resolved_rating_key = await tautulli.search_movie_history(movie.title, movie.year, imdb_id=movie.imdb_id, db=db)
+
+        # If we resolved a rating_key from Plex/Tautulli, persist it to the movie record for future syncs
+        if resolved_rating_key and movie.rating_key != resolved_rating_key:
+            movie.rating_key = resolved_rating_key
+    
+    if history:
+        # Update movie watch status
+        movie.watched = True
+        movie.watch_count = len(history)
+        
+        # Get most recent watch
+        if history:
+            most_recent = history[0]  # History is sorted by date desc
+            movie.last_watched_date = datetime.fromtimestamp(most_recent.get('date', 0))
+            movie.last_watched_user = most_recent.get('user', 'Unknown')
+        
+        await db.commit()
+        
+        return {
+            "success": True,
+            "watched": True,
+            "watch_count": movie.watch_count,
+            "last_watched_date": movie.last_watched_date.isoformat() if movie.last_watched_date else None,
+            "last_watched_user": movie.last_watched_user
+        }
+    else:
+        # No watch history found
+        movie.watched = False
+        movie.watch_count = 0
+        movie.last_watched_date = None
+        movie.last_watched_user = None
+        await db.commit()
+        
+        return {
+            "success": True,
+            "watched": False,
+            "watch_count": 0
+        }
+
+
+@router.post("/sync-watch-history-all")
+async def sync_all_movies_watch_history(db: AsyncSession = Depends(get_db)):
+    """
+    Sync watch history for all movies from Tautulli to the database
+    """
+    from app.services.tautulli import get_tautulli_service
+    from datetime import datetime
+    
+    # Get Tautulli service
+    tautulli = await get_tautulli_service(db)
+    if not tautulli:
+        raise HTTPException(status_code=400, detail="Tautulli not configured")
+    
+    # Get all movies that have been scraped (have metadata)
+    result = await db.execute(
+        select(Movie).where(Movie.scraped == True, Movie.title.isnot(None))
+    )
+    movies = result.scalars().all()
+    
+    # Count total movies for reporting
+    total_result = await db.execute(select(func.count(Movie.id)))
+    total_movies = total_result.scalar()
+    
+    synced_count = 0
+    watched_count = 0
+    skipped_count = total_movies - len(movies)
+    
+    for movie in movies:
+        try:
+            # Prefer stored rating_key if available
+            if movie.rating_key:
+                history = await tautulli.get_history(rating_key=movie.rating_key)
+                resolved_rating_key = movie.rating_key
+            else:
+                history, resolved_rating_key = await tautulli.search_movie_history(movie.title, movie.year, imdb_id=movie.imdb_id, db=db)
+                if resolved_rating_key and movie.rating_key != resolved_rating_key:
+                    movie.rating_key = resolved_rating_key
+            
+            if history:
+                movie.watched = True
+                movie.watch_count = len(history)
+                watched_count += 1
+                
+                # Get most recent watch
+                most_recent = history[0]
+                movie.last_watched_date = datetime.fromtimestamp(most_recent.get('date', 0))
+                movie.last_watched_user = most_recent.get('user', 'Unknown')
+            else:
+                movie.watched = False
+                movie.watch_count = 0
+                movie.last_watched_date = None
+                movie.last_watched_user = None
+            
+            synced_count += 1
+        except Exception as e:
+            logger.error(f"Error syncing watch history for movie {movie.id}: {str(e)}")
+            continue
+    
+    await db.commit()
+    
+    return {
+        "success": True,
+        "total_movies": total_movies,
+        "synced_count": synced_count,
+        "watched_count": watched_count,
+        "skipped_count": skipped_count,
+        "message": f"Skipped {skipped_count} movies without metadata. Please scrape metadata first." if skipped_count > 0 else None
+    }
+
+
+@router.post("/sync-watch-history-batch")
+async def sync_movies_watch_history_batch(
+    request: MovieIdsRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Sync watch history for a set of movies (by id list) from Tautulli"""
+    from app.services.tautulli import get_tautulli_service
+    from datetime import datetime
+
+    tautulli = await get_tautulli_service(db)
+    if not tautulli:
+        raise HTTPException(status_code=400, detail="Tautulli not configured")
+
+    if request.movie_ids:
+        result = await db.execute(select(Movie).where(Movie.id.in_(request.movie_ids)))
+    else:
+        result = await db.execute(select(Movie))
+
+    movies = result.scalars().all()
+    synced_count = 0
+    watched_count = 0
+    errors = []
+
+    for movie in movies:
+        try:
+            if movie.rating_key:
+                history = await tautulli.get_history(rating_key=movie.rating_key)
+                resolved_rating_key = movie.rating_key
+            else:
+                history, resolved_rating_key = await tautulli.search_movie_history(movie.title, movie.year, imdb_id=movie.imdb_id, db=db)
+                if resolved_rating_key and movie.rating_key != resolved_rating_key:
+                    movie.rating_key = resolved_rating_key
+
+            if history:
+                movie.watched = True
+                movie.watch_count = len(history)
+                watched_count += 1
+                most_recent = history[0]
+                movie.last_watched_date = datetime.fromtimestamp(most_recent.get('date', 0))
+                movie.last_watched_user = most_recent.get('user', 'Unknown')
+            else:
+                movie.watched = False
+                movie.watch_count = 0
+                movie.last_watched_date = None
+                movie.last_watched_user = None
+
+            synced_count += 1
+        except Exception as e:
+            logger.error(f"Error syncing watch history for movie {movie.id}: {str(e)}")
+            errors.append(str(e))
+            continue
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "requested": len(request.movie_ids) if request.movie_ids else None,
+        "synced_count": synced_count,
+        "watched_count": watched_count,
+        "errors": errors[:10] if errors else []
     }

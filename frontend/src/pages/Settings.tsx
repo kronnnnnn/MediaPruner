@@ -34,6 +34,16 @@ export default function Settings() {
   const [omdbApiKey, setOmdbApiKey] = useState('')
   const [omdbSaveMessage, setOmdbSaveMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
+  // Tautulli state
+  const [tautulliHost, setTautulliHost] = useState('')
+  const [tautulliApiKey, setTautulliApiKey] = useState('')
+  const [tautulliSaveMessage, setTautulliSaveMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  // Plex state
+  const [plexHost, setPlexHost] = useState('')
+  const [plexToken, setPlexToken] = useState('')
+  const [plexSaveMessage, setPlexSaveMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [testPlexMessage, setTestPlexMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
   // Logs state
   const [logPage, setLogPage] = useState(1)
   const [logLevel, setLogLevel] = useState<string>('')
@@ -55,6 +65,18 @@ export default function Settings() {
   const { data: omdbStatus, isLoading: omdbStatusLoading } = useQuery({
     queryKey: ['omdb-status'],
     queryFn: () => settingsApi.getOmdbKeyStatus().then(res => res.data),
+  })
+
+  // Query Tautulli status
+  const { data: tautulliStatus, isLoading: tautulliStatusLoading } = useQuery({
+    queryKey: ['tautulli-status'],
+    queryFn: () => settingsApi.getTautulliStatus().then(res => res.data),
+  })
+
+  // Query Plex status
+  const { data: plexStatus, isLoading: plexStatusLoading } = useQuery({
+    queryKey: ['plex-status'],
+    queryFn: () => settingsApi.getPlexStatus().then(res => res.data),
   })
 
   const scanPathMutation = useMutation({
@@ -153,6 +175,56 @@ export default function Settings() {
     },
   })
 
+  // Tautulli mutations
+  const saveTautulliMutation = useMutation({
+    mutationFn: (data: { host: string; apiKey: string }) => settingsApi.setTautulliSettings(data.host, data.apiKey),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['tautulli-status'] })
+      setTautulliHost('')
+      setTautulliApiKey('')
+      setTautulliSaveMessage({ type: 'success', message: 'Tautulli settings saved successfully!' })
+      setTimeout(() => setTautulliSaveMessage(null), 3000)
+    },
+    onError: () => {
+      setTautulliSaveMessage({ type: 'error', message: 'Failed to save Tautulli settings' })
+      setTimeout(() => setTautulliSaveMessage(null), 3000)
+    },
+  })
+
+  // Plex mutations
+  const savePlexMutation = useMutation({
+    mutationFn: (data: { host: string; token: string }) => settingsApi.setPlexSettings(data.host, data.token),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['plex-status'] })
+      setPlexHost('')
+      setPlexToken('')
+      setPlexSaveMessage({ type: 'success', message: 'Plex settings saved successfully!' })
+      setTimeout(() => setPlexSaveMessage(null), 3000)
+    },
+    onError: () => {
+      setPlexSaveMessage({ type: 'error', message: 'Failed to save Plex settings' })
+      setTimeout(() => setPlexSaveMessage(null), 3000)
+    },
+  })
+
+  const deletePlexMutation = useMutation({
+    mutationFn: () => settingsApi.deletePlexSettings(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['plex-status'] })
+      setPlexSaveMessage({ type: 'success', message: 'Plex settings removed' })
+      setTimeout(() => setPlexSaveMessage(null), 3000)
+    },
+  })
+
+  const deleteTautulliMutation = useMutation({
+    mutationFn: () => settingsApi.deleteTautulliSettings(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['tautulli-status'] })
+      setTautulliSaveMessage({ type: 'success', message: 'Tautulli settings removed' })
+      setTimeout(() => setTautulliSaveMessage(null), 3000)
+    },
+  })
+
   // Logs queries
   const { data: logsData, isLoading: logsLoading, refetch: refetchLogs } = useQuery({
     queryKey: ['logs', logPage, logLevel, logSearch],
@@ -222,6 +294,31 @@ export default function Settings() {
       saveOmdbKeyMutation.mutate(omdbApiKey.trim())
     }
   }
+
+  const handleSaveTautulli = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (tautulliHost.trim() && tautulliApiKey.trim()) {
+      logger.buttonClick('Save Tautulli Settings', 'Settings')
+      saveTautulliMutation.mutate({ host: tautulliHost.trim(), apiKey: tautulliApiKey.trim() })
+    }
+  }
+
+  const handleSavePlex = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (plexHost.trim() && plexToken.trim()) {
+      logger.buttonClick('Save Plex Settings', 'Settings')
+      savePlexMutation.mutate({ host: plexHost.trim(), token: plexToken.trim() })
+    }
+  }
+  const testPlexMutation = useMutation({
+    mutationFn: (data: { host: string; token: string }) => settingsApi.testPlexSettings(data.host, data.token),
+    onSuccess: () => {
+      setTestPlexMessage({ type: 'success', message: 'Plex token validated successfully' })
+    },
+    onError: (err: any) => {
+      setTestPlexMessage({ type: 'error', message: err?.response?.data?.detail || 'Failed to validate Plex token' })
+    }
+  })
 
   const handleLogSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -629,6 +726,199 @@ export default function Settings() {
                     <Trash2 className="w-4 h-4" />
                   )}
                   Remove Key
+                </button>
+              )}
+            </div>
+          </form>
+
+          {/* Divider */}
+          <div className="border-t border-gray-200 dark:border-gray-700 my-6"></div>
+
+          {/* Tautulli Integration Section */}
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-gray-500 dark:text-gray-400 text-sm">Tautulli Status:</span>
+            {tautulliStatusLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-gray-500 dark:text-gray-400" />
+            ) : tautulliStatus?.configured ? (
+              <span className="flex items-center gap-1 text-green-400 text-sm">
+                <Check className="w-4 h-4" />
+                Configured
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-yellow-400 text-sm">
+                <X className="w-4 h-4" />
+                Not configured (optional)
+              </span>
+            )}
+          </div>
+
+          <form onSubmit={handleSaveTautulli}>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">
+                  Tautulli Host URL
+                </label>
+                <input
+                  type="text"
+                  value={tautulliHost}
+                  onChange={(e) => setTautulliHost(e.target.value)}
+                  placeholder={tautulliStatus?.host || 'http://localhost:8181'}
+                  className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-primary-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">
+                  {tautulliStatus?.configured ? 'Update Tautulli API Key' : 'Tautulli API Key'}
+                </label>
+                <input
+                  type="password"
+                  value={tautulliApiKey}
+                  onChange={(e) => setTautulliApiKey(e.target.value)}
+                  placeholder={tautulliStatus?.configured ? 'Enter new API key to update' : 'Enter your Tautulli API key'}
+                  className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-primary-500"
+                />
+                <p className="text-gray-500 text-xs mt-1">
+                  <span className="text-gray-500 dark:text-gray-400">Optional:</span> Connect to Tautulli for Plex watch history tracking.
+                  <br />
+                  Find your API key in Tautulli: Settings → Web Interface → API Key
+                </p>
+              </div>
+            </div>
+            
+            {/* Success/Error Message */}
+            {tautulliSaveMessage && (
+              <div className={`mt-2 text-sm ${tautulliSaveMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                {tautulliSaveMessage.message}
+              </div>
+            )}
+
+            <div className="flex gap-2 mt-4">
+              <button
+                type="submit"
+                disabled={!tautulliHost.trim() || !tautulliApiKey.trim() || saveTautulliMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-gray-900 dark:text-white rounded-lg transition-colors"
+              >
+                {saveTautulliMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                {saveTautulliMutation.isPending ? 'Saving...' : 'Save Settings'}
+              </button>
+              
+              {tautulliStatus?.configured && (
+                <button
+                  type="button"
+                  onClick={() => deleteTautulliMutation.mutate()}
+                  disabled={deleteTautulliMutation.isPending}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors"
+                >
+                  {deleteTautulliMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  Remove Settings
+                </button>
+              )}
+            </div>
+          </form>
+
+          {/* Divider */}
+          <div className="border-t border-gray-200 dark:border-gray-700 my-6"></div>
+
+          {/* Plex Integration Section */}
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-gray-500 dark:text-gray-400 text-sm">Plex Status:</span>
+            {plexStatusLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-gray-500 dark:text-gray-400" />
+            ) : plexStatus?.configured ? (
+              <span className="flex items-center gap-1 text-green-400 text-sm">
+                <Check className="w-4 h-4" />
+                Configured
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-yellow-400 text-sm">
+                <X className="w-4 h-4" />
+                Not configured (optional)
+              </span>
+            )}
+          </div>
+
+          <form onSubmit={handleSavePlex}>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Plex Host URL</label>
+                <input
+                  type="text"
+                  value={plexHost}
+                  onChange={(e) => setPlexHost(e.target.value)}
+                  placeholder={plexStatus?.host || 'http://192.168.1.50:32400'}
+                  className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-primary-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Plex Token (X-Plex-Token)</label>
+                <input
+                  type="password"
+                  value={plexToken}
+                  onChange={(e) => setPlexToken(e.target.value)}
+                  placeholder={plexStatus?.configured ? 'Enter new token to update' : 'Enter your Plex X-Plex-Token'}
+                  className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-primary-500"
+                />
+                <p className="text-gray-500 text-xs mt-1">Get your token from Plex (account → settings or use developer tools). Used to resolve `rating_key` by GUID.</p>
+              </div>
+              <div className="mt-3 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => testPlexMutation.mutate({ host: plexHost.trim(), token: plexToken.trim() })}
+                  disabled={!plexHost.trim() || !plexToken.trim() || testPlexMutation.isPending}
+                  className="px-3 py-2 bg-gray-600 hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg transition-colors"
+                >
+                  {testPlexMutation.isPending ? 'Testing...' : 'Test Token'}
+                </button>
+                <a href="https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/" target="_blank" rel="noreferrer" className="text-sm text-gray-400 hover:text-white">How to get your token</a>
+              </div>
+
+              {testPlexMessage && <div className={`mt-2 text-sm ${testPlexMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>{testPlexMessage.message}</div>}
+            </div>
+
+            {/* Success/Error Message */}
+            {plexSaveMessage && (
+              <div className={`mt-2 text-sm ${plexSaveMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                {plexSaveMessage.message}
+              </div>
+            )}
+
+            <div className="flex gap-2 mt-4">
+              <button
+                type="submit"
+                disabled={!plexHost.trim() || !plexToken.trim() || savePlexMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-gray-900 dark:text-white rounded-lg transition-colors"
+              >
+                {savePlexMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                {savePlexMutation.isPending ? 'Saving...' : 'Save Settings'}
+              </button>
+
+              {plexStatus?.configured && (
+                <button
+                  type="button"
+                  onClick={() => deletePlexMutation.mutate()}
+                  disabled={deletePlexMutation.isPending}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors"
+                >
+                  {deletePlexMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  Remove Settings
                 </button>
               )}
             </div>

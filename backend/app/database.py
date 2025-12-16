@@ -42,6 +42,17 @@ async def migrate_db():
             # Subtitle info
             ("subtitle_path", "VARCHAR(1024)"),
             ("has_subtitle", "BOOLEAN DEFAULT 0"),
+            # Watch history (from Tautulli)
+            ("watched", "BOOLEAN DEFAULT 0"),
+            ("watch_count", "INTEGER DEFAULT 0"),
+            ("last_watched_date", "DATETIME"),
+            ("last_watched_user", "VARCHAR(128)"),
+            # Plex rating key to persist resolved rating_key for quicker lookups
+            ("rating_key", "INTEGER"),
+            # Option 4: custom external ID field added in UI
+            ("option_4", "VARCHAR(255)"),
+            # Track if analysis failed
+            ("media_info_failed", "BOOLEAN DEFAULT 0"),
         ]
         
         for col_name, col_type in movies_columns:

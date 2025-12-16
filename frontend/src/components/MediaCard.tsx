@@ -1,4 +1,4 @@
-import { Film, Tv } from 'lucide-react'
+import { Film, Tv, CheckCircle } from 'lucide-react'
 
 interface MediaCardProps {
   title: string
@@ -6,10 +6,12 @@ interface MediaCardProps {
   posterUrl?: string
   rating?: number
   mediaType?: 'movie' | 'tv'
+  watched?: boolean
+  watchCount?: number
   onClick?: () => void
 }
 
-export default function MediaCard({ title, year, posterUrl, rating, mediaType = 'movie', onClick }: MediaCardProps) {
+export default function MediaCard({ title, year, posterUrl, rating, mediaType = 'movie', watched, watchCount, onClick }: MediaCardProps) {
   const PlaceholderIcon = mediaType === 'tv' ? Tv : Film
   
   return (
@@ -39,6 +41,14 @@ export default function MediaCard({ title, year, posterUrl, rating, mediaType = 
           {year && <p className="text-gray-300 text-xs mt-0.5">{year}</p>}
         </div>
       </div>
+      
+      {/* Watch status badge (top left) */}
+      {watched && (
+        <div className="absolute top-1 left-1 flex items-center gap-0.5 bg-green-600/90 text-white text-xs font-medium px-1.5 py-0.5 rounded">
+          <CheckCircle className="w-3 h-3" />
+          {watchCount && watchCount > 1 && <span>{watchCount}x</span>}
+        </div>
+      )}
       
       {/* Rating badge */}
       {rating && (

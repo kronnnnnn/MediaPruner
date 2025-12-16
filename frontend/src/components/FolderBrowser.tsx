@@ -110,15 +110,9 @@ export default function FolderBrowser({ isOpen, initialPath, onSelect, onCancel 
               type="text"
               value={manualPath}
               onChange={(e) => setManualPath(e.target.value)}
-              placeholder="Enter path or paste network path (e.g., \\server\share)"
+              placeholder="Enter path (press Enter to navigate)"
               className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500 font-mono text-sm"
             />
-            <button
-              type="submit"
-              className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
-            >
-              Go
-            </button>
           </form>
         </div>
 
@@ -208,7 +202,7 @@ export default function FolderBrowser({ isOpen, initialPath, onSelect, onCancel 
               disabled={!data?.current_path}
               className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
             >
-              Select Folder
+              Add
             </button>
           </div>
         </div>

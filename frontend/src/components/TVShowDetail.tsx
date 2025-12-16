@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { X, RefreshCw, Edit2, FileText, Star, ChevronDown, ChevronUp } from 'lucide-react'
+import { X, RefreshCw, Edit2, FileText, Star, ChevronDown, ChevronUp, Eye, Clock } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { tvShowsApi, TVShow, Episode } from '../services/api'
+import { tvShowsApi, TVShow, Episode, tautulliApi } from '../services/api'
 
 interface TVShowDetailProps {
   show: TVShow
@@ -15,6 +15,23 @@ export default function TVShowDetail({ show, onClose }: TVShowDetailProps) {
   const { data: episodes } = useQuery({
     queryKey: ['episodes', show.id],
     queryFn: () => tvShowsApi.getEpisodes(show.id).then(res => res.data),
+  })
+
+  // Fetch watch history from Tautulli (if configured)
+  const { data: watchHistory } = useQuery({
+    queryKey: ['tvshow-watch-history', show.id, show.title],
+    queryFn: async () => {
+      if (!show.title) return null
+      try {
+        const response = await tautulliApi.getTVShowHistory(show.title)
+        return response.data
+      } catch (error) {
+        // Tautulli might not be configured, silently fail
+        return null
+      }
+    },
+    enabled: !!show.title,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   })
 
   const scrapeMutation = useMutation({
@@ -188,6 +205,42 @@ export default function TVShowDetail({ show, onClose }: TVShowDetailProps) {
               {nfoMutation.isPending ? 'Generating...' : 'Generate NFO'}
             </button>
           </div>
+
+          {/* Watch History (Tautulli Integration) */}
+          {watchHistory && watchHistory.total_count > 0 && (
+            <div className="mt-6 p-4 bg-gray-700/50 rounded-lg">
+              <div className="flex items-center gap-2 mb-3">
+                <Eye className="w-4 h-4 text-green-400" />
+                <h3 className="text-white font-medium">Watch History</h3>
+                <span className="text-xs text-gray-400">({watchHistory.total_count} views)</span>
+              </div>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {watchHistory.history.slice(0, 10).map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-sm p-2 bg-gray-800 rounded">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <Clock className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                      <span className="text-white font-medium truncate">{item.user}</span>
+                      {item.parent_media_index !== undefined && item.media_index !== undefined && (
+                        <span className="text-gray-400 text-xs">
+                          S{item.parent_media_index.toString().padStart(2, '0')}E{item.media_index.toString().padStart(2, '0')}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-gray-400">
+                      {item.percent_complete !== undefined && (
+                        <span className="text-xs">
+                          {item.percent_complete}%
+                        </span>
+                      )}
+                      <span className="text-xs whitespace-nowrap">
+                        {new Date(item.date * 1000).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Seasons & Episodes */}
           <div className="mt-6">

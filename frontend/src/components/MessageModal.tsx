@@ -41,45 +41,49 @@ export default function MessageModal({
   }
 
   return (
-    <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-      onClick={onClose}
-    >
+    <>
       <div 
-        className={`bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4 overflow-hidden border-t-4 ${borderColors[type]}`}
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+        onClick={onClose}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between p-4">
-          <div className="flex-1" />
-          <button
-            onClick={onClose}
-            className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white rounded transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="px-6 pb-6 text-center">
-          <div className="flex justify-center mb-4">
-            {icons[type]}
+        <div 
+          className={`bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4 overflow-hidden border-t-4 ${borderColors[type]}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between p-4">
+            <div className="flex-1" />
+            <button
+              onClick={onClose}
+              className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white rounded transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">{title}</h3>
-          <p className="text-gray-600 dark:text-gray-300 whitespace-pre-line">{message}</p>
-        </div>
 
-        {/* Footer */}
-        <div className="px-6 pb-6">
-          <button
-            onClick={onClose}
-            className={`w-full py-2.5 ${buttonColors[type]} text-white font-medium rounded-lg transition-colors`}
-          >
-            OK
-          </button>
+          {/* Content */}
+          <div className="px-6 pb-6 text-center">
+            <div className="flex justify-center mb-4">
+              {icons[type]}
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">{title}</h3>
+            <p className="text-gray-600 dark:text-gray-300 whitespace-pre-line">{message}</p>
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 pb-6">
+            <button
+              onClick={onClose}
+              className={`w-full py-2.5 ${buttonColors[type]} text-white font-medium rounded-lg transition-colors`}
+            >
+              OK
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+
+
+    </>
   )
 }
 

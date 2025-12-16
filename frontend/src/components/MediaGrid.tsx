@@ -8,6 +8,8 @@ interface MediaItem {
   year?: number
   posterUrl?: string
   rating?: number
+  watched?: boolean
+  watchCount?: number
 }
 
 interface MediaGridProps {
@@ -105,6 +107,8 @@ export default function MediaGrid({ items, onItemClick, isLoading, mediaType = '
                   posterUrl={item.posterUrl}
                   rating={item.rating}
                   mediaType={mediaType}
+                  watched={item.watched}
+                  watchCount={item.watchCount}
                   onClick={() => onItemClick?.(item)}
                 />
               ))}

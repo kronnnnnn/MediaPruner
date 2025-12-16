@@ -8,7 +8,8 @@ from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.database import init_db
-from app.routers import movies, tvshows, library, health, settings as settings_router
+from app.routers import movies, tvshows, library, health, settings as settings_router, tautulli
+from app.routers import plex
 from app.services.logging_service import setup_database_logging
 # Import models to ensure all tables are registered with SQLAlchemy
 from app import models  # noqa: F401
@@ -50,6 +51,8 @@ app.include_router(library.router, prefix="/api/library", tags=["Library"])
 app.include_router(movies.router, prefix="/api/movies", tags=["Movies"])
 app.include_router(tvshows.router, prefix="/api/tvshows", tags=["TV Shows"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["Settings"])
+app.include_router(tautulli.router, prefix="/api/integrations/tautulli", tags=["Tautulli"])
+app.include_router(plex.router, prefix="/api/integrations/plex", tags=["Plex"])
 
 # Serve static files in production (when frontend is built)
 static_dir = Path(__file__).parent.parent / "static"

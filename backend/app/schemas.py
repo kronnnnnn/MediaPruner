@@ -37,6 +37,7 @@ class MovieBase(BaseModel):
     backdrop_path: Optional[str] = None
     tmdb_id: Optional[int] = None
     imdb_id: Optional[str] = None
+    option_4: Optional[str] = None
     
     # Ratings - TMDB
     rating: Optional[float] = None  # TMDB rating (0-10)
@@ -63,6 +64,9 @@ class MovieUpdate(BaseModel):
     overview: Optional[str] = None
     tagline: Optional[str] = None
     genres: Optional[str] = None
+    # Allow updating rating_key and option_4 from the frontend
+    rating_key: Optional[int] = None
+    option_4: Optional[str] = None
 
 
 class MovieResponse(MovieBase):
@@ -101,8 +105,17 @@ class MovieResponse(MovieBase):
     audio_tracks: Optional[str] = None
     subtitle_languages: Optional[str] = None
     subtitle_count: int = 0
+    subtitle_path: Optional[str] = None
+    has_subtitle: bool = False
     container: Optional[str] = None
     overall_bitrate: Optional[int] = None
+    
+    # Watch history (from Tautulli)
+    watched: bool = False
+    watch_count: int = 0
+    last_watched_date: Optional[datetime] = None
+    last_watched_user: Optional[str] = None
+    rating_key: Optional[int] = None
     
     class Config:
         from_attributes = True
