@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 from pydantic import BaseModel
-from datetime import datetime
 
 from app.database import get_db
 from app.services.tautulli import get_tautulli_service

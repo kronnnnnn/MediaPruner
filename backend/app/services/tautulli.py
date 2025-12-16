@@ -3,7 +3,6 @@ Tautulli API integration for watch history tracking
 """
 import httpx
 from typing import Optional, List, Dict, Any
-from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
@@ -357,8 +356,6 @@ class TautulliService:
             return []
         
         # Get history for this TV show
-        params = {"grandparent_rating_key": grandparent_rating_key}
-        
         history = await self.get_history(grandparent_rating_key=grandparent_rating_key)
         
         # Filter by season/episode if specified
