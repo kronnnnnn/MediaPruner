@@ -147,7 +147,6 @@ UI behavior:
 - The Movies grid "Sync Watch History" action enqueues a batch `sync_watch_history` task (instead of running per-item inline). Only the Movie Details page uses the one-off synchronous `POST /api/movies/{id}/sync-watch-history` endpoint.
 
 ---
-
 ## Next steps / TODO
 
 - [ ] Add DB models & migrations
