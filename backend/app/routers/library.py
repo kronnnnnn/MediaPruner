@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
+from fastapi import APIRouter, HTTPException, Depends, Query
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from pathlib import Path
@@ -12,6 +13,8 @@ from app.services.scanner import scan_movie_directory, scan_tvshow_directory, is
 from app.services.queue import create_task
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 @router.get("/browse")
