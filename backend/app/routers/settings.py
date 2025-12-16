@@ -2,14 +2,17 @@
 Settings API Router - Manages application settings stored in the database
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
+from starlette.status import HTTP_200_OK, HTTP_400_BAD_REQUEST
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, delete, func
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 
 from app.database import get_db
 from app.models import AppSettings, LogEntry
+from app.services.tmdb import TMDBService
+
 
 router = APIRouter()
 
@@ -126,6 +129,27 @@ async def delete_tmdb_api_key(db: AsyncSession = Depends(get_db)):
     return {"message": "TMDB API key removed"}
 
 
+@router.post("/tmdb-api-key/verify")
+async def verify_tmdb_api_key(
+    data: TmdbApiKeyUpdate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Verify if the provided TMDB API key is valid by making a test request to TMDB."""
+    # Use the provided key for verification
+    tmdb_service = TMDBService(api_key=data.api_key)
+    try:
+        # Try searching for a well-known movie (Star Wars)
+        results = await tmdb_service.search_movie("Star Wars", year=1977)
+        await tmdb_service.close()
+        if results and len(results) > 0:
+            return {"valid": True}
+        else:
+            return {"valid": False}
+    except Exception as e:
+        await tmdb_service.close()
+        return {"valid": False}
+
+
 # OMDb API Key Endpoints
 class OmdbApiKeyUpdate(BaseModel):
     api_key: str
@@ -186,6 +210,29 @@ async def delete_omdb_api_key(db: AsyncSession = Depends(get_db)):
         await db.commit()
     
     return {"message": "OMDb API key removed"}
+
+
+@router.post("/omdb-api-key/verify")
+async def verify_omdb_api_key(
+    data: OmdbApiKeyUpdate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Verify if the provided OMDb API key is valid by making a test request to OMDb."""
+    from app.services.omdb import OMDbService
+    
+    # Use the provided key for verification
+    omdb_service = OMDbService(api_key=data.api_key)
+    try:
+        # Try fetching ratings for a well-known movie (Star Wars - tt0076759)
+        result = await omdb_service.get_ratings_by_imdb_id("tt0076759")
+        await omdb_service.close()
+        if result:
+            return {"valid": True}
+        else:
+            return {"valid": False}
+    except Exception as e:
+        await omdb_service.close()
+        return {"valid": False}
 
 
 # Tautulli Settings Endpoints
@@ -281,6 +328,27 @@ async def delete_tautulli_settings(db: AsyncSession = Depends(get_db)):
     await db.commit()
     
     return {"message": "Tautulli settings removed"}
+
+
+@router.post("/tautulli/verify")
+async def verify_tautulli_settings(
+    data: TautulliSettingsUpdate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Verify if the provided Tautulli settings are valid by making a test request."""
+    from app.services.tautulli import TautulliService
+    
+    # Use the provided settings for verification
+    tautulli_service = TautulliService(host=data.host, api_key=data.api_key)
+    try:
+        # Try getting a small amount of history to test connection
+        result = await tautulli_service.get_history(length=1)
+        if result is not None:
+            return {"valid": True}
+        else:
+            return {"valid": False}
+    except Exception as e:
+        return {"valid": False}
 
 
 # Plex Settings Endpoints

@@ -401,14 +401,17 @@ export const settingsApi = {
   getTmdbKeyStatus: () => api.get<{ configured: boolean }>('/settings/tmdb-api-key/status'),
   setTmdbApiKey: (apiKey: string) => api.put('/settings/tmdb-api-key', { api_key: apiKey }),
   deleteTmdbApiKey: () => api.delete('/settings/tmdb-api-key'),
+  verifyTmdbApiKey: (apiKey: string) => api.post<{ valid: boolean }>('/settings/tmdb-api-key/verify', { api_key: apiKey }),
   // OMDb (for IMDB, Rotten Tomatoes, Metacritic ratings)
   getOmdbKeyStatus: () => api.get<{ configured: boolean }>('/settings/omdb-api-key/status'),
   setOmdbApiKey: (apiKey: string) => api.put('/settings/omdb-api-key', { api_key: apiKey }),
   deleteOmdbApiKey: () => api.delete('/settings/omdb-api-key'),
+  verifyOmdbApiKey: (apiKey: string) => api.post<{ valid: boolean }>('/settings/omdb-api-key/verify', { api_key: apiKey }),
   // Tautulli
   getTautulliStatus: () => api.get<{ configured: boolean; host?: string }>('/settings/tautulli/status'),
   setTautulliSettings: (host: string, apiKey: string) => api.put('/settings/tautulli', { host, api_key: apiKey }),
   deleteTautulliSettings: () => api.delete('/settings/tautulli'),
+  verifyTautulliSettings: (host: string, apiKey: string) => api.post<{ valid: boolean }>('/settings/tautulli/verify', { host, api_key: apiKey }),
   // Plex
   getPlexStatus: () => api.get<{ configured: boolean; host?: string }>('/settings/plex/status'),
   setPlexSettings: (host: string, token: string) => api.put('/settings/plex', { host, token }),
