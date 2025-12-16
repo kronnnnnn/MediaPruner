@@ -283,11 +283,8 @@ async def update_movie(
     
     await db.commit()
     await db.refresh(movie)
-    
+
     return MovieResponse.model_validate(movie)
-
-
-import re
 
 # Patterns to extract IDs from filenames
 IMDB_ID_PATTERN = re.compile(r'(?:^|[_\.\s\-])tt(\d{7,8})(?:[_\.\s\-]|$)', re.IGNORECASE)

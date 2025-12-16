@@ -3,7 +3,6 @@ Tautulli API integration for watch history tracking
 """
 import httpx
 from typing import Optional, List, Dict, Any
-from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
