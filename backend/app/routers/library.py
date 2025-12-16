@@ -232,7 +232,8 @@ async def add_library_path(
         name=db_path.name,
         exists=True,
         file_count=file_count,
-        created_at=db_path.created_at
+        created_at=db_path.created_at,
+        enqueued_task_id=task.id if task else None
     )
 
 

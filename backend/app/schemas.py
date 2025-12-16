@@ -18,6 +18,7 @@ class LibraryPathResponse(BaseModel):
     exists: bool = True
     file_count: int = 0
     created_at: datetime
+    enqueued_task_id: Optional[int] = None
     
     class Config:
         from_attributes = True
