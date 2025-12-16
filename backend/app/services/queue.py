@@ -89,6 +89,10 @@ class QueueWorker:
         if self._task:
             await self._task
 
+    def is_running(self) -> bool:
+        """Return whether the worker is actively running."""
+        return self._task is not None and not self._task.done() and not self._stop.is_set()
+
     async def process_one(self) -> bool:
         """Process a single queued task if present. Returns True if a task was processed."""
         from sqlalchemy import select

@@ -75,3 +75,10 @@ async def api_ongoing():
     # Return short summary - implemented by listing tasks and filtering here
     tasks = await list_tasks(limit=10)
     return tasks
+
+
+@router.get("/worker")
+async def api_worker_status(request):
+    """Return worker running status."""
+    worker = getattr(request.app.state, 'queue_worker', None)
+    return {"running": bool(worker and worker.is_running())}
