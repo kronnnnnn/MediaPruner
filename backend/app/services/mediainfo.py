@@ -205,6 +205,23 @@ def analyze_file(file_path: str) -> MediaInfoResult:
         result.error = f"Failed to parse file: {str(e)}"
         logger.error(f"MediaInfo parse error for {file_path}: {e}")
         return result
+
+    # Debug: log track types and key attributes for diagnosis
+    try:
+        track_summaries = []
+        for t in media_info.tracks:
+            summary = {
+                'type': getattr(t, 'track_type', None),
+                'format': getattr(t, 'format', None),
+                'codec_id': getattr(t, 'codec_id', None),
+                'width': getattr(t, 'width', None),
+                'height': getattr(t, 'height', None),
+                'frame_rate': getattr(t, 'frame_rate', None),
+            }
+            track_summaries.append(summary)
+        logger.debug(f"MediaInfo tracks for {file_path}: {track_summaries}")
+    except Exception as e:
+        logger.debug(f"Failed to build MediaInfo track summary for {file_path}: {e}")
     
     try:
         result.file_size = path.stat().st_size
@@ -277,6 +294,22 @@ def analyze_file(file_path: str) -> MediaInfoResult:
                 result.audio_channels = track.channels
                 result.audio_bitrate = track.bitrate
                 result.audio_language = track.language
+
+        # If no video _and_ no audio detected, consider this a failed analysis - file may be corrupt or unsupported
+        if not video_tracks and not audio_tracks:
+            result.success = False
+            result.error = "No audio or video tracks found - file may be corrupted or unsupported"
+            # Include the track summary in the warning to help troubleshooting
+            try:
+                summaries = [{
+                    'type': getattr(t, 'track_type', None),
+                    'format': getattr(t, 'format', None),
+                    'codec_id': getattr(t, 'codec_id', None),
+                } for t in media_info.tracks]
+                logger.warning(f"MediaInfo found no audio/video tracks for {file_path}. Tracks: {summaries}")
+            except Exception:
+                logger.warning(f"MediaInfo found no audio/video tracks for {file_path}.")
+            return result
         
         # Process Subtitle/Text tracks
         text_tracks = [t for t in media_info.tracks if t.track_type == 'Text']

@@ -33,6 +33,8 @@ class SettingResponse(BaseModel):
 
 class AllSettingsResponse(BaseModel):
     tmdb_api_key: Optional[str] = None
+    plex_host: Optional[str] = None
+    plex_token: Optional[str] = None
     # Add more settings as needed
 
 
@@ -54,9 +56,16 @@ async def get_all_settings(db: AsyncSession = Depends(get_db)):
     tmdb_key = settings_dict.get("tmdb_api_key")
     if tmdb_key and len(tmdb_key) > 4:
         tmdb_key = "•" * (len(tmdb_key) - 4) + tmdb_key[-4:]
+
+    plex_host = settings_dict.get("plex_host")
+    plex_token = settings_dict.get("plex_token")
+    if plex_token and len(plex_token) > 4:
+        plex_token = "•" * (len(plex_token) - 4) + plex_token[-4:]
     
     return AllSettingsResponse(
         tmdb_api_key=tmdb_key
+        , plex_host=plex_host
+        , plex_token=plex_token
     )
 
 
@@ -177,6 +186,280 @@ async def delete_omdb_api_key(db: AsyncSession = Depends(get_db)):
         await db.commit()
     
     return {"message": "OMDb API key removed"}
+
+
+# Tautulli Settings Endpoints
+class TautulliSettingsUpdate(BaseModel):
+    host: str
+    api_key: str
+
+
+@router.get("/tautulli/status")
+async def get_tautulli_status(db: AsyncSession = Depends(get_db)):
+    """Check if Tautulli is configured"""
+    result_host = await db.execute(
+        select(AppSettings).where(AppSettings.key == "tautulli_host")
+    )
+    result_key = await db.execute(
+        select(AppSettings).where(AppSettings.key == "tautulli_api_key")
+    )
+    
+    host_setting = result_host.scalar_one_or_none()
+    key_setting = result_key.scalar_one_or_none()
+    
+    has_host = host_setting is not None and host_setting.value is not None and len(host_setting.value) > 0
+    has_key = key_setting is not None and key_setting.value is not None and len(key_setting.value) > 0
+    
+    return {
+        "configured": has_host and has_key,
+        "host": host_setting.value if has_host else None,
+        "masked_api_key": ("•" * (len(key_setting.value) - 4) + key_setting.value[-4:]) if has_key and len(key_setting.value) > 4 else None
+    }
+
+
+@router.put("/tautulli")
+async def set_tautulli_settings(
+    data: TautulliSettingsUpdate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Set Tautulli host and API key"""
+    # Update or create host setting
+    result_host = await db.execute(
+        select(AppSettings).where(AppSettings.key == "tautulli_host")
+    )
+    host_setting = result_host.scalar_one_or_none()
+    
+    if host_setting:
+        host_setting.value = data.host
+    else:
+        host_setting = AppSettings(
+            key="tautulli_host",
+            value=data.host,
+            description="Tautulli server URL (e.g., http://localhost:8181)"
+        )
+        db.add(host_setting)
+    
+    # Update or create API key setting
+    result_key = await db.execute(
+        select(AppSettings).where(AppSettings.key == "tautulli_api_key")
+    )
+    key_setting = result_key.scalar_one_or_none()
+    
+    if key_setting:
+        key_setting.value = data.api_key
+    else:
+        key_setting = AppSettings(
+            key="tautulli_api_key",
+            value=data.api_key,
+            description="Tautulli API key for watch history tracking"
+        )
+        db.add(key_setting)
+    
+    await db.commit()
+    
+    return {"message": "Tautulli settings saved successfully"}
+
+
+@router.delete("/tautulli")
+async def delete_tautulli_settings(db: AsyncSession = Depends(get_db)):
+    """Delete Tautulli settings"""
+    result_host = await db.execute(
+        select(AppSettings).where(AppSettings.key == "tautulli_host")
+    )
+    result_key = await db.execute(
+        select(AppSettings).where(AppSettings.key == "tautulli_api_key")
+    )
+    
+    host_setting = result_host.scalar_one_or_none()
+    key_setting = result_key.scalar_one_or_none()
+    
+    if host_setting:
+        await db.delete(host_setting)
+    if key_setting:
+        await db.delete(key_setting)
+    
+    await db.commit()
+    
+    return {"message": "Tautulli settings removed"}
+
+
+# Plex Settings Endpoints
+class PlexSettingsUpdate(BaseModel):
+    host: str
+    token: str
+
+
+@router.get("/plex/status")
+async def get_plex_status(db: AsyncSession = Depends(get_db)):
+    """Check if Plex is configured"""
+    result_host = await db.execute(
+        select(AppSettings).where(AppSettings.key == "plex_host")
+    )
+    result_token = await db.execute(
+        select(AppSettings).where(AppSettings.key == "plex_token")
+    )
+
+    host_setting = result_host.scalar_one_or_none()
+    token_setting = result_token.scalar_one_or_none()
+
+    has_host = host_setting is not None and host_setting.value is not None and len(host_setting.value) > 0
+    has_token = token_setting is not None and token_setting.value is not None and len(token_setting.value) > 0
+
+    return {
+        "configured": has_host and has_token,
+        "host": host_setting.value if has_host else None,
+        "masked_token": ("•" * (len(token_setting.value) - 4) + token_setting.value[-4:]) if has_token and len(token_setting.value) > 4 else None
+    }
+
+
+@router.put("/plex")
+async def set_plex_settings(
+    data: PlexSettingsUpdate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Set Plex host and token"""
+    result_host = await db.execute(
+        select(AppSettings).where(AppSettings.key == "plex_host")
+    )
+    host_setting = result_host.scalar_one_or_none()
+
+    if host_setting:
+        host_setting.value = data.host
+    else:
+        host_setting = AppSettings(
+            key="plex_host",
+            value=data.host,
+            description="Plex server URL (e.g., http://192.168.1.50:32400)"
+        )
+        db.add(host_setting)
+
+    result_token = await db.execute(
+        select(AppSettings).where(AppSettings.key == "plex_token")
+    )
+    token_setting = result_token.scalar_one_or_none()
+
+    if token_setting:
+        token_setting.value = data.token
+    else:
+        token_setting = AppSettings(
+            key="plex_token",
+            value=data.token,
+            description="Plex X-Plex-Token for server access"
+        )
+        db.add(token_setting)
+
+    await db.commit()
+
+    return {"message": "Plex settings saved successfully"}
+
+
+@router.delete("/plex")
+async def delete_plex_settings(db: AsyncSession = Depends(get_db)):
+    """Delete Plex settings"""
+    result_host = await db.execute(
+        select(AppSettings).where(AppSettings.key == "plex_host")
+    )
+    result_token = await db.execute(
+        select(AppSettings).where(AppSettings.key == "plex_token")
+    )
+
+    host_setting = result_host.scalar_one_or_none()
+    token_setting = result_token.scalar_one_or_none()
+
+    if host_setting:
+        await db.delete(host_setting)
+    if token_setting:
+        await db.delete(token_setting)
+
+    await db.commit()
+
+    return {"message": "Plex settings removed"}
+
+
+class PlexFetchTokenRequest(BaseModel):
+    username: str
+    password: str
+    save: bool = False
+
+
+@router.post("/plex/fetch-token")
+async def fetch_plex_token(data: PlexFetchTokenRequest, db: AsyncSession = Depends(get_db)):
+    """Fetch Plex authentication token from Plex.tv using username/password.
+
+    WARNING: Password is only used for this request and not stored by default unless `save` is true.
+    """
+    import httpx
+
+    try:
+        # Use Plex.tv sign-in endpoint
+        url = "https://plex.tv/users/sign_in.json"
+        headers = {
+            "X-Plex-Product": "MediaPruner",
+            "X-Plex-Platform": "MediaPruner",
+            "X-Plex-Device": "MediaPruner",
+        }
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, auth=(data.username, data.password), headers=headers)
+            resp.raise_for_status()
+            payload = resp.json()
+
+        token = payload.get("user", {}).get("auth_token")
+        if not token:
+            return {"token": None, "message": "No token returned from Plex.tv"}
+
+        if data.save:
+            # Persist token into settings
+            result_token = await db.execute(select(AppSettings).where(AppSettings.key == "plex_token"))
+            token_setting = result_token.scalar_one_or_none()
+            if token_setting:
+                token_setting.value = token
+            else:
+                token_setting = AppSettings(key="plex_token", value=token, description="Plex X-Plex-Token for server access")
+                db.add(token_setting)
+            await db.commit()
+
+        return {"token": token}
+
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch token: {e.response.status_code}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch token: {str(e)}")
+
+
+# Allow testing a host/token pair without saving credentials
+class PlexTestRequest(BaseModel):
+    host: str
+    token: str
+
+
+@router.post('/plex/test')
+async def test_plex_settings(data: PlexTestRequest):
+    """Test provided Plex host and token by making a simple request against the server.
+
+    This endpoint does not store any credentials; it only validates connectivity and token.
+    """
+    from app.services.plex import PlexService
+
+    svc = PlexService(data.host, data.token)
+    # Try fetching root XML to validate token/access
+    root = await svc._make_request('/')
+    if root is None:
+        raise HTTPException(status_code=400, detail='Failed to connect to Plex or invalid token')
+
+    # Try to extract some basic info (friendlyName, machineIdentifier) from root or children
+    info = {}
+    try:
+        # Many Plex endpoints include a MediaContainer or similar with attributes
+        info = dict(root.attrib) if root.attrib else {}
+        # Also try first child
+        first = next(iter(root), None)
+        if first is not None and hasattr(first, 'attrib'):
+            info.update({k: v for k, v in first.attrib.items() if k not in info})
+    except Exception:
+        pass
+
+    return {"success": True, "info": info}
 
 
 # Internal function to get raw setting value (for use by other services)

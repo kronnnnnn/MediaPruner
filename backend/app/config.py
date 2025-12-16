@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     tmdb_api_key: Optional[str] = None
     omdb_api_key: Optional[str] = None
     
+    # Tautulli integration
+    tautulli_host: Optional[str] = None
+    tautulli_api_key: Optional[str] = None
+    
     # Server settings
     host: str = "0.0.0.0"
     port: int = 8000

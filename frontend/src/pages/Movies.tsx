@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
   Filter, SortAsc, SortDesc, Search, HardDrive, Loader2, RefreshCw, 
-  LayoutGrid, List, Settings2, Database, X, Star, Trash2, Pencil, Edit2, FolderEdit
+  LayoutGrid, List, Settings2, Database, X, Star, Trash2, Pencil, Edit2, FolderEdit, Eye
 } from 'lucide-react'
 import MediaGrid from '../components/MediaGrid'
 import MediaList, { getDefaultVisibleColumns, AVAILABLE_COLUMNS, ColumnDef } from '../components/MediaList'
@@ -25,8 +25,9 @@ type ViewMode = 'grid' | 'list'
 // Filter state interface
 interface Filters {
   scraped: 'all' | 'yes' | 'no'
-  analyzed: 'all' | 'yes' | 'no'
+  analyzed: 'all' | 'yes' | 'no' | 'failed'
   hasNfo: 'all' | 'yes' | 'no'
+  watched: 'all' | 'yes' | 'no'
   minYear: string
   maxYear: string
   // TMDB rating (0-10)
@@ -132,6 +133,7 @@ export default function Movies() {
     scraped: 'all',
     analyzed: 'all',
     hasNfo: 'all',
+    watched: 'all',
     minYear: '',
     maxYear: '',
     minRating: '',
@@ -167,13 +169,14 @@ export default function Movies() {
   }, [filters])
 
   const { data, isPending: isLoading } = useQuery({
-    queryKey: ['movies', page, pageSize, sortBy, sortOrder, searchQuery],
+    queryKey: ['movies', page, pageSize, sortBy, sortOrder, searchQuery, filters.watched],
     queryFn: () => moviesApi.getMovies({
       page,
       page_size: pageSize,
       sort_by: sortBy,
       sort_order: sortOrder,
       search: searchQuery || undefined,
+      watched: filters.watched === 'all' ? undefined : filters.watched === 'yes',
     }).then(res => res.data),
     placeholderData: (previousData) => previousData,
   })
@@ -203,6 +206,53 @@ export default function Movies() {
         errorMessage: error?.response?.data?.detail || error?.message 
       })
       showMessage('Refresh Failed', error?.response?.data?.detail || 'Failed to refresh library', 'error')
+    }
+  })
+
+  const syncWatchHistoryMutation = useMutation({
+    mutationFn: () => moviesApi.syncAllWatchHistory(),
+    onSuccess: async (result) => {
+      const data = result.data as { 
+        total_movies: number; 
+        synced_count: number; 
+        watched_count: number;
+        skipped_count?: number;
+        message?: string;
+      }
+      await queryClient.invalidateQueries({ queryKey: ['movies'] })
+      await queryClient.refetchQueries({ queryKey: ['movies'] })
+      
+      let message = `Synced ${data.synced_count} movies from Tautulli.\n${data.watched_count} movies marked as watched.`
+      if (data.skipped_count && data.skipped_count > 0) {
+        message += `\n\n⚠️ Skipped ${data.skipped_count} movies without metadata.\nPlease scrape metadata first for complete sync.`
+      }
+      
+      showMessage(
+        'Sync Complete',
+        message,
+        data.skipped_count && data.skipped_count > 0 ? 'info' : 'success'
+      )
+    },
+    onError: (error: any) => {
+      logger.error('Sync watch history failed', 'Movies', { 
+        error,
+        errorMessage: error?.response?.data?.detail || error?.message 
+      })
+      showMessage('Sync Failed', error?.response?.data?.detail || 'Failed to sync watch history. Is Tautulli configured?', 'error')
+    }
+  })
+
+  const syncWatchBatchMutation = useMutation({
+    mutationFn: (movieIds?: number[]) => moviesApi.syncWatchHistoryBatch(movieIds),
+    onSuccess: async (result) => {
+      const data = result.data as { requested?: number | null; synced_count: number; watched_count: number; errors?: string[] }
+      await queryClient.invalidateQueries({ queryKey: ['movies'] })
+      await queryClient.refetchQueries({ queryKey: ['movies'] })
+      showMessage('Sync Complete', `Synced watch history for ${data.synced_count} movies.`, 'success')
+    },
+    onError: (error: any) => {
+      logger.error('Sync watch history failed', 'Movies', { error, errorMessage: error?.response?.data?.detail || error?.message })
+      showMessage('Sync Failed', error?.response?.data?.detail || 'Failed to sync watch history', 'error')
     }
   })
 
@@ -352,6 +402,7 @@ export default function Movies() {
     if (filters.scraped === 'no' && movie.scraped) return false
     if (filters.analyzed === 'yes' && !movie.media_info_scanned) return false
     if (filters.analyzed === 'no' && movie.media_info_scanned) return false
+    if (filters.analyzed === 'failed' && !movie.media_info_failed) return false
     if (filters.hasNfo === 'yes' && !movie.has_nfo) return false
     if (filters.hasNfo === 'no' && movie.has_nfo) return false
     if (filters.minYear && movie.year && movie.year < parseInt(filters.minYear)) return false
@@ -468,6 +519,7 @@ export default function Movies() {
       scraped: 'all',
       analyzed: 'all',
       hasNfo: 'all',
+      watched: 'all',
       minYear: '',
       maxYear: '',
       minRating: '',
@@ -482,8 +534,75 @@ export default function Movies() {
     })
   }
 
+  // Batch progress tracking for long-running operations (shows current/total)
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; actionName?: string } | null>(null)
+  const cancelRequestedRef = useRef(false)
+
+  const processIdsWithProgress = async (ids: number[], actionName: string) => {
+    if (!ids || ids.length === 0) return
+    cancelRequestedRef.current = false
+    setBatchProgress({ current: 0, total: ids.length, actionName })
+
+    let successCount = 0
+    const errors: string[] = []
+
+    for (let i = 0; i < ids.length; i++) {
+      if (cancelRequestedRef.current) break
+      const id = ids[i]
+      setBatchProgress({ current: i + 1, total: ids.length, actionName })
+
+      try {
+        if (actionName === 'Analyze') {
+          await moviesApi.analyzeMovie(id)
+          successCount += 1
+        } else if (actionName === 'Refresh Metadata') {
+          await moviesApi.scrapeMovie(id)
+          successCount += 1
+        } else if (actionName === 'Fetch Ratings') {
+          // Use batch ratings endpoint with single id so server logic is reused
+          const resp = await moviesApi.fetchOmdbRatings([id])
+          // Consider it success if request did not error
+          if (resp.status === 200) successCount += 1
+        } else if (actionName === 'Sync Watch History') {
+          await moviesApi.syncWatchHistory(id)
+          successCount += 1
+        } else {
+          // For other actions fallback to batch mutation (shouldn't happen here)
+          // leave successCount unchanged
+        }
+      } catch (err: any) {
+        errors.push(`${id}: ${err?.response?.data?.detail || err?.message || 'Unknown error'}`)
+      }
+    }
+
+    setBatchProgress(null)
+
+    // Close the scope modal if it was open for this action
+    setScopeModal(s => ({ ...s, isOpen: false }))
+
+    // Refresh movie list after operation
+    await queryClient.invalidateQueries({ queryKey: ['movies'] })
+    await queryClient.refetchQueries({ queryKey: ['movies'] })
+
+    if (cancelRequestedRef.current) {
+      showMessage(`${actionName} Canceled`, `Canceled after ${successCount} of ${ids.length} items.`, 'warning')
+    } else if (errors.length > 0) {
+      showMessage(`${actionName} Completed with Errors`, `${successCount} of ${ids.length} succeeded. ${errors.length} errors occurred.`, 'warning')
+    } else {
+      showMessage(`${actionName} Complete`, `Successfully processed ${successCount} of ${ids.length} items.`, 'success')
+    }
+
+    // Reset cancel flag
+    cancelRequestedRef.current = false
+  }
+
   // Get current process status
   const getProcessStatus = () => {
+    // If we have an active batchProgress, show it first
+    if (batchProgress) {
+      return { running: true, label: `${batchProgress.actionName || 'Processing'} (${batchProgress.current}/${batchProgress.total})` }
+    }
+
     if (deleteMutation.isPending) {
       return { running: true, label: 'Deleting movies...' }
     }
@@ -508,18 +627,87 @@ export default function Movies() {
     return { running: false, label: '' }
   }
 
-  const isAnyProcessRunning = analyzeMutation.isPending || scrapeMutation.isPending || fetchOmdbMutation.isPending || refreshMutation.isPending || deleteMutation.isPending || renameFilesMutation.isPending || renameFoldersMutation.isPending
+  const isAnyProcessRunning = Boolean(batchProgress) || analyzeMutation.isPending || scrapeMutation.isPending || fetchOmdbMutation.isPending || refreshMutation.isPending || deleteMutation.isPending || renameFilesMutation.isPending || renameFoldersMutation.isPending
 
   const processStatus = getProcessStatus()
 
   // Get movie IDs for the currently filtered list
   const getFilteredMovieIds = () => movies.map(m => m.id)
 
+  // Fetch all matching movie IDs from server for full filtered operations
+  const getAllMatchingMovieIds = async () => {
+    const params: any = {}
+    if (searchQuery) params.search = searchQuery
+    if (filters.watched && filters.watched !== 'all') params.watched = filters.watched === 'yes'
+    // Pass client-only filters to server so 'all matching' respects UI filters
+    if (filters.scraped && filters.scraped !== 'all') params.scraped = filters.scraped
+    if (filters.analyzed && filters.analyzed !== 'all') params.analyzed = filters.analyzed
+    if (filters.hasNfo && filters.hasNfo !== 'all') params.hasNfo = filters.hasNfo
+    if (filters.resolution && filters.resolution !== 'all') params.resolution = filters.resolution
+    if (filters.minRating) params.minRating = parseFloat(filters.minRating)
+    if (filters.maxRating) params.maxRating = parseFloat(filters.maxRating)
+    if (filters.minImdbRating) params.minImdbRating = parseFloat(filters.minImdbRating)
+    if (filters.maxImdbRating) params.maxImdbRating = parseFloat(filters.maxImdbRating)
+    if (filters.minRottenTomatoes) params.minRottenTomatoes = parseInt(filters.minRottenTomatoes)
+    if (filters.maxRottenTomatoes) params.maxRottenTomatoes = parseInt(filters.maxRottenTomatoes)
+    if (filters.minMetacritic) params.minMetacritic = parseInt(filters.minMetacritic)
+    if (filters.maxMetacritic) params.maxMetacritic = parseInt(filters.maxMetacritic)
+    const resp = await moviesApi.getMovieIds(params)
+    return resp.data.ids
+  }
+
+  const confirmScopeAndRun = async (actionName: string, mutation: any) => {
+    try {
+      // If the user has explicit selections in edit mode, apply only to those selected IDs
+      let ids: number[] = []
+      if (selectedIds.size > 0) {
+        ids = Array.from(selectedIds)
+      } else {
+        ids = getFilteredMovieIds()
+
+        // If there are more matching results than the current page, show modal to choose whether to apply to all matches or only filtered results
+        if (data?.total && data.total > movies.length) {
+        setScopeModal({
+          isOpen: true,
+          actionName,
+          total: data.total,
+          currentCount: movies.length,
+          // Keep the dialog open while running so users can see progress and cancel
+          onConfirmAll: async () => {
+            const allIds = await getAllMatchingMovieIds()
+            // Start per-item processing with progress
+            processIdsWithProgress(allIds, actionName)
+          },
+          onConfirmPage: () => {
+            // Start per-item processing for current page
+            processIdsWithProgress(ids, actionName)
+          }
+        })
+        return
+      }
+      }
+      // If it's one of the actions that supports per-item progress, run per-item so we can show progress
+      if (['Analyze', 'Refresh Metadata', 'Fetch Ratings', 'Sync Watch History'].includes(actionName)) {
+        await processIdsWithProgress(ids, actionName)
+        return
+      }
+
+      // Fallback: use existing batch mutation
+      mutation.mutate(ids)
+    } catch (error: any) {
+      logger.error(`${actionName} failed to start`, 'Movies', { error })
+      showMessage(`${actionName} Failed`, 'Could not start operation', 'error')
+    }
+  }
+
   // Handle delete confirmation
   const handleDeleteSelected = (deleteFile: boolean, deleteFolder: boolean) => {
     setDeleteOptions({ deleteFile, deleteFolder })
     setDeleteConfirmOpen(true)
   }
+
+  // Confirmation modal state (confirm whether to apply to filtered results or all matches)
+  const [scopeModal, setScopeModal] = useState<{ isOpen: boolean; actionName?: string; total?: number; currentCount?: number; onConfirmAll?: () => void; onConfirmPage?: () => void }>({ isOpen: false })
 
   // Toggle edit mode - clears selection when exiting
   const toggleEditMode = () => {
@@ -699,6 +887,7 @@ export default function Movies() {
                   <option value="all">All</option>
                   <option value="yes">Yes</option>
                   <option value="no">No</option>
+                  <option value="failed">Failed</option>
                 </select>
               </div>
 
@@ -713,6 +902,20 @@ export default function Movies() {
                   <option value="all">All</option>
                   <option value="yes">Yes</option>
                   <option value="no">No</option>
+                </select>
+              </div>
+
+              {/* Watched Filter */}
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Watched</label>
+                <select
+                  value={filters.watched}
+                  onChange={(e) => setFilters(f => ({ ...f, watched: e.target.value as any }))}
+                  className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-gray-900 dark:text-white text-sm transition-colors"
+                >
+                  <option value="all">All</option>
+                  <option value="yes">Watched</option>
+                  <option value="no">Unwatched</option>
                 </select>
               </div>
 
@@ -907,7 +1110,7 @@ export default function Movies() {
           <button
             onClick={() => {
               logger.buttonClick('Analyze', 'Movies', { count: movies.length })
-              analyzeMutation.mutate(getFilteredMovieIds())
+              confirmScopeAndRun('Analyze', analyzeMutation)
             }}
             disabled={isAnyProcessRunning || movies.length === 0}
             className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 rounded text-white text-sm transition-colors"
@@ -921,7 +1124,7 @@ export default function Movies() {
           <button
             onClick={() => {
               logger.buttonClick('Refresh Metadata', 'Movies', { count: movies.length })
-              scrapeMutation.mutate(getFilteredMovieIds())
+              confirmScopeAndRun('Refresh Metadata', scrapeMutation)
             }}
             disabled={isAnyProcessRunning || movies.length === 0}
             className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded text-white text-sm transition-colors"
@@ -935,7 +1138,7 @@ export default function Movies() {
           <button
             onClick={() => {
               logger.buttonClick('Fetch Ratings', 'Movies', { count: movies.length })
-              fetchOmdbMutation.mutate(getFilteredMovieIds())
+              confirmScopeAndRun('Fetch Ratings', fetchOmdbMutation)
             }}
             disabled={isAnyProcessRunning || movies.length === 0}
             className="flex items-center gap-2 px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 rounded text-white text-sm transition-colors"
@@ -957,6 +1160,25 @@ export default function Movies() {
           >
             <RefreshCw className="w-4 h-4" />
             <span>Refresh</span>
+          </button>
+
+          {/* Sync Watch History Button */}
+          <button
+            onClick={() => {
+              logger.buttonClick('Sync Watch History', 'Movies')
+              // Use confirm scope run to optionally run on all matching movies
+              confirmScopeAndRun('Sync Watch History', syncWatchBatchMutation)
+            }}
+            disabled={syncWatchHistoryMutation.isPending}
+            className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 rounded text-white text-sm transition-colors"
+            title="Sync watch history from Tautulli"
+          >
+            {syncWatchHistoryMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Eye className="w-4 h-4" />
+            )}
+            <span>Sync Watched</span>
           </button>
 
           {/* Columns Button - only show in list view */}
@@ -1158,6 +1380,8 @@ export default function Movies() {
               year: m.year,
               posterUrl: m.poster_path,
               rating: m.rating,
+              watched: m.watched,
+              watchCount: m.watch_count,
             }))}
             isLoading={isLoading}
             onItemClick={handleMovieClick}
@@ -1248,6 +1472,28 @@ export default function Movies() {
             logger.modal('close', 'MovieDetail', 'Movies')
             setSelectedMovie(null)
           }}
+          onPrev={(() => {
+            const idx = movies.findIndex(m => m.id === selectedMovie.id)
+            if (idx > 0) {
+              return () => {
+                const prev = movies[idx - 1]
+                logger.uiInteraction('movie-navigate', 'prev', 'Movies')
+                setSelectedMovie(prev)
+              }
+            }
+            return undefined
+          })()}
+          onNext={(() => {
+            const idx = movies.findIndex(m => m.id === selectedMovie.id)
+            if (idx !== -1 && idx < movies.length - 1) {
+              return () => {
+                const next = movies[idx + 1]
+                logger.uiInteraction('movie-navigate', 'next', 'Movies')
+                setSelectedMovie(next)
+              }
+            }
+            return undefined
+          })()}
         />
       )}
 
@@ -1276,6 +1522,36 @@ export default function Movies() {
         onConfirm={confirmDelete}
         onCancel={() => setDeleteConfirmOpen(false)}
       />
+
+      {/* Scope Confirmation Modal for batch actions (page vs all matches) */}
+      <ConfirmDialog
+        isOpen={scopeModal.isOpen}
+        title={scopeModal.actionName ? scopeModal.actionName : 'Confirm'}
+        message={
+          scopeModal.actionName
+            ? `Apply ${scopeModal.actionName} to all ${scopeModal.total} matching movies, or only the filtered results (${scopeModal.currentCount})?` 
+            : ''
+        }
+        confirmLabel={scopeModal.actionName ? `Apply to All (${scopeModal.total})` : 'Apply to All'}
+        cancelLabel={`Apply to Filtered (${scopeModal.currentCount})`}
+        variant={'info'}
+        requireAcknowledgement={Boolean((scopeModal.total ?? 0) > 500)}
+        acknowledgementLabel={(scopeModal.total ?? 0) > 500 ? `This will run for ${scopeModal.total ?? 0} movies and may take a long time. Please check server load and make sure you want to proceed.` : undefined}
+        // When user confirms, we call the configured handler which now starts per-item processing
+        onConfirm={() => scopeModal.onConfirmAll && scopeModal.onConfirmAll()}
+        // If an operation is running for this action, treat cancel as a stop request; otherwise apply to page
+        onCancel={() => {
+          if (batchProgress && batchProgress.actionName === scopeModal.actionName) {
+            cancelRequestedRef.current = true
+          } else {
+            scopeModal.onConfirmPage && scopeModal.onConfirmPage()
+          }
+        }}
+        onClose={() => setScopeModal(s => ({ ...s, isOpen: false }))}
+        isLoading={Boolean(batchProgress) && batchProgress?.actionName === scopeModal.actionName}
+        progress={batchProgress && batchProgress.actionName === scopeModal.actionName ? batchProgress : null}
+      />
     </div>
   )
+
 }

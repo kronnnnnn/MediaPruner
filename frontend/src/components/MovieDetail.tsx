@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
-import { X, Edit2, FolderEdit, RefreshCw, FileText, Star, HardDrive, Film, Volume2, Subtitles, Trash2, FileVideo } from 'lucide-react'
+import { X, Edit2, FileEdit, FolderEdit, RefreshCw, FileText, Star, HardDrive, Film, Volume2, Subtitles, Trash2, FileVideo, Eye, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { moviesApi, Movie } from '../services/api'
+import { moviesApi, Movie, tautulliApi } from '../services/api'
 import RenameModal from './RenameModal'
 import ConfirmDialog from './ConfirmDialog'
 import MuxConfirmDialog from './MuxConfirmDialog'
+import MessageModal, { useMessageModal } from './MessageModal'
+import { useToast } from '../contexts/ToastContext'
 import logger from '../services/logger'
 
 interface MovieDetailProps {
@@ -12,9 +14,11 @@ interface MovieDetailProps {
   initialMovie?: Movie
   onClose: () => void
   onDeleted?: () => void
+  onPrev?: () => void
+  onNext?: () => void
 }
 
-export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted }: MovieDetailProps) {
+export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted, onPrev, onNext }: MovieDetailProps) {
   const queryClient = useQueryClient()
   const [showRenameModal, setShowRenameModal] = useState(false)
   const [renameMode, setRenameMode] = useState<'file' | 'folder'>('file')
@@ -32,6 +36,22 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted 
     }
   }, [movieId])
 
+  // Keyboard navigation: left/right arrows to move between movies when modal is open
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' && typeof onPrev === 'function') {
+        e.preventDefault()
+        onPrev()
+      }
+      if (e.key === 'ArrowRight' && typeof onNext === 'function') {
+        e.preventDefault()
+        onNext()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onPrev, onNext])
+
   // Fetch movie data - will refetch when invalidated
   const { data: movie } = useQuery({
     queryKey: ['movie', movieId],
@@ -43,12 +63,42 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted 
     staleTime: 0, // Always refetch when invalidated
   })
 
+  // Fetch watch history from Tautulli (if configured)
+  const { data: watchHistory } = useQuery({
+    queryKey: ['movie-watch-history', movieId, movie?.imdb_id, movie?.title, movie?.year],
+    queryFn: async () => {
+      if (!movie?.title && !movie?.imdb_id) return null
+      try {
+        const response = await tautulliApi.getMovieHistory(movie?.title, movie?.year, movie?.imdb_id, movie?.rating_key)
+        return response.data
+      } catch (error) {
+        // Tautulli might not be configured, silently fail
+        return null
+      }
+    },
+    enabled: Boolean(movie?.title || movie?.imdb_id) && movie?.scraped && movie?.media_info_scanned,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  })
+
+  const { messageState, showMessage, hideMessage } = useMessageModal()
+  const { showToast } = useToast()
+
   const scrapeMutation = useMutation({
     mutationFn: () => moviesApi.scrapeMovie(movieId),
-    onSuccess: async () => {
+    onSuccess: async (response: any) => {
       await queryClient.invalidateQueries({ queryKey: ['movie', movieId] })
       await queryClient.invalidateQueries({ queryKey: ['movies'] })
+      const data = response?.data
+      if (data?.omdb_ratings_fetched) {
+        // Use the global toast for OMDb fallbacks instead of a modal popup
+        showToast('Metadata updated', 'OMDb was used as a fallback and ratings were applied', 'info')
+      } else {
+        showMessage('Metadata updated', 'Movie metadata refreshed', 'success')
+      }
     },
+    onError: (error: any) => {
+      showMessage('Metadata refresh failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
+    }
   })
 
   const analyzeMutation = useMutation({
@@ -56,7 +106,11 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted 
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['movie', movieId] })
       await queryClient.invalidateQueries({ queryKey: ['movies'] })
+      showToast('Analysis Complete', 'File analysis completed successfully', 'success')
     },
+    onError: (error: any) => {
+      showToast('Analysis Failed', error?.response?.data?.detail || 'Failed to analyze file', 'error')
+    }
   })
 
   const nfoMutation = useMutation({
@@ -77,6 +131,36 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted 
       onDeleted?.()
     },
   })
+  
+    const syncWatchMutation = useMutation({
+      mutationFn: () => moviesApi.syncWatchHistory(movieId),
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: ['movie', movieId] })
+        await queryClient.invalidateQueries({ queryKey: ['movie-watch-history', movieId] })
+        await queryClient.invalidateQueries({ queryKey: ['movies'] })
+      },
+    })
+
+  // If rating_key is not set but option_4 appears to contain a numeric rating key, persist it to the DB
+  useEffect(() => {
+    const tryPersistRatingKeyFromOption4 = async () => {
+      if (!movie) return
+      if (movie.rating_key) return
+      if (movie.option_4 && /^\d+$/.test(movie.option_4)) {
+        const rk = Number(movie.option_4)
+        try {
+          await moviesApi.updateMovie(movieId, { rating_key: rk })
+          await queryClient.invalidateQueries({ queryKey: ['movie', movieId] })
+          await queryClient.invalidateQueries({ queryKey: ['movies'] })
+        } catch (err) {
+          // Ignore errors - this is a best-effort convenience
+          console.error('Failed to persist rating_key from option_4', err)
+        }
+      }
+    }
+
+    tryPersistRatingKeyFromOption4()
+  }, [movie, movie?.option_4, movie?.rating_key, movieId, queryClient])
 
   const muxSubtitleMutation = useMutation({
     mutationFn: () => moviesApi.muxSubtitle(movieId),
@@ -197,15 +281,38 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted 
       onClick={onClose}
     >
       <div 
-        className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-lg shadow-xl transition-colors"
+        className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-lg shadow-xl transition-colors animate-mp-slide-down"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+          className="absolute top-4 left-1/2 -translate-x-1/2 z-30 p-3 bg-black/50 rounded-full text-white hover:bg-black/70 transition-opacity duration-200 opacity-70 hover:opacity-100"
+          aria-label="Close"
+          title="Close"
         >
-          <X className="w-5 h-5" />
+          <X className="w-8 h-8" />
+        </button>
+
+        {/* Floating prev/next navigation buttons (top of modal) - moved closer and enlarged */}
+        <button
+          onClick={onPrev}
+          disabled={!onPrev}
+          aria-label="Previous movie"
+          title="Previous"
+          className="absolute top-4 left-8 z-20 p-4 bg-white dark:bg-gray-700 rounded-full shadow transform opacity-70 hover:opacity-100 disabled:opacity-40 hover:scale-105 transition-all duration-150"
+        >
+          <ChevronLeft className="w-12 h-12 text-gray-700 dark:text-gray-300" />
+        </button>
+
+        <button
+          onClick={onNext}
+          disabled={!onNext}
+          aria-label="Next movie"
+          title="Next"
+          className="absolute top-4 right-8 z-20 p-4 bg-white dark:bg-gray-700 rounded-full shadow transform opacity-70 hover:opacity-100 disabled:opacity-40 hover:scale-105 transition-all duration-150"
+        >
+          <ChevronRight className="w-12 h-12 text-gray-700 dark:text-gray-300" />
         </button>
 
         {/* Backdrop */}
@@ -314,35 +421,60 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted 
             </div>
           </div>
 
-          {/* File Info */}
-          <div className="mt-6 p-4 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
-            <h3 className="text-gray-900 dark:text-white font-medium mb-2">File Information</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">File:</span>
-                <p className="text-gray-900 dark:text-white font-mono text-xs truncate">{movie.file_name}</p>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Size:</span>
-                <p className="text-gray-900 dark:text-white">
-                  {movie.file_size ? `${(movie.file_size / 1024 / 1024 / 1024).toFixed(2)} GB` : 'Unknown'}
-                </p>
-              </div>
-              {movie.file_path && (
-                <div className="col-span-2">
-                  <span className="text-gray-500 dark:text-gray-400">Location:</span>
-                  <p className="text-gray-900 dark:text-white font-mono text-xs truncate" title={movie.file_path}>
-                    {movie.file_path.substring(0, movie.file_path.lastIndexOf('\\')) || movie.file_path.substring(0, movie.file_path.lastIndexOf('/'))}
+          {/* File Info + Watch Count */}
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-2 p-4 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
+              <h3 className="text-gray-900 dark:text-white font-medium mb-2">File Information</h3>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">File:</span>
+                  <p className="text-gray-900 dark:text-white font-mono text-xs truncate">{movie.file_name}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">Size:</span>
+                  <p className="text-gray-900 dark:text-white">
+                    {movie.file_size ? `${(movie.file_size / 1024 / 1024 / 1024).toFixed(2)} GB` : 'Unknown'}
                   </p>
                 </div>
-              )}
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Container:</span>
-                <p className="text-gray-900 dark:text-white">{movie.container || 'Unknown'}</p>
+                {movie.file_path && (
+                  <div className="col-span-2">
+                    <span className="text-gray-500 dark:text-gray-400">Location:</span>
+                    <p className="text-gray-900 dark:text-white font-mono text-xs truncate" title={movie.file_path}>
+                      {movie.file_path.substring(0, movie.file_path.lastIndexOf('\\')) || movie.file_path.substring(0, movie.file_path.lastIndexOf('/'))}
+                    </p>
+                  </div>
+                )}
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">Container:</span>
+                  <p className="text-gray-900 dark:text-white">{movie.container || 'Unknown'}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">Duration:</span>
+                  <p className="text-gray-900 dark:text-white">{formatDuration(movie.duration) || 'Unknown'}</p>
+                </div>
               </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Duration:</span>
-                <p className="text-gray-900 dark:text-white">{formatDuration(movie.duration) || 'Unknown'}</p>
+            </div>
+
+            <div className="p-4 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
+              <div className="flex items-center gap-2 mb-3">
+                <Clock className="w-4 h-4 text-blue-400" />
+                <h4 className="text-gray-900 dark:text-white font-medium">Watch Count</h4>
+              </div>
+              <div className="text-sm text-gray-700 dark:text-gray-300">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500">Total Views</span>
+                  <span className="text-lg font-semibold text-gray-900 dark:text-white">{watchHistory?.total_count ?? movie.watch_count ?? 0}</span>
+                </div>
+                <div className="mt-3">
+                  <span className="text-xs text-gray-500">Last Watched</span>
+                  <div className="text-sm text-gray-900 dark:text-white">
+                    {watchHistory?.history?.[0]?.date ? new Date(watchHistory.history[0].date * 1000).toLocaleString() : movie.last_watched_date ? new Date(movie.last_watched_date).toLocaleString() : 'Never'}
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <span className="text-xs text-gray-500">Last User</span>
+                  <div className="text-sm text-gray-900 dark:text-white">{watchHistory?.history?.[0]?.user ?? movie.last_watched_user ?? '-'}</div>
+                </div>
               </div>
             </div>
           </div>
@@ -453,7 +585,7 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted 
           {/* External IDs */}
           <div className="mt-4 p-4 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
             <h3 className="text-gray-900 dark:text-white font-medium mb-2">External IDs</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
               <div>
                 <span className="text-gray-500 dark:text-gray-400">TMDB ID:</span>
                 <p className="text-gray-900 dark:text-white">
@@ -488,53 +620,158 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted 
                   )}
                 </p>
               </div>
+              <div>
+                <span className="text-gray-500 dark:text-gray-400">Plex Rating Key:</span>
+                <p className="text-gray-900 dark:text-white">
+                  {movie.rating_key ?? (movie.option_4 && /^\d+$/.test(movie.option_4) ? movie.option_4 : null) ? (
+                    // Prefer explicit rating_key, fallback to numeric option_4
+                    <span>{movie.rating_key ?? movie.option_4}</span>
+                  ) : (
+                    'Not set'
+                  )}
+                </p>
+              </div>
             </div>
           </div>
 
+          {/* Watch History (Tautulli Integration) */}
+          {watchHistory && watchHistory.total_count > 0 && (
+            <div className="mt-4 p-4 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
+              <div className="flex items-center gap-2 mb-3">
+                <Eye className="w-4 h-4 text-green-400" />
+                <h3 className="text-gray-900 dark:text-white font-medium">Watch History</h3>
+                <span className="text-xs text-gray-500 dark:text-gray-400">({watchHistory.total_count} views)</span>
+              </div>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {watchHistory.history.slice(0, 10).map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-sm p-2 bg-white dark:bg-gray-800 rounded">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-3 h-3 text-gray-400" />
+                      <span className="text-gray-900 dark:text-white font-medium">{item.user}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-gray-500 dark:text-gray-400">
+                      {item.percent_complete !== undefined && (
+                        <span className="text-xs">
+                          {item.percent_complete}% watched
+                        </span>
+                      )}
+                      <span className="text-xs">
+                        {new Date(item.date * 1000).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Actions */}
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              onClick={handleScrape}
-              disabled={scrapeMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
-            >
-              <RefreshCw className={`w-4 h-4 ${scrapeMutation.isPending ? 'animate-spin' : ''}`} />
-              {scrapeMutation.isPending ? 'Refreshing...' : 'Refresh Metadata'}
-            </button>
-            
-            <button
-              onClick={handleAnalyze}
-              disabled={analyzeMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
-            >
-              <HardDrive className={`w-4 h-4 ${analyzeMutation.isPending ? 'animate-spin' : ''}`} />
-              {analyzeMutation.isPending ? 'Analyzing...' : 'Analyze File'}
-            </button>
-            
-            <button
-              onClick={handleRenameFile}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
-            >
-              <Edit2 className="w-4 h-4" />
-              Rename File
-            </button>
-            
-            <button
-              onClick={handleRenameFolder}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
-            >
-              <FolderEdit className="w-4 h-4" />
-              Rename Folder
-            </button>
-            
-            <button
-              onClick={handleGenerateNfo}
-              disabled={nfoMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 text-white rounded-lg transition-colors"
-            >
-              <FileText className="w-4 h-4" />
-              {nfoMutation.isPending ? 'Generating...' : 'Generate NFO'}
-            </button>
+          <div className="mt-6">
+            {/* Top row: primary actions */}
+            <div className="flex flex-wrap gap-3 mb-3">
+              <button
+                onClick={handleAnalyze}
+                disabled={analyzeMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
+              >
+                <HardDrive className={`w-4 h-4 ${analyzeMutation.isPending ? 'animate-spin' : ''}`} />
+                {analyzeMutation.isPending ? 'Analyzing...' : 'Analyze'}
+              </button>
+
+              <button
+                onClick={handleScrape}
+                disabled={scrapeMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
+              >
+                <RefreshCw className={`w-4 h-4 ${scrapeMutation.isPending ? 'animate-spin' : ''}`} />
+                {scrapeMutation.isPending ? 'Refreshing...' : 'Refresh Metadata'}
+              </button>
+
+              <button
+                onClick={() => syncWatchMutation.mutate()}
+                disabled={syncWatchMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
+              >
+                <Eye className={`w-4 h-4 ${syncWatchMutation.isPending ? 'animate-spin' : ''}`} />
+                {syncWatchMutation.isPending ? 'Syncing...' : 'Sync Watch History'}
+              </button>
+            </div>
+
+            {/* Bottom row: rename + generate on left, delete on right */}
+            <div className="flex items-center gap-3">
+              <div className="flex gap-3">
+                <div className="relative group">
+                  <button
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    Rename
+                  </button>
+                  <div className="absolute bottom-full left-0 mb-1 w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20">
+                    <button
+                      onClick={handleRenameFile}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-lg flex items-center gap-2"
+                    >
+                      <FileEdit className="w-4 h-4" />
+                      Rename File
+                    </button>
+                    <button
+                      onClick={handleRenameFolder}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-lg flex items-center gap-2"
+                    >
+                      <FolderEdit className="w-4 h-4" />
+                      Rename Folder
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleGenerateNfo}
+                  disabled={nfoMutation.isPending}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 text-white rounded-lg transition-colors"
+                >
+                  <FileText className="w-4 h-4" />
+                  {nfoMutation.isPending ? 'Generating...' : 'Generate NFO'}
+                </button>
+              </div>
+
+              <div className="ml-auto">
+                {/* Delete Button with dropdown - moved to far right */}
+                <div className="relative group">
+                  <button
+                    disabled={deleteMutation.isPending}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
+                  >
+                    <Trash2 className={`w-4 h-4 ${deleteMutation.isPending ? 'animate-spin' : ''}`} />
+                    {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+                  </button>
+                  <div className="absolute bottom-full right-0 mb-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20">
+                    <button
+                      onClick={() => handleDeleteClick(false, false)}
+                      disabled={deleteMutation.isPending}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-lg"
+                    >
+                      Remove from library only
+                    </button>
+                    <button
+                      onClick={() => handleDeleteClick(true, false)}
+                      disabled={deleteMutation.isPending}
+                      className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      Delete media file
+                    </button>
+                    <button
+                      onClick={() => handleDeleteClick(false, true)}
+                      disabled={deleteMutation.isPending}
+                      className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-lg"
+                    >
+                      Delete entire folder
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
             {/* Embed Subtitle Button - only show if movie has external subtitle */}
             {movie?.has_subtitle && movie?.subtitle_path && (
@@ -548,50 +785,15 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted 
               </button>
             )}
 
-            {/* Delete Button with dropdown */}
-            <div className="relative group">
-              <button
-                disabled={deleteMutation.isPending}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
-              >
-                <Trash2 className={`w-4 h-4 ${deleteMutation.isPending ? 'animate-spin' : ''}`} />
-                {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
-              </button>
-              <div className="absolute bottom-full left-0 mb-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20">
-                <button
-                  onClick={() => handleDeleteClick(false, false)}
-                  disabled={deleteMutation.isPending}
-                  className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-lg"
-                >
-                  Remove from library only
-                </button>
-                <button
-                  onClick={() => handleDeleteClick(true, false)}
-                  disabled={deleteMutation.isPending}
-                  className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  Delete media file
-                </button>
-                <button
-                  onClick={() => handleDeleteClick(false, true)}
-                  disabled={deleteMutation.isPending}
-                  className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-lg"
-                >
-                  Delete entire folder
-                </button>
-              </div>
-            </div>
-          </div>
-
           {/* Status indicators */}
           <div className="mt-4 flex gap-4 text-sm">
             <span className={`flex items-center gap-1 ${movie.scraped ? 'text-green-400' : 'text-gray-500'}`}>
               <span className={`w-2 h-2 rounded-full ${movie.scraped ? 'bg-green-400' : 'bg-gray-500'}`} />
               {movie.scraped ? 'Scraped' : 'Not Scraped'}
             </span>
-            <span className={`flex items-center gap-1 ${movie.media_info_scanned ? 'text-green-400' : 'text-gray-500'}`}>
-              <span className={`w-2 h-2 rounded-full ${movie.media_info_scanned ? 'bg-green-400' : 'bg-gray-500'}`} />
-              {movie.media_info_scanned ? 'Analyzed' : 'Not Analyzed'}
+            <span className={`flex items-center gap-1 ${movie.media_info_failed ? 'text-red-400' : movie.media_info_scanned ? 'text-green-400' : 'text-gray-500'}`}>
+              <span className={`w-2 h-2 rounded-full ${movie.media_info_failed ? 'bg-red-400' : movie.media_info_scanned ? 'bg-green-400' : 'bg-gray-500'}`} />
+              {movie.media_info_failed ? 'Analysis Failed' : movie.media_info_scanned ? 'Analyzed' : 'Not Analyzed'}
             </span>
             <span className={`flex items-center gap-1 ${movie.has_nfo ? 'text-green-400' : 'text-gray-500'}`}>
               <span className={`w-2 h-2 rounded-full ${movie.has_nfo ? 'bg-green-400' : 'bg-gray-500'}`} />
@@ -641,6 +843,16 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted 
         preview={muxPreview}
         error={muxPreviewError}
       />
+
+      <MessageModal
+        isOpen={messageState.isOpen}
+        onClose={hideMessage}
+        title={messageState.title}
+        message={messageState.message}
+        type={messageState.type}
+      />
+
+
     </div>
   )
 }

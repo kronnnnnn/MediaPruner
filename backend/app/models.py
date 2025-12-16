@@ -103,6 +103,17 @@ class Movie(Base):
     has_trailer = Column(Boolean, default=False)
     scraped = Column(Boolean, default=False)
     media_info_scanned = Column(Boolean, default=False)
+    media_info_failed = Column(Boolean, default=False)  # Set when analysis failed
+    
+    # Watch History (from Tautulli)
+    watched = Column(Boolean, default=False)  # Has been watched at least once
+    watch_count = Column(Integer, default=0)  # Total number of times watched
+    last_watched_date = Column(DateTime, nullable=True)  # When it was last watched
+    last_watched_user = Column(String(128), nullable=True)  # Who last watched it
+    # Plex rating key for this media item (if known)
+    rating_key = Column(Integer, nullable=True, index=True)
+    # Optional custom external ID (Option 4)
+    option_4 = Column(String(255), nullable=True)
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -22,6 +22,8 @@ export interface Movie {
   backdrop_path?: string
   tmdb_id?: number
   imdb_id?: string
+  option_4?: string
+  rating_key?: number
   
   // Ratings - TMDB
   rating?: number  // TMDB rating (0-10)
@@ -42,6 +44,7 @@ export interface Movie {
   has_trailer: boolean
   scraped: boolean
   media_info_scanned: boolean
+  media_info_failed?: boolean
   created_at: string
   updated_at: string
   
@@ -72,6 +75,12 @@ export interface Movie {
   has_subtitle?: boolean  // Has external subtitle file
   container?: string
   overall_bitrate?: number
+  
+  // Watch history (from Tautulli)
+  watched?: boolean
+  watch_count?: number
+  last_watched_date?: string
+  last_watched_user?: string
 }
 
 export interface Episode {
@@ -257,9 +266,11 @@ export const moviesApi = {
     search?: string
     genre?: string
     year?: number
+    watched?: boolean
     sort_by?: string
     sort_order?: string
   }) => api.get('/movies', { params }),
+  getMovieIds: (params: { search?: string; genre?: string; year?: number; watched?: boolean; scraped?: string; analyzed?: string; hasNfo?: string; resolution?: string; minRating?: number; maxRating?: number; minImdbRating?: number; maxImdbRating?: number; minRottenTomatoes?: number; maxRottenTomatoes?: number; minMetacritic?: number; maxMetacritic?: number }) => api.get<{ ids: number[]; total: number }>('/movies/ids/list', { params }),
   getMovie: (id: number) => api.get<Movie>(`/movies/${id}`),
   updateMovie: (id: number, data: Partial<Movie>) => api.patch<Movie>(`/movies/${id}`, data),
   scrapeMovie: (id: number) => api.post(`/movies/${id}/scrape`),
@@ -269,6 +280,7 @@ export const moviesApi = {
   analyzeAllMovies: () => api.post('/movies/analyze-all'),
   analyzeMoviesBatch: (movieIds: number[]) => api.post('/movies/analyze-batch', { movie_ids: movieIds }),
   fetchOmdbRatings: (movieIds?: number[]) => api.post('/movies/fetch-omdb-ratings', { movie_ids: movieIds || null }),
+  syncWatchHistoryBatch: (movieIds?: number[]) => api.post('/movies/sync-watch-history-batch', { movie_ids: movieIds || null }),
   getRenamePresets: () => api.get<{ presets: Record<string, RenamePreset>, placeholders: Record<string, string> }>('/movies/rename-presets'),
   previewRename: (id: number, pattern: string) => api.get<RenamePreview>(`/movies/${id}/rename-preview`, { params: { pattern } }),
   renameMovie: (id: number, pattern: string) => api.post(`/movies/${id}/rename`, null, { params: { pattern } }),
@@ -295,6 +307,9 @@ export const moviesApi = {
   // Subtitle muxing
   getMuxSubtitlePreview: (id: number) => api.get(`/movies/${id}/mux-subtitle-preview`),
   muxSubtitle: (id: number) => api.post(`/movies/${id}/mux-subtitle`),
+  // Watch history sync
+  syncWatchHistory: (id: number) => api.post(`/movies/${id}/sync-watch-history`),
+  syncAllWatchHistory: () => api.post('/movies/sync-watch-history-all'),
 }
 
 // TV Shows API
@@ -390,11 +405,68 @@ export const settingsApi = {
   getOmdbKeyStatus: () => api.get<{ configured: boolean }>('/settings/omdb-api-key/status'),
   setOmdbApiKey: (apiKey: string) => api.put('/settings/omdb-api-key', { api_key: apiKey }),
   deleteOmdbApiKey: () => api.delete('/settings/omdb-api-key'),
+  // Tautulli
+  getTautulliStatus: () => api.get<{ configured: boolean; host?: string }>('/settings/tautulli/status'),
+  setTautulliSettings: (host: string, apiKey: string) => api.put('/settings/tautulli', { host, api_key: apiKey }),
+  deleteTautulliSettings: () => api.delete('/settings/tautulli'),
+  // Plex
+  getPlexStatus: () => api.get<{ configured: boolean; host?: string }>('/settings/plex/status'),
+  setPlexSettings: (host: string, token: string) => api.put('/settings/plex', { host, token }),
+  deletePlexSettings: () => api.delete('/settings/plex'),
+  fetchPlexToken: (username: string, password: string, save?: boolean) => api.post('/settings/plex/fetch-token', { username, password, save: !!save }),
+  testPlexSettings: (host: string, token: string) => api.post('/settings/plex/test', { host, token }),
   // Logs
   getLogs: (params?: { page?: number; page_size?: number; level?: string; search?: string }) => 
     api.get<LogsResponse>('/settings/logs', { params }),
   getLogStats: () => api.get<LogStats>('/settings/logs/stats'),
   clearLogs: (level?: string) => api.delete('/settings/logs', { params: level ? { level } : undefined }),
+}
+
+// Tautulli API
+export interface WatchHistoryItem {
+  id: number
+  date: number  // Unix timestamp
+  user: string
+  title: string
+  year?: number
+  media_type: string
+  rating_key?: number
+  parent_rating_key?: number
+  grandparent_rating_key?: number
+  parent_media_index?: number  // Season number
+  media_index?: number  // Episode number
+  watched_status?: number
+  percent_complete?: number
+  stopped?: number  // Unix timestamp
+  duration?: number  // Duration in seconds
+}
+
+export interface WatchHistoryResponse {
+  total_count: number
+  history: WatchHistoryItem[]
+}
+
+export const tautulliApi = {
+  testConnection: () => api.get('/integrations/tautulli/test-connection'),
+  getMovieHistory: (title?: string, year?: number, imdb_id?: string, rating_key?: number) => 
+    api.get<WatchHistoryResponse>('/integrations/tautulli/movie-history', { 
+      params: { title, year, imdb_id, rating_key } 
+    }),
+  getTVShowHistory: (title: string, season?: number, episode?: number) => 
+    api.get<WatchHistoryResponse>('/integrations/tautulli/tvshow-history', { 
+      params: { title, season, episode } 
+    }),
+  getHistory: (length?: number) => 
+    api.get<WatchHistoryResponse>('/integrations/tautulli/history', { 
+      params: { length } 
+    }),
+}
+
+// Plex API
+export const plexApi = {
+  getRatingKeyByImdb: (imdb_id: string) => api.get<{ rating_key: number | null }>(`/integrations/plex/rating-key`, { params: { imdb_id } }),
+  rawSearch: (query: string) => api.get<{ results: any[] }>(`/integrations/plex/raw-search`, { params: { query } }),
+  getMetadata: (rating_key: number) => api.get<{ metadata: any }>(`/integrations/plex/metadata`, { params: { rating_key } }),
 }
 
 export default api
