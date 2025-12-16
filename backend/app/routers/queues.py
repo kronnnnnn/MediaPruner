@@ -79,7 +79,6 @@ async def api_get_task(task_id: int):
         "meta": task.meta,
         "items": items,
     }
->>>>>>> d028972 (feat(queue): add QueueTask/QueueItem models, service, worker, router; enqueue scans on folder add)
 
 
 @router.post("/tasks/{task_id}/cancel")
