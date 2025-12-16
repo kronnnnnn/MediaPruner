@@ -11,7 +11,7 @@ from app.database import get_db
 from app.models import TVShow, Episode, Season
 from app.schemas import TVShowResponse, TVShowListResponse, TVShowUpdate, EpisodeResponse, SeasonResponse
 from app.services.tmdb import TMDBService
-from app.services.omdb import OMDbService, get_omdb_api_key_from_db, fetch_omdb_tvshow, fetch_omdb_season_episodes
+from app.services.omdb import fetch_omdb_tvshow, fetch_omdb_season_episodes
 from app.services.renamer import (
     rename_episode, get_episode_filename, parse_quality, parse_resolution, 
     parse_release_group, EPISODE_RENAME_PRESETS, EPISODE_PLACEHOLDERS
@@ -842,8 +842,8 @@ async def get_mux_subtitles_preview(
     episodes_result = await db.execute(
         select(Episode).where(
             Episode.tvshow_id == show_id,
-            Episode.subtitle_path.isnot(None),
-            Episode.has_subtitle == True
+                Episode.subtitle_path.isnot(None),
+                Episode.has_subtitle
         )
     )
     episodes = episodes_result.scalars().all()
@@ -923,8 +923,8 @@ async def mux_all_subtitles(
     episodes_result = await db.execute(
         select(Episode).where(
             Episode.tvshow_id == show_id,
-            Episode.subtitle_path.isnot(None),
-            Episode.has_subtitle == True
+                Episode.subtitle_path.isnot(None),
+                Episode.has_subtitle
         )
     )
     episodes = episodes_result.scalars().all()

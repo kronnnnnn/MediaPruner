@@ -1,7 +1,6 @@
 """Plex integration routes for resolving rating_key and metadata"""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
 
 from app.database import get_db
 from app.services.plex import get_plex_service

@@ -357,8 +357,6 @@ class TautulliService:
             return []
         
         # Get history for this TV show
-        params = {"grandparent_rating_key": grandparent_rating_key}
-        
         history = await self.get_history(grandparent_rating_key=grandparent_rating_key)
         
         # Filter by season/episode if specified
