@@ -7,11 +7,13 @@ from typing import List, Optional
 from pathlib import Path
 
 import app.database as database
+from app.database import async_session
 from sqlalchemy import text
 from app.models import QueueTask, QueueItem, QueueStatus
 
 logger = logging.getLogger(__name__)
 
+<<<<<<< HEAD
 # Simple in-memory SSE broadcaster
 _subscribers: set[asyncio.Queue] = set()
 _SUBSCRIBER_QUEUE_MAXSIZE = 10
@@ -106,6 +108,7 @@ async def create_task(task_type: str, items: List[dict], meta: Optional[dict] = 
         await session.commit()
         await session.refresh(task)
         logger.info(f"Created queue task {task.id} type={task_type} items={len(items)}")
+<<<<<<< HEAD
         # Notify SSE subscribers about the new task
         try:
             await publish_task_update(task.id)
@@ -115,6 +118,7 @@ async def create_task(task_type: str, items: List[dict], meta: Optional[dict] = 
 
 
 async def list_tasks(limit: int = 50):
+<<<<<<< HEAD
     async with database.async_session() as session:
         # Use a raw SQL select and cast status as TEXT to avoid SQLAlchemy Enum coercion errors
         result = await session.execute(
@@ -413,6 +417,7 @@ async def clear_queued_tasks(scope: str = 'current', older_than_seconds: int | N
             logger.exception("Failed to publish task list after purge")
 
         return {"tasks_cleared": tasks_deleted, "items_affected": items_deleted}
+=======
 
 
 class QueueWorker:
@@ -481,6 +486,15 @@ class QueueWorker:
                 item.started_at = datetime.utcnow()
                 await session.commit()
 
+                logger.info(f"Starting item {item.id} (index={item.index}) for task {task.id}")
+                    continue
+
+                # Mark item running
+                item.status = QueueStatus.RUNNING
+                item.started_at = datetime.utcnow()
+                await session.commit()
+
+<<<<<<< HEAD
                 logger.info(f"Starting item {item.id} (index={item.index}) for task {task.id}")
                 payload = json.loads(item.payload) if item.payload else {}
 
@@ -964,16 +978,11 @@ class QueueWorker:
                                     except Exception as e:
                                         item.result = json.dumps({'error': str(e)})
                                         item.status = QueueStatus.FAILED
-                    else:
-                        # Unknown task - mark failed
-                        item.result = json.dumps({'error': 'unknown task type'})
-                        item.status = QueueStatus.FAILED
-
-
                 except Exception as e:
                     logger.exception(f"Error processing item {item.id} for task {task.id}: {e}")
                     item.result = json.dumps({'error': str(e)})
                     item.status = QueueStatus.FAILED
+<<<<<<< HEAD
                     # store last error for diagnostics
                     self.last_error = str(e)
 
@@ -1021,6 +1030,7 @@ class QueueWorker:
                 await session.commit()
                 logger.info(f"Task {task.id} finished with status {task.status}")
 
+<<<<<<< HEAD
                 # If the task failed, persist a summary LogEntry to make this visible in the DB logs
                 if task.status == QueueStatus.FAILED:
                     try:

@@ -1,15 +1,27 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
 import asyncio
 import logging
-
-from app.database import get_db
-from app.services.queue import create_task, get_task, list_tasks, cancel_task, clear_queued_tasks, subscribe_events, unsubscribe_events, QueueWorker
-from app.config import settings
 import json
 
+from app.database import get_db
+from app.services.queue import (
+    create_task,
+    get_task,
+    list_tasks,
+    cancel_task,
+    clear_queued_tasks,
+    subscribe_events,
+    unsubscribe_events,
+    QueueWorker,
+)
+from app.schemas import QueueTaskResponse, QueueItemResponse
+from app.config import settings
+
 logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["queues"])
 
 
@@ -40,20 +52,44 @@ async def api_get_task(task_id: int):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    # get_task now returns a serialized mapping
-    return task
+
+    # Basic serialization
+    items = []
+    for i in task.items:
+        items.append({
+            "id": i.id,
+            "index": i.index,
+            "status": i.status.value,
+            "payload": i.payload,
+            "result": i.result,
+            "started_at": i.started_at,
+            "finished_at": i.finished_at,
+        })
+
+    return {
+        "id": task.id,
+        "type": task.type,
+        "status": task.status.value,
+        "created_by": task.created_by,
+        "created_at": task.created_at,
+        "started_at": task.started_at,
+        "finished_at": task.finished_at,
+        "total_items": task.total_items,
+        "completed_items": task.completed_items,
+        "meta": task.meta,
+        "items": items,
+    }
+>>>>>>> d028972 (feat(queue): add QueueTask/QueueItem models, service, worker, router; enqueue scans on folder add)
 
 
 @router.post("/tasks/{task_id}/cancel")
 async def api_cancel_task(task_id: int):
-    try:
-        res = await cancel_task(task_id)
-        if not res:
-            raise HTTPException(status_code=404, detail="Task not found")
-        return {"task_id": res.get('id'), "status": res.get('status')}
-    except Exception as e:
-        logger.exception(f"Failed to cancel task {task_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to cancel task")
+
+    t = await cancel_task(task_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"task_id": t.id, "status": t.status.value}
+>>>>>>> d028972 (feat(queue): add QueueTask/QueueItem models, service, worker, router; enqueue scans on folder add)
 
 
 @router.get("/ongoing")
@@ -61,6 +97,7 @@ async def api_ongoing():
     # Return short summary - implemented by listing tasks and filtering here
     tasks = await list_tasks(limit=10)
     return tasks
+<<<<<<< HEAD
 
 
 @router.get("/worker")
