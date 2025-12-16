@@ -97,6 +97,7 @@ async def api_ongoing():
     tasks = await list_tasks(limit=10)
     return tasks
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 
 @router.get("/worker")
@@ -241,3 +242,4 @@ async def api_worker_stop(request: Request):
         return {'stopped': False, 'reason': 'worker not running'}
     await worker.stop()
     return {'stopped': True}
+
