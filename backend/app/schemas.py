@@ -123,6 +123,37 @@ class MovieResponse(MovieBase):
         from_attributes = True
 
 
+# Queue schemas
+class QueueItemResponse(BaseModel):
+    id: int
+    index: int
+    status: str
+    payload: Optional[str]
+    result: Optional[str]
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+class QueueTaskResponse(BaseModel):
+    id: int
+    type: str
+    status: str
+    created_by: Optional[str]
+    created_at: datetime
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+    total_items: int
+    completed_items: int
+    meta: Optional[str]
+    items: Optional[list[QueueItemResponse]] = None
+
+    class Config:
+        from_attributes = True
+
+
 class MovieListResponse(BaseModel):
     movies: list[MovieResponse]
     total: int

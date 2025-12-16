@@ -4,11 +4,15 @@ from sqlalchemy import select, func
 from pathlib import Path
 import os
 import string
+import logging
 
 from app.database import get_db
 from app.models import LibraryPath, Movie, TVShow, Episode, Season, MediaType
 from app.schemas import LibraryPathCreate, LibraryPathResponse, ScanResult
 from app.services.scanner import scan_movie_directory, scan_tvshow_directory, is_video_file, find_associated_subtitle
+from app.services.queue import create_task
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -229,6 +233,13 @@ async def add_library_path(
     db.add(db_path)
     await db.commit()
     await db.refresh(db_path)
+
+    # Enqueue a scan task for this path so the new folder is processed by the central queue
+    try:
+        task = await create_task('scan', items=[{"path": db_path.path, "media_type": db_path.media_type.value}], meta={"trigger": "folder_add"})
+        logger.info(f"Enqueued scan task {task.id} for new library path {db_path.id}")
+    except Exception as e:
+        logger.exception("Failed to enqueue scan task for new library path %s: %s", db_path.id, e)
 
     return LibraryPathResponse(
         id=db_path.id,
