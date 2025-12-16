@@ -120,20 +120,22 @@ async def init_db():
     # Run migrations for any new columns
     await migrate_db()
 
+    # Ensure queue tables exist (migration added this)
+    async with engine.begin() as conn:
+        await _ensure_queue_tables(conn)
+
     # Normalize any existing media_type values to lowercase to match Enum values (e.g., 'TV' -> 'tv')
-    try:
-        await conn.execute(text("UPDATE library_paths SET media_type = LOWER(media_type) WHERE media_type IS NOT NULL AND media_type != LOWER(media_type)"))
-    except Exception:
-        pass
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(text("UPDATE library_paths SET media_type = LOWER(media_type) WHERE media_type IS NOT NULL AND media_type != LOWER(media_type)"))
+        except Exception:
+            pass
 
-    # Normalize queue task statuses to lowercase to match QueueStatus enum values
-    try:
-        await conn.execute(text("UPDATE queue_tasks SET status = LOWER(status) WHERE status IS NOT NULL AND status != LOWER(status)"))
-    except Exception:
-        pass
-
-    # Ensure queue tables exist (new feature)
-    await _ensure_queue_tables(conn)
+        # Normalize queue task statuses to lowercase to match QueueStatus enum values
+        try:
+            await conn.execute(text("UPDATE queue_tasks SET status = LOWER(status) WHERE status IS NOT NULL AND status != LOWER(status)"))
+        except Exception:
+            pass
 
 
 async def _ensure_queue_tables(conn):
