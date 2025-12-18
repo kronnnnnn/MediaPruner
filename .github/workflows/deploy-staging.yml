@@ -6,7 +6,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: staging
+    environment:
+      name: staging
     steps:
       - uses: actions/checkout@v4
 

@@ -7,7 +7,8 @@ on:
 jobs:
   preview:
     runs-on: ubuntu-latest
-    environment: pr-preview
+    environment:
+      name: pr-preview
     steps:
       - uses: actions/checkout@v4
 
