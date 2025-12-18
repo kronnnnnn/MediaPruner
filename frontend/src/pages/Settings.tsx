@@ -29,15 +29,18 @@ export default function Settings() {
   // TMDB API Key state
   const [tmdbApiKey, setTmdbApiKey] = useState('')
   const [tmdbSaveMessage, setTmdbSaveMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [tmdbTestMessage, setTmdbTestMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   // OMDb API Key state
   const [omdbApiKey, setOmdbApiKey] = useState('')
   const [omdbSaveMessage, setOmdbSaveMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [omdbTestMessage, setOmdbTestMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   // Tautulli state
   const [tautulliHost, setTautulliHost] = useState('')
   const [tautulliApiKey, setTautulliApiKey] = useState('')
   const [tautulliSaveMessage, setTautulliSaveMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [tautulliTestMessage, setTautulliTestMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   // Plex state
   const [plexHost, setPlexHost] = useState('')
   const [plexToken, setPlexToken] = useState('')
@@ -151,6 +154,22 @@ export default function Settings() {
     },
   })
 
+  const verifyTmdbKeyMutation = useMutation({
+    mutationFn: (apiKey: string) => settingsApi.verifyTmdbApiKey(apiKey),
+    onSuccess: (response) => {
+      if (response.data.valid) {
+        setTmdbTestMessage({ type: 'success', message: 'API key is valid!' })
+      } else {
+        setTmdbTestMessage({ type: 'error', message: 'API key is invalid' })
+      }
+      setTimeout(() => setTmdbTestMessage(null), 3000)
+    },
+    onError: () => {
+      setTmdbTestMessage({ type: 'error', message: 'Failed to verify API key' })
+      setTimeout(() => setTmdbTestMessage(null), 3000)
+    },
+  })
+
   // OMDb API key mutations
   const saveOmdbKeyMutation = useMutation({
     mutationFn: (apiKey: string) => settingsApi.setOmdbApiKey(apiKey),
@@ -172,6 +191,22 @@ export default function Settings() {
       await queryClient.invalidateQueries({ queryKey: ['omdb-status'] })
       setOmdbSaveMessage({ type: 'success', message: 'OMDb API key removed' })
       setTimeout(() => setOmdbSaveMessage(null), 3000)
+    },
+  })
+
+  const verifyOmdbKeyMutation = useMutation({
+    mutationFn: (apiKey: string) => settingsApi.verifyOmdbApiKey(apiKey),
+    onSuccess: (response) => {
+      if (response.data.valid) {
+        setOmdbTestMessage({ type: 'success', message: 'API key is valid!' })
+      } else {
+        setOmdbTestMessage({ type: 'error', message: 'API key is invalid' })
+      }
+      setTimeout(() => setOmdbTestMessage(null), 3000)
+    },
+    onError: () => {
+      setOmdbTestMessage({ type: 'error', message: 'Failed to verify API key' })
+      setTimeout(() => setOmdbTestMessage(null), 3000)
     },
   })
 
@@ -222,6 +257,22 @@ export default function Settings() {
       await queryClient.invalidateQueries({ queryKey: ['tautulli-status'] })
       setTautulliSaveMessage({ type: 'success', message: 'Tautulli settings removed' })
       setTimeout(() => setTautulliSaveMessage(null), 3000)
+    },
+  })
+
+  const verifyTautulliMutation = useMutation({
+    mutationFn: ({ host, apiKey }: { host: string; apiKey: string }) => settingsApi.verifyTautulliSettings(host, apiKey),
+    onSuccess: (response) => {
+      if (response.data.valid) {
+        setTautulliTestMessage({ type: 'success', message: 'Connection successful!' })
+      } else {
+        setTautulliTestMessage({ type: 'error', message: 'Connection failed - check host and API key' })
+      }
+      setTimeout(() => setTautulliTestMessage(null), 3000)
+    },
+    onError: () => {
+      setTautulliTestMessage({ type: 'error', message: 'Failed to verify connection' })
+      setTimeout(() => setTautulliTestMessage(null), 3000)
     },
   })
 
@@ -619,6 +670,11 @@ export default function Settings() {
                 {tmdbSaveMessage.message}
               </div>
             )}
+            {tmdbTestMessage && (
+              <div className={`mt-2 text-sm ${tmdbTestMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                {tmdbTestMessage.message}
+              </div>
+            )}
 
             <div className="flex gap-2 mt-4">
               <button
@@ -632,6 +688,20 @@ export default function Settings() {
                   <Save className="w-4 h-4" />
                 )}
                 {saveTmdbKeyMutation.isPending ? 'Saving...' : 'Save API Key'}
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => verifyTmdbKeyMutation.mutate(tmdbApiKey)}
+                disabled={!tmdbApiKey.trim() || verifyTmdbKeyMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-gray-900 dark:text-white rounded-lg transition-colors"
+              >
+                {verifyTmdbKeyMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4" />
+                )}
+                {verifyTmdbKeyMutation.isPending ? 'Testing...' : 'Test API Key'}
               </button>
               
               {tmdbStatus?.configured && (
@@ -698,6 +768,11 @@ export default function Settings() {
                 {omdbSaveMessage.message}
               </div>
             )}
+            {omdbTestMessage && (
+              <div className={`mt-2 text-sm ${omdbTestMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                {omdbTestMessage.message}
+              </div>
+            )}
 
             <div className="flex gap-2 mt-4">
               <button
@@ -711,6 +786,20 @@ export default function Settings() {
                   <Save className="w-4 h-4" />
                 )}
                 {saveOmdbKeyMutation.isPending ? 'Saving...' : 'Save API Key'}
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => verifyOmdbKeyMutation.mutate(omdbApiKey)}
+                disabled={!omdbApiKey.trim() || verifyOmdbKeyMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-gray-900 dark:text-white rounded-lg transition-colors"
+              >
+                {verifyOmdbKeyMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4" />
+                )}
+                {verifyOmdbKeyMutation.isPending ? 'Testing...' : 'Test API Key'}
               </button>
               
               {omdbStatus?.configured && (
@@ -792,6 +881,11 @@ export default function Settings() {
                 {tautulliSaveMessage.message}
               </div>
             )}
+            {tautulliTestMessage && (
+              <div className={`mt-2 text-sm ${tautulliTestMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                {tautulliTestMessage.message}
+              </div>
+            )}
 
             <div className="flex gap-2 mt-4">
               <button
@@ -805,6 +899,20 @@ export default function Settings() {
                   <Save className="w-4 h-4" />
                 )}
                 {saveTautulliMutation.isPending ? 'Saving...' : 'Save Settings'}
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => verifyTautulliMutation.mutate({ host: tautulliHost, apiKey: tautulliApiKey })}
+                disabled={!tautulliHost.trim() || !tautulliApiKey.trim() || verifyTautulliMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-gray-900 dark:text-white rounded-lg transition-colors"
+              >
+                {verifyTautulliMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4" />
+                )}
+                {verifyTautulliMutation.isPending ? 'Testing...' : 'Test Connection'}
               </button>
               
               {tautulliStatus?.configured && (

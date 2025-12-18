@@ -2,7 +2,6 @@
 File Renaming Service - Renames media files according to naming conventions
 Similar to Radarr/Sonarr naming conventions
 """
-import os
 import re
 import shutil
 import logging

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+import re
 from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel
@@ -202,7 +203,7 @@ async def get_movie_ids_list(
         elif r == '720p':
             query = query.where(Movie.video_resolution.ilike('%720%'))
         elif r == 'sd':
-            from sqlalchemy import not_, or_
+            from sqlalchemy import or_
             query = query.where(~or_(
                 Movie.video_resolution.ilike('%2160%'),
                 Movie.video_resolution.ilike('%1080%'),
@@ -282,11 +283,8 @@ async def update_movie(
     
     await db.commit()
     await db.refresh(movie)
-    
+
     return MovieResponse.model_validate(movie)
-
-
-import re
 
 # Patterns to extract IDs from filenames
 IMDB_ID_PATTERN = re.compile(r'(?:^|[_\.\s\-])tt(\d{7,8})(?:[_\.\s\-]|$)', re.IGNORECASE)
@@ -1866,7 +1864,7 @@ async def sync_all_movies_watch_history(db: AsyncSession = Depends(get_db)):
     
     # Get all movies that have been scraped (have metadata)
     result = await db.execute(
-        select(Movie).where(Movie.scraped == True, Movie.title.isnot(None))
+        select(Movie).where(Movie.scraped, Movie.title.isnot(None))
     )
     movies = result.scalars().all()
     
