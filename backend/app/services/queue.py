@@ -500,6 +500,16 @@ class QueueWorker:
                                     m.backdrop_path = tmdb_result.backdrop_path
                                     m.imdb_id = tmdb_result.imdb_id
                                     m.scraped = True
+
+                                    # Ensure the updated movie is flushed/committed so tests and other sessions can observe changes
+                                    try:
+                                        session.add(m)
+                                        await session.commit()
+                                        await session.refresh(m)
+                                        logger.info(f"Persisted TMDB metadata for movie {m.id} (tmdb_id={m.tmdb_id})")
+                                    except Exception:
+                                        logger.exception("Failed to persist movie updates from TMDB")
+
                                     item.result = json.dumps({'updated_from': 'tmdb'})
                                     item.status = QueueStatus.COMPLETED
                                     task.completed_items = (task.completed_items or 0) + 1
@@ -519,6 +529,7 @@ class QueueWorker:
                                         )
                                         session.add(log)
                                         await session.commit()
+                                        logger.info("Persisted LogEntry for movie TMDB no-result")
                                     except Exception:
                                         logger.exception('Failed to persist LogEntry for TMDB no-result')
 
@@ -622,6 +633,16 @@ class QueueWorker:
                                         s.backdrop_path = tmdb_result.backdrop_path
                                         s.imdb_id = tmdb_result.imdb_id
                                         s.scraped = True
+
+                                        # Persist the show update immediately so tests that query the DB can observe it
+                                        try:
+                                            session.add(s)
+                                            await session.commit()
+                                            await session.refresh(s)
+                                            logger.info(f"Persisted TMDB metadata for show {s.id} (tmdb_id={s.tmdb_id})")
+                                        except Exception:
+                                            logger.exception("Failed to persist show updates from TMDB")
+
                                         item.result = json.dumps({'updated_from': 'tmdb'})
                                         item.status = QueueStatus.COMPLETED
                                         task.completed_items = (task.completed_items or 0) + 1
@@ -641,6 +662,7 @@ class QueueWorker:
                                             )
                                             session.add(log)
                                             await session.commit()
+                                            logger.info("Persisted LogEntry for show TMDB no-result")
                                         except Exception:
                                             logger.exception('Failed to persist LogEntry for TMDB no-result (show)')
 
@@ -660,6 +682,7 @@ class QueueWorker:
                                             )
                                             session.add(log2)
                                             await session.commit()
+                                            logger.info(f"Persisted additional LogEntry for show {s.id}")
                                         except Exception:
                                             logger.exception('Failed to persist additional LogEntry for TMDB no-result (show)')
                                 else:

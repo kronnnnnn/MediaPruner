@@ -1,0 +1,115 @@
+name: PR Preview Deploy (Unraid Self-hosted)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_BASE: ghcr.io/${{ github.repository }}
+
+jobs:
+  build-pr-image:
+    name: Build PR image
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.set_tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set PR tag
+        id: set_tag
+        run: echo "tag=pr-${{ github.event.number }}" >> $GITHUB_OUTPUT
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Build and push PR image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE_BASE }}:${{ steps.set_tag.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-pr:
+    name: Deploy PR to Unraid runner
+    runs-on: [self-hosted, linux, unraid]
+    needs: build-pr-image
+    steps:
+      - name: Create per-PR deploy dir on runner
+        run: |
+          PR_DIR="${{ secrets.UNRAID_COMPOSE_DIR }}/pr-${{ github.event.number }}"
+          mkdir -p "$PR_DIR"
+          # Write a minimal docker-compose.yml pointing to the PR-tagged image
+          cat > "$PR_DIR/docker-compose.yml" <<EOF
+          version: '3.8'
+          services:
+            mediapruner:
+              image: ${{ env.IMAGE_BASE }}:pr-${{ github.event.number }}
+              container_name: mediapruner_pr${{ github.event.number }}
+              ports:
+                - "8000:8000"
+              env_file:
+                - .env
+              restart: unless-stopped
+              volumes:
+                - mediapruner_data_pr${{ github.event.number }}:/app/data
+                - mediapruner_logs_pr${{ github.event.number }}:/app/logs
+          volumes:
+            mediapruner_data_pr${{ github.event.number }}:
+            mediapruner_logs_pr${{ github.event.number }}:
+          EOF
+
+      - name: Write temporary .env (use staging secrets)
+        run: |
+          PR_DIR="${{ secrets.UNRAID_COMPOSE_DIR }}/pr-${{ github.event.number }}"
+
+          cat > "$PR_DIR/.env" <<EOF
+          MB_DEBUG=${{ secrets.MB_DEBUG }}
+          MB_TMDB_API_KEY=${{ secrets.MB_TMDB_API_KEY }}
+          MB_OMDB_API_KEY=${{ secrets.MB_OMDB_API_KEY }}
+          MB_DATABASE_URL=${{ secrets.MB_DATABASE_URL }}
+          EOF
+
+          chmod 600 "$PR_DIR/.env"
+
+      - name: Pull image and bring up preview
+        run: |
+          PR_DIR="${{ secrets.UNRAID_COMPOSE_DIR }}/pr-${{ github.event.number }}"
+          cd "$PR_DIR"
+          docker compose pull || true
+          COMPOSE_PROJECT_NAME=mediapruner_pr${{ github.event.number }} docker compose up -d
+
+      - name: Health check
+        run: |
+          # Note: This runs on the runner, so localhost is the host. If port conflicts exist this may fail.
+          sleep 5
+          curl -fSsf http://localhost:8000/api/health || (echo "Preview healthcheck failed" && exit 1)
+
+      - name: Leave a comment on the PR with preview info
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request.number
+            const url = `http://${process.env.RUNNER_HOST || 'your-unraid-host'}:8000`;
+            await github.issues.createComment({
+              ...context.repo,
+              issue_number: pr,
+              body: `Preview deployed: ${url} (may be behind NAT or need host port mapping). If the preview fails, check the Actions logs and the runner.`
+            })
+
+# NOTES:
+# - PR preview deploys require that the PR branch is in the same repository (not a fork) in order to access secrets.
+# - This workflow writes per-PR compose directories under UNRAID_COMPOSE_DIR/pr-<num>. Clean up after the PR is closed if desired.
+# - If the host already has a process bound to 8000, the preview will fail; consider adjusting port mapping for previews.
+# - Ensure repository secrets are set: GHCR_PAT, UNRAID_COMPOSE_DIR, MB_TMDB_API_KEY, MB_OMDB_API_KEY, MB_DATABASE_URL, MB_DEBUG.

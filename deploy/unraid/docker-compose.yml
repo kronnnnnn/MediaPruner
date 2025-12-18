@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  mediapruner:
+    image: ghcr.io/${{ repo_owner }}/*REPO_NAME*/:staging
+    container_name: mediapruner
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - MB_DEBUG=${MB_DEBUG}
+      - MB_LOG_LEVEL=INFO
+    volumes:
+      - mediapruner_data:/app/data
+      - mediapruner_logs:/app/logs
+      # Mount your media directories here
+      # - /mnt/user/media/movies:/media/movies:ro
+      # - /mnt/user/media/tvshows:/media/tvshows:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  mediapruner_data:
+  mediapruner_logs:
+
+# Notes:
+# - Replace the image with your repo image name (e.g., ghcr.io/kronnnnnn/MediaPruner:staging)
+# - Keep this file under /mnt/user/appdata/mediapruner/docker-compose.yml on Unraid and set UNRAID_COMPOSE_DIR to that folder path in GitHub Environment secrets.
+# - The workflow writes a temporary .env file in that directory during deploy; keep your real `.env` out of VCS.

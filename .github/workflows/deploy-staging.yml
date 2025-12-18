@@ -1,0 +1,107 @@
+name: Deploy to Staging (Unraid Self-hosted)
+
+on:
+  push:
+    branches: [ develop, staging ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+  TAG: staging
+
+jobs:
+  build-and-push:
+    name: Build and push image
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ env.IMAGE }}:${{ env.TAG }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}:${{ env.TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-on-unraid:
+    name: Deploy on Unraid self-hosted runner
+    runs-on: [self-hosted, linux, unraid]
+    needs: build-and-push
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        # Uses provided GHCR_PAT secret to allow docker pull
+        run: |
+          echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Write .env for deployment (from secrets)
+        # Expects repository/environment secrets to include UNRAID_COMPOSE_DIR and app secrets
+        run: |
+          DEPLOY_DIR="${{ secrets.UNRAID_COMPOSE_DIR }}"
+          if [ -z "$DEPLOY_DIR" ]; then
+            echo "UNRAID_COMPOSE_DIR secret is not set. Set it to the folder where your docker-compose.yml lives on the runner." >&2
+            exit 1
+          fi
+
+          # Build .env file in the deploy dir from secrets (do NOT commit this file)
+          cat > "$DEPLOY_DIR/.env" <<EOF
+          MB_TMDB_API_KEY=${{ secrets.MB_TMDB_API_KEY }}
+          MB_OMDB_API_KEY=${{ secrets.MB_OMDB_API_KEY }}
+          MB_DATABASE_URL=${{ secrets.MB_DATABASE_URL }}
+          MB_DEBUG=${{ secrets.MB_DEBUG }}
+          EOF
+
+          chmod 600 "$DEPLOY_DIR/.env"
+
+      - name: Pull image and restart service
+        run: |
+          DEPLOY_DIR="${{ secrets.UNRAID_COMPOSE_DIR }}"
+          cd "$DEPLOY_DIR"
+          docker pull ${{ needs.build-and-push.outputs.image }}
+          docker compose pull || true
+          docker compose up -d --no-build
+
+      - name: Health check
+        run: |
+          sleep 5
+          curl -fSsf http://localhost:8000/api/health || (echo "Healthcheck failed" && exit 1)
+
+      - name: Cleanup local env file
+        if: always()
+        run: |
+          DEPLOY_DIR="${{ secrets.UNRAID_COMPOSE_DIR }}"
+          rm -f "$DEPLOY_DIR/.env"
+
+    # IMPORTANT: Limit who can approve / run this (set in repo -> Environments -> staging)
+
+# Notes:
+# - This workflow requires a self-hosted runner registered on your Unraid machine with label "unraid".
+# - Required secrets (set in the repository's Environments -> staging):
+#   - GHCR_PAT (or ensure runner can pull images from GHCR)
+#   - UNRAID_COMPOSE_DIR: absolute path to the directory on the runner where docker-compose.yml resides
+#   - MB_TMDB_API_KEY, MB_OMDB_API_KEY, MB_DATABASE_URL, MB_DEBUG (optional)
+# - The runner must have Docker and docker-compose available and the runner user must be able to run Docker commands.
