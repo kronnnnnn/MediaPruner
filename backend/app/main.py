@@ -16,6 +16,7 @@ from app.services.queue import QueueWorker
 # Import models to ensure all tables are registered with SQLAlchemy
 from app import models  # noqa: F401
 
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
