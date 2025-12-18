@@ -2,6 +2,7 @@ import pytest
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 import app.database as database
+from app import models  # noqa: F401 - Import to register models with Base
 
 
 @pytest.fixture

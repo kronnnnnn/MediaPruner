@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import List, Optional
 from pathlib import Path
 
-from app.database import async_session
+from app import database
 from app.models import QueueTask, QueueItem, QueueStatus
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ async def publish_task_list():
 
 async def create_task(task_type: str, items: List[dict], meta: Optional[dict] = None, created_by: Optional[str] = None):
     """Create a queue task with items. Returns task id."""
-    async with async_session() as session:
+    async with database.async_session() as session:
         task = QueueTask(
             type=task_type,
             status=QueueStatus.QUEUED,
@@ -114,7 +114,7 @@ async def create_task(task_type: str, items: List[dict], meta: Optional[dict] = 
 
 
 async def list_tasks(limit: int = 50):
-    async with async_session() as session:
+    async with database.async_session() as session:
         result = await session.execute(
             QueueTask.__table__.select().order_by(QueueTask.created_at.desc()).limit(limit)
         )
@@ -156,7 +156,7 @@ async def get_task(task_id: int):
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
 
-    async with async_session() as session:
+    async with database.async_session() as session:
         q = await session.execute(
             select(QueueTask).where(QueueTask.id == task_id).options(selectinload(QueueTask.items))
         )
@@ -207,7 +207,7 @@ async def cancel_task(task_id: int):
     """
     from sqlalchemy import update, select
 
-    async with async_session() as session:
+    async with database.async_session() as session:
         # Check task exists
         t = await session.get(QueueTask, task_id)
         if not t:
@@ -256,7 +256,7 @@ async def clear_queued_tasks(older_than_seconds: int | None = None):
     from sqlalchemy import update, select, and_, or_
     from datetime import datetime, timedelta
 
-    async with async_session() as session:
+    async with database.async_session() as session:
         # Build where clause
         where_clause = QueueTask.status.in_([QueueStatus.QUEUED, QueueStatus.RUNNING])
         if older_than_seconds is not None:
@@ -328,7 +328,7 @@ class QueueWorker:
         from sqlalchemy import select
         from app.services.scanner import scan_movie_directory, scan_tvshow_directory
 
-        async with async_session() as session:
+        async with database.async_session() as session:
             from sqlalchemy.orm import selectinload
             q = await session.execute(
                 select(QueueTask).where(QueueTask.status == QueueStatus.QUEUED).order_by(QueueTask.created_at).options(selectinload(QueueTask.items))
