@@ -156,9 +156,61 @@ async def browse_directory(path: str = Query(default="")):
 
 @router.get("/paths", response_model=list[LibraryPathResponse])
 async def get_library_paths(db: AsyncSession = Depends(get_db)):
-    """Get all configured library paths"""
-    result = await db.execute(select(LibraryPath))
-    paths = result.scalars().all()
+
+    """Get all configured library paths
+
+    NOTE: Some older rows may store the media_type as lowercase strings ('movie' / 'tv') which
+    can raise a LookupError when SQLAlchemy attempts to convert to the `MediaType` Enum. To
+    be robust we attempt the ORM query first and fall back to a raw table select and manual
+    normalization when that fails.
+    """
+    try:
+        result = await db.execute(select(LibraryPath))
+        paths = result.scalars().all()
+    except LookupError:
+        # Fallback to raw SQL select so we don't trigger SQLAlchemy Enum processing on corrupt
+        # rows that use lowercase values like 'tv'. We execute a plain text query and work with
+        # raw tuples/strings.
+        from sqlalchemy import text as _text
+
+        result = await db.execute(_text('SELECT id, path, media_type, name, created_at FROM library_paths'))
+        rows = result.fetchall()
+
+        responses = []
+        for r in rows:
+            _id, _path, _media_type, _name, _created_at = r
+
+            mt_norm = (_media_type.upper() if isinstance(_media_type, str) else 'MOVIE')
+            try:
+                media_type_value = MediaType[mt_norm]
+            except Exception:
+                media_type_value = MediaType.MOVIE
+
+            path_obj = Path(_path)
+            exists = path_obj.exists()
+
+            if media_type_value == MediaType.MOVIE:
+                count_result = await db.execute(
+                    select(func.count(Movie.id)).where(Movie.library_path_id == _id)
+                )
+                file_count = count_result.scalar() or 0
+            else:
+                count_result = await db.execute(
+                    select(func.count(Episode.id)).join(TVShow).where(TVShow.library_path_id == _id)
+                )
+                file_count = count_result.scalar() or 0
+
+            responses.append(LibraryPathResponse(
+                id=_id,
+                path=_path,
+                media_type=media_type_value.value,
+                name=_name,
+                exists=exists,
+                file_count=file_count,
+                created_at=_created_at
+            ))
+
+        return responses
 
     responses = []
     for path in paths:

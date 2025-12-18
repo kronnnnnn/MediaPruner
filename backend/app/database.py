@@ -29,7 +29,14 @@ async def get_db():
 
 
 async def migrate_db():
-    """Run database migrations for new columns"""
+    """Run database migrations for new columns and SQL migration files.
+
+    This function performs two tasks:
+    1. Adds any missing columns to tables (backwards-compatible checks).
+    2. Runs SQL files placed in `backend/migrations/` that have not yet been applied. A
+       simple `migrations` table is used to record applied migrations so they are
+       not re-applied.
+    """
     async with engine.begin() as conn:
         # Check and add new columns to movies table
         movies_columns = [
@@ -79,6 +86,32 @@ async def migrate_db():
                 # Column already exists
                 pass
 
+        # Create a simple migrations table to track applied SQL migrations
+        try:
+            await conn.execute(text("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)"))
+        except Exception:
+            pass
+
+        # Apply SQL migration files from backend/migrations in lexicographical order
+        import os
+        migrations_dir = Path(__file__).parent.parent / 'migrations'
+        if migrations_dir.exists():
+            for sql_file in sorted([p for p in migrations_dir.iterdir() if p.suffix == '.sql']):
+                name = sql_file.name
+                # Check if applied
+                res = await conn.execute(text("SELECT 1 FROM migrations WHERE name = :name"), {"name": name})
+                if res.fetchone():
+                    continue
+                # Read and execute SQL
+                sql_text = sql_file.read_text()
+                try:
+                    await conn.execute(text(sql_text))
+                    await conn.execute(text("INSERT INTO migrations (name) VALUES (:name)"), {"name": name})
+                except Exception:
+                    # Don't let one migration fail the whole sequence - raise to surface in tests
+                    raise
+
+
 
 async def init_db():
     """Initialize database tables"""
@@ -86,6 +119,12 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
     # Run migrations for any new columns
     await migrate_db()
+
+    # Normalize any existing media_type values (e.g., 'tv' -> 'TV') to avoid Enum lookup errors
+    try:
+        await conn.execute(text("UPDATE library_paths SET media_type = UPPER(media_type) WHERE media_type IS NOT NULL AND media_type != UPPER(media_type)"))
+    except Exception:
+        pass
 
     # Ensure queue tables exist (new feature)
     await _ensure_queue_tables(conn)
