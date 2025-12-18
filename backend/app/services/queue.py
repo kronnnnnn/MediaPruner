@@ -647,6 +647,21 @@ class QueueWorker:
                                         item.result = json.dumps({'updated_from': None, 'note': 'no metadata found from TMDB or OMDb'})
                                         item.status = QueueStatus.COMPLETED
                                         task.completed_items = (task.completed_items or 0) + 1
+                                        try:
+                                            # Ensure a DB-side log entry exists for diagnostic purposes
+                                            from app.models import LogEntry
+                                            detail_msg = f"TMDB search for show '{s.title}' ({s.id}) returned no result. Tried: {getattr(tmdb_service, 'last_search_tried', None)}"
+                                            log2 = LogEntry(
+                                                level='INFO',
+                                                logger_name='QueueWorker',
+                                                message=detail_msg,
+                                                module='queue',
+                                                function='process_one',
+                                            )
+                                            session.add(log2)
+                                            await session.commit()
+                                        except Exception:
+                                            logger.exception('Failed to persist additional LogEntry for TMDB no-result (show)')
                                 else:
                                     item.result = json.dumps({'error': 'tmdb not configured'})
                                     item.status = QueueStatus.FAILED
