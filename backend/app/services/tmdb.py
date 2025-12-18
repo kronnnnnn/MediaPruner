@@ -98,7 +98,13 @@ class TMDBService:
         self.use_bearer = self.api_key.startswith(
             "eyJ") if self.api_key else False
         self.client = httpx.AsyncClient(timeout=30.0)
+<<<<<<< HEAD
 
+=======
+        # diagnostics: store last search variants tried
+        self.last_search_tried: list | None = None
+    
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
     @classmethod
     async def create_with_db_key(cls, db: AsyncSession) -> "TMDBService":
         """Factory method to create TMDBService with API key from database"""
@@ -132,7 +138,7 @@ class TMDBService:
 
         try:
             url = f"{TMDB_BASE_URL}{endpoint}"
-            logger.debug(f"TMDB request: {url} (bearer={self.use_bearer})")
+            logger.debug(f"TMDB request: {url} params={params} (bearer={self.use_bearer})")
             response = await self.client.get(url, params=params, headers=headers)
             response.raise_for_status()
             return response.json()
@@ -190,25 +196,99 @@ class TMDBService:
             votes=data.get("vote_count"),
         )
 
-    async def search_movie_and_get_details(
-            self,
-            title: str,
-            year: Optional[int] = None) -> Optional[TMDBMovieResult]:
-        """Search for a movie and get its details"""
-        results = await self.search_movie(title, year)
-        if not results:
-            # Try without year
+    
+    def _title_variants(self, title: str) -> list[str]:
+        """Generate a set of title variants to improve matching."""
+        if not title:
+            return []
+        variants = [title]
+        # Remove parenthetical content e.g. "Title (2013)" or "Title (something)"
+        import re
+        stripped = re.sub(r"\s*\([^\)]*\)", "", title).strip()
+        if stripped and stripped not in variants:
+            variants.append(stripped)
+        # Remove leading articles
+        for art in ("The ", "A ", "An "):
+            if title.startswith(art):
+                v = title[len(art):].strip()
+                if v and v not in variants:
+                    variants.append(v)
+        # Consider portion before colon
+        if ':' in title:
+            before = title.split(':', 1)[0].strip()
+            if before and before not in variants:
+                variants.append(before)
+        # Clean punctuation-only variants
+        cleaned = re.sub(r"[^0-9A-Za-z ]+", "", title).strip()
+        if cleaned and cleaned not in variants:
+            variants.append(cleaned)
+        return variants
+
+    async def search_movie_and_get_details(self, title: str, year: Optional[int] = None) -> Optional[TMDBMovieResult]:
+        """Search for a movie and get its details using multiple heuristics to improve match rate."""
+        tried = []
+        # Try several title variants and year combinations
+        import difflib
+
+        def pick_best_result(results_list, target_title, target_year=None):
+            """Pick best match from TMDB search results using simple fuzzy matching."""
+            best = None
+            best_score = 0.0
+            for r in results_list:
+                name = r.get('title') or r.get('name') or ''
+                # Compute similarity
+                score = difflib.SequenceMatcher(None, target_title.lower(), name.lower()).ratio()
+                # Boost score if the year matches (release_date or first_air_date)
+                year_score = 0.0
+                try:
+                    if target_year:
+                        rd = r.get('release_date') or r.get('first_air_date')
+                        if rd:
+                            rd_year = int(rd.split('-')[0])
+                            if rd_year == target_year:
+                                year_score = 0.15
+                except Exception:
+                    pass
+                final = score + year_score
+                if final > best_score:
+                    best_score = final
+                    best = r
+            # Accept if above threshold (0.5) otherwise None
+            return best if best_score >= 0.5 else None
+
+        for t in self._title_variants(title):
+            # Try with year first
             if year:
-                results = await self.search_movie(title)
+                tried.append({"query": t, "year": year})
+                results = await self.search_movie(t, year)
+                if results:
+                    best = pick_best_result(results, t, year)
+                    if best:
+                        # Record tried variants for diagnostics and return details
+                        self.last_search_tried = tried
+                        return await self.get_movie_details(best["id"])
+                    # fallback to first
+                    self.last_search_tried = tried
+                    return await self.get_movie_details(results[0]["id"])
+            # Try without year
+            tried.append({"query": t, "year": None})
+            results = await self.search_movie(t)
+            if results:
+                best = pick_best_result(results, t)
+                if best:
+                    # Record tried variants and return
+                    self.last_search_tried = tried
+                    return await self.get_movie_details(best["id"])
+                # Record tried variants and return fallback
+                self.last_search_tried = tried
+                return await self.get_movie_details(results[0]["id"])
 
-        if not results:
-            return None
-
-        # Get details for the first result
-        return await self.get_movie_details(results[0]["id"])
-
-    async def find_movie_by_imdb(
-            self, imdb_id: str) -> Optional[TMDBMovieResult]:
+        logger.info(f"TMDB movie search exhausted variants for '{title}' year={year}. Tried: {tried}")
+        self.last_search_tried = tried
+        return None
+    
+    async def find_movie_by_imdb(self, imdb_id: str) -> Optional[TMDBMovieResult]:
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
         """Find a movie by its IMDB ID"""
         # Ensure imdb_id starts with 'tt'
         if not imdb_id.startswith('tt'):
@@ -325,6 +405,7 @@ class TMDBService:
             ))
 
         return episodes
+<<<<<<< HEAD
 
     async def search_tvshow_and_get_details(
             self,
@@ -338,6 +419,59 @@ class TMDBService:
         # Get details for the first result
         return await self.get_tvshow_details(results[0]["id"])
 
+=======
+    
+    async def search_tvshow_and_get_details(self, title: str, year: Optional[int] = None) -> Optional[TMDBTVShowResult]:
+        """Search for a TV show and get its details using multiple heuristics."""
+        tried = []
+        import difflib
+
+        def pick_best_result_tv(results_list, target_title, target_year=None):
+            best = None
+            best_score = 0.0
+            for r in results_list:
+                name = r.get('name') or r.get('original_name') or ''
+                score = difflib.SequenceMatcher(None, target_title.lower(), name.lower()).ratio()
+                year_score = 0.0
+                try:
+                    if target_year:
+                        fd = r.get('first_air_date')
+                        if fd:
+                            fd_year = int(fd.split('-')[0])
+                            if fd_year == target_year:
+                                year_score = 0.15
+                except Exception:
+                    pass
+                final = score + year_score
+                if final > best_score:
+                    best_score = final
+                    best = r
+            return best if best_score >= 0.5 else None
+
+        for t in self._title_variants(title):
+            # Try with year first
+            if year:
+                tried.append({"query": t, "year": year})
+                results = await self.search_tvshow(t, year)
+                if results:
+                    best = pick_best_result_tv(results, t, year)
+                    if best:
+                        return await self.get_tvshow_details(best["id"])
+                    return await self.get_tvshow_details(results[0]["id"])
+            # Try without year
+            tried.append({"query": t, "year": None})
+            results = await self.search_tvshow(t)
+            if results:
+                best = pick_best_result_tv(results, t)
+                if best:
+                    return await self.get_tvshow_details(best["id"])
+                return await self.get_tvshow_details(results[0]["id"])
+
+        logger.info(f"TMDB TV search exhausted variants for '{title}' year={year}. Tried: {tried}")
+        self.last_search_tried = tried
+        return None
+    
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
     async def close(self):
         """Close the HTTP client"""
         await self.client.aclose()

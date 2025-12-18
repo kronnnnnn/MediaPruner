@@ -421,7 +421,7 @@ async def scan_single_path(
     tvshows_found = 0
     episodes_found = 0
     errors = []
-
+    new_movie_ids = []
     try:
         if lib_path.media_type == MediaType.MOVIE:
             movies = scan_movie_directory(path)
@@ -446,6 +446,8 @@ async def scan_single_path(
                     edition=parsed.edition
                 )
                 db.add(movie)
+                await db.flush()
+                new_movie_ids.append(movie.id)
                 movies_found += 1
 
         else:
@@ -516,6 +518,23 @@ async def scan_single_path(
 
         await db.commit()
 
+<<<<<<< HEAD
+=======
+        # If new movies were added during this scan, enqueue post-scan processing tasks
+        try:
+            if new_movie_ids:
+                from app.services.queue import create_task
+                import logging
+                logger = logging.getLogger(__name__)
+
+                analyze_task = await create_task('analyze', [{'movie_id': mid} for mid in new_movie_ids])
+                refresh_task = await create_task('refresh_metadata', [{'movie_id': mid} for mid in new_movie_ids])
+                sync_task = await create_task('sync_watch_history', [{'movie_id': mid} for mid in new_movie_ids])
+
+                logger.info(f"Enqueued post-scan tasks for {len(new_movie_ids)} movies: analyze={analyze_task.id}, refresh={refresh_task.id}, sync={sync_task.id}")
+        except Exception:
+            # Don't block the scan result on task enqueueing
+            pass
     except Exception as e:
         errors.append(str(e))
 
@@ -542,7 +561,7 @@ async def scan_all_libraries(db: AsyncSession = Depends(get_db)):
     total_shows = 0
     total_episodes = 0
     all_errors = []
-
+    new_movie_ids = []
     for lib_path in paths:
         path = Path(lib_path.path)
         if not path.exists():
@@ -571,6 +590,8 @@ async def scan_all_libraries(db: AsyncSession = Depends(get_db)):
                         edition=parsed.edition
                     )
                     db.add(movie)
+                    await db.flush()
+                    new_movie_ids.append(movie.id)
                     total_movies += 1
             else:
                 shows = scan_tvshow_directory(path)
@@ -611,6 +632,24 @@ async def scan_all_libraries(db: AsyncSession = Depends(get_db)):
 
     await db.commit()
 
+<<<<<<< HEAD
+=======
+    # If new movies were added during this scan, enqueue post-scan processing tasks
+    try:
+        if new_movie_ids:
+            from app.services.queue import create_task
+            import logging
+            logger = logging.getLogger(__name__)
+
+            analyze_task = await create_task('analyze', [{'movie_id': mid} for mid in new_movie_ids])
+            refresh_task = await create_task('refresh_metadata', [{'movie_id': mid} for mid in new_movie_ids])
+            sync_task = await create_task('sync_watch_history', [{'movie_id': mid} for mid in new_movie_ids])
+
+            logger.info(f"Enqueued post-scan tasks for {len(new_movie_ids)} movies: analyze={analyze_task.id}, refresh={refresh_task.id}, sync={sync_task.id}")
+    except Exception:
+        pass
+
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
     return {
         "message": "Library scan completed",
         "movies_found": total_movies,
@@ -654,7 +693,12 @@ async def refresh_library(db: AsyncSession = Depends(get_db)):
     added_shows = 0
     added_episodes = 0
     errors = []
+<<<<<<< HEAD
 
+=======
+    new_movie_ids = []
+    
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
     for lib_path in paths:
         path = Path(lib_path.path)
         if not path.exists():
@@ -730,6 +774,8 @@ async def refresh_library(db: AsyncSession = Depends(get_db)):
                             edition=parsed.edition
                         )
                         db.add(movie)
+                        await db.flush()
+                        new_movie_ids.append(movie.id)
                         added_movies += 1
 
             else:
@@ -801,6 +847,24 @@ async def refresh_library(db: AsyncSession = Depends(get_db)):
 
     await db.commit()
 
+<<<<<<< HEAD
+=======
+    # Enqueue post-scan tasks if new movies were added
+    try:
+        if new_movie_ids:
+            from app.services.queue import create_task
+            import logging
+            logger = logging.getLogger(__name__)
+
+            analyze_task = await create_task('analyze', [{'movie_id': mid} for mid in new_movie_ids])
+            refresh_task = await create_task('refresh_metadata', [{'movie_id': mid} for mid in new_movie_ids])
+            sync_task = await create_task('sync_watch_history', [{'movie_id': mid} for mid in new_movie_ids])
+
+            logger.info(f"Enqueued post-refresh tasks for {len(new_movie_ids)} movies: analyze={analyze_task.id}, refresh={refresh_task.id}, sync={sync_task.id}")
+    except Exception:
+        pass
+
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
     return {
         "message": "Library refreshed",
         "removed": {

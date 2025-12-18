@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { Film, Tv, Settings, LayoutDashboard, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Film, Tv, Settings, LayoutDashboard, ChevronLeft, ChevronRight, List } from 'lucide-react'
 import { useSidebar } from '../contexts/SidebarContext'
 import logger from '../services/logger'
 
@@ -7,6 +7,7 @@ const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/movies', icon: Film, label: 'Movies' },
   { path: '/tvshows', icon: Tv, label: 'TV' },
+  { path: '/queues', icon: List, label: 'Queue' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ]
 

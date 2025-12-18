@@ -1,9 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi.responses import StreamingResponse
+import asyncio
+import logging
 
 from app.database import get_db
-from app.services.queue import create_task, get_task, list_tasks, cancel_task
+from app.services.queue import create_task, get_task, list_tasks, cancel_task, clear_queued_tasks, subscribe_events, unsubscribe_events, QueueWorker
+from app.config import settings
+import json
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["queues"])
 
 
@@ -34,40 +40,20 @@ async def api_get_task(task_id: int):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    # Basic serialization
-    items = []
-    for i in task.items:
-        items.append({
-            "id": i.id,
-            "index": i.index,
-            "status": i.status.value,
-            "payload": i.payload,
-            "result": i.result,
-            "started_at": i.started_at,
-            "finished_at": i.finished_at,
-        })
-
-    return {
-        "id": task.id,
-        "type": task.type,
-        "status": task.status.value,
-        "created_by": task.created_by,
-        "created_at": task.created_at,
-        "started_at": task.started_at,
-        "finished_at": task.finished_at,
-        "total_items": task.total_items,
-        "completed_items": task.completed_items,
-        "meta": task.meta,
-        "items": items,
-    }
+    # get_task now returns a serialized mapping
+    return task
 
 
 @router.post("/tasks/{task_id}/cancel")
 async def api_cancel_task(task_id: int):
-    t = await cancel_task(task_id)
-    if not t:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return {"task_id": t.id, "status": t.status.value}
+    try:
+        res = await cancel_task(task_id)
+        if not res:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return {"task_id": res.get('id'), "status": res.get('status')}
+    except Exception as e:
+        logger.exception(f"Failed to cancel task {task_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to cancel task")
 
 
 @router.get("/ongoing")
@@ -78,7 +64,113 @@ async def api_ongoing():
 
 
 @router.get("/worker")
-async def api_worker_status(request):
+async def api_worker_status(request: Request):
     """Return worker running status."""
     worker = getattr(request.app.state, 'queue_worker', None)
     return {"running": bool(worker and worker.is_running())}
+
+
+@router.post("/worker/run-once")
+async def api_worker_run_once(request: Request):
+    """Trigger a single worker iteration immediately (DEBUG only).
+
+    Useful to force processing and surface exceptions synchronously during debugging.
+    """
+    if not settings.debug:
+        raise HTTPException(status_code=403, detail="Run-once is only allowed in debug mode")
+
+    worker = getattr(request.app.state, 'queue_worker', None)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not available")
+
+    import traceback
+    try:
+        processed = await worker.process_one()
+        return {"processed": bool(processed)}
+    except Exception as e:
+        # Log full traceback
+        tb = traceback.format_exc()
+        logger.exception(f"Worker run-once failed: {e}\n{tb}")
+        # In debug, return the full traceback for easier diagnosis; otherwise keep generic
+        if settings.debug:
+            raise HTTPException(status_code=500, detail=tb)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get('/stream')
+async def api_queues_stream():
+    """Server-sent events stream of queue changes (init + task_update events)."""
+    # subscribe
+    q = subscribe_events()
+
+    async def event_generator():
+        # Send initial snapshot
+        try:
+            initial = await list_tasks()
+            yield f"event: init\ndata: {json.dumps(initial, default=str)}\n\n"
+        except Exception as e:
+            logger.exception(f"Failed to send initial task list: {e}")
+
+        try:
+            while True:
+                msg = await q.get()
+                yield msg
+        except asyncio.CancelledError:
+            # Client disconnected
+            pass
+        finally:
+            unsubscribe_events(q)
+
+    return StreamingResponse(event_generator(), media_type='text/event-stream')
+
+@router.post("/tasks/clear")
+async def api_clear_tasks(older_than_seconds: int | None = None):
+    """Clear queued/running tasks (DEBUG only).
+
+    Marks matching tasks as DELETED and queued/running items as CANCELED. Only enabled when app is running in debug mode.
+    """
+    if not settings.debug:
+        raise HTTPException(status_code=403, detail="Clearing tasks is only allowed in debug mode")
+    res = await clear_queued_tasks(older_than_seconds)
+    return res
+
+
+@router.get('/worker/debug')
+async def api_worker_debug(request: Request):
+    """Return worker debug info: running, last_processed_at, last_error."""
+    worker = getattr(request.app.state, 'queue_worker', None)
+    if not worker:
+        raise HTTPException(status_code=404, detail='Worker not available')
+    info = {
+        'running': bool(worker and worker.is_running()),
+        'last_processed_at': worker.last_processed_at.isoformat() if getattr(worker, 'last_processed_at', None) else None,
+        'last_error': getattr(worker, 'last_error', None),
+    }
+    return info
+
+
+@router.post('/worker/start')
+async def api_worker_start(request: Request):
+    """Start the queue worker (debug only)."""
+    if not settings.debug:
+        raise HTTPException(status_code=403, detail='Start/stop only allowed in debug mode')
+    worker = getattr(request.app.state, 'queue_worker', None)
+    if worker and worker.is_running():
+        return {'started': False, 'reason': 'worker already running'}
+    if not worker:
+        request.app.state.queue_worker = QueueWorker()
+        worker = request.app.state.queue_worker
+    await worker.start()
+    return {'started': True}
+
+
+@router.post('/worker/stop')
+async def api_worker_stop(request: Request):
+    """Stop the queue worker (debug only)."""
+    if not settings.debug:
+        raise HTTPException(status_code=403, detail='Start/stop only allowed in debug mode')
+    worker = getattr(request.app.state, 'queue_worker', None)
+    if not worker or not worker.is_running():
+        return {'stopped': False, 'reason': 'worker not running'}
+    await worker.stop()
+    return {'stopped': True}

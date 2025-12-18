@@ -2,10 +2,11 @@
 Settings API Router - Manages application settings stored in the database
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
+from starlette.status import HTTP_200_OK, HTTP_400_BAD_REQUEST
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, delete, func
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 
 from app.database import get_db
@@ -141,7 +142,7 @@ async def verify_tmdb_api_key(
             return {"valid": True}
         else:
             return {"valid": False}
-    except Exception:
+    except Exception as e:
         await tmdb_service.close()
         return {"valid": False}
 
@@ -213,7 +214,11 @@ async def verify_omdb_api_key(
 ):
     """Verify if the provided OMDb API key is valid by making a test request to OMDb."""
     from app.services.omdb import OMDbService
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
     # Use the provided key for verification
     omdb_service = OMDbService(api_key=data.api_key)
     try:
@@ -224,7 +229,11 @@ async def verify_omdb_api_key(
             return {"valid": True}
         else:
             return {"valid": False}
+<<<<<<< HEAD
     except Exception:
+=======
+    except Exception as e:
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
         await omdb_service.close()
         return {"valid": False}
 
@@ -330,7 +339,11 @@ async def verify_tautulli_settings(
 ):
     """Verify if the provided Tautulli settings are valid by making a test request."""
     from app.services.tautulli import TautulliService
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
     # Use the provided settings for verification
     tautulli_service = TautulliService(host=data.host, api_key=data.api_key)
     try:
@@ -340,7 +353,7 @@ async def verify_tautulli_settings(
             return {"valid": True}
         else:
             return {"valid": False}
-    except Exception:
+    except Exception as e:
         return {"valid": False}
     finally:
         if hasattr(tautulli_service, 'close'):
