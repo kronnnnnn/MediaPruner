@@ -189,7 +189,6 @@ async def get_task(task_id: int):
             except Exception:
                 data['meta'] = task.meta
 
-<<<<<<< HEAD
         from app.models import Movie
         for i in task.items:
             payload_parsed = None
@@ -307,18 +306,6 @@ async def get_task(task_id: int):
                 pass
 
             data['items'].append(item_obj)
-=======
-        for i in task.items:
-            data['items'].append({
-                'id': i.id,
-                'index': i.index,
-                'status': i.status.value if hasattr(i.status, 'value') else str(i.status),
-                'payload': i.payload,
-                'result': i.result,
-                'started_at': i.started_at.isoformat() if i.started_at else None,
-                'finished_at': i.finished_at.isoformat() if i.finished_at else None,
-            })
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
 
         return data
 
@@ -340,7 +327,7 @@ async def cancel_task(task_id: int):
         await session.execute(
             update(QueueTask)
             .where(QueueTask.id == task_id)
-<<<<<<< HEAD
+
             .values(status=QueueStatus.CANCELED, canceled_at=datetime.utcnow())
         )
 
@@ -419,55 +406,6 @@ async def clear_queued_tasks(older_than_seconds: int | None = None):
         except Exception:
             logger.exception("Failed to publish updates after clearing tasks")
         return {"tasks_cleared": len(ids), "items_affected": rowcount}
-async def clear_queued_tasks(older_than_seconds: int | None = None):
-    """Clear queued or running tasks and cancel their items.
-
-    If older_than_seconds is provided, only tasks with started_at older than that (or tasks created_at older than that when not started) are affected.
-    Returns a dict with counts.
-    """
-    from sqlalchemy import update, select, and_, or_
-    from datetime import datetime, timedelta
-
-    async with async_session() as session:
-        # Build where clause
-        where_clause = QueueTask.status.in_([QueueStatus.QUEUED, QueueStatus.RUNNING])
-        if older_than_seconds is not None:
-            cutoff = datetime.utcnow() - timedelta(seconds=older_than_seconds)
-            # If task started_at exists, compare started_at, else created_at
-            where_clause = and_(
-                where_clause,
-                or_(
-                    and_(QueueTask.started_at != None, QueueTask.started_at < cutoff),
-                    QueueTask.created_at < cutoff,
-                ),
-            )
-
-        q = await session.execute(select(QueueTask).where(where_clause))
-        tasks = q.scalars().all()
-        if not tasks:
-            return {"tasks_cleared": 0, "items_affected": 0}
-
-        ids = [t.id for t in tasks]
-
-        await session.execute(
-            update(QueueTask).where(QueueTask.id.in_(ids)).values(status=QueueStatus.DELETED)
-        )
-        res = await session.execute(
-            update(QueueItem)
-            .where(QueueItem.task_id.in_(ids))
-            .where(QueueItem.status.in_([QueueStatus.QUEUED, QueueStatus.RUNNING]))
-            .values(status=QueueStatus.CANCELED)
-        )
-        await session.commit()
-        rowcount = getattr(res, 'rowcount', None)
-        # Publish update for affected tasks so clients refresh
-        try:
-            for tid in ids:
-                await publish_task_update(tid)
-        except Exception:
-            logger.exception("Failed to publish updates after clearing tasks")
-        return {"tasks_cleared": len(ids), "items_affected": rowcount}
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
 
 
 class QueueWorker:
@@ -1019,7 +957,7 @@ class QueueWorker:
                                     except Exception as e:
                                         item.result = json.dumps({'error': str(e)})
                                         item.status = QueueStatus.FAILED
-=======
+
 
                     # Analyze handler: analyze movie or episode files and update DB
                     elif task.type == 'analyze':
@@ -1158,7 +1096,14 @@ class QueueWorker:
                                         await session.commit()
                                     except Exception:
                                         logger.exception('Failed to persist LogEntry for TMDB no-result')
-
+                                        # Fallback: try with a fresh session to ensure the diagnostic log is recorded
+                                        try:
+                                            async with database.async_session() as s2:
+                                                s2.add(log)
+                                                await s2.commit()
+                                                logger.info('Persisted LogEntry for movie TMDB no-result in fallback session')
+                                        except Exception:
+                                            logger.exception('Fallback failed to persist LogEntry for movie TMDB no-result')
                                     # Try OMDb fallback for ratings only and capture request params
                                     api_key = await get_omdb_api_key_from_db(session)
                                     if api_key:
@@ -1265,8 +1210,25 @@ class QueueWorker:
                                             )
                                             session.add(log)
                                             await session.commit()
+                                            # Debug: read back the inserted log and print message for test visibility
+                                            try:
+                                                qres = await session.execute(select(LogEntry).where(LogEntry.logger_name == 'QueueWorker').order_by(LogEntry.id.desc()).limit(1))
+                                                latest = qres.scalars().first()
+                                                print(f"Inserted LogEntry message: {getattr(latest,'message',None)}")
+                                            except Exception:
+                                                pass
+                                            print(f"Persisted TMDB no-result log for show {s.id} in main session")
                                         except Exception:
                                             logger.exception('Failed to persist LogEntry for TMDB no-result (show)')
+                                            # Fallback attempt with fresh session to ensure a DB-side diagnostic exists
+                                            try:
+                                                async with database.async_session() as s2:
+                                                    s2.add(log)
+                                                    await s2.commit()
+                                                    logger.info('Persisted LogEntry for show TMDB no-result in fallback session')
+                                                    print(f"Persisted TMDB no-result log for show {s.id} in fallback session")
+                                            except Exception:
+                                                logger.exception('Fallback failed to persist LogEntry for TMDB no-result (show)')
 
                                         item.result = json.dumps({'updated_from': None, 'note': 'no metadata found from TMDB or OMDb'})
                                         item.status = QueueStatus.COMPLETED
@@ -1452,10 +1414,7 @@ class QueueWorker:
                 await session.commit()
                 logger.info(f"Task {task.id} finished with status {task.status}")
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
+
                 # If the task failed, persist a summary LogEntry to make this visible in the DB logs
                 if task.status == QueueStatus.FAILED:
                     try:
