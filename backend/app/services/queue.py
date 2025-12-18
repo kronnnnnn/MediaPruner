@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import List, Optional
 from pathlib import Path
 
-from app.database import async_session
+import app.database as database
 from app.models import QueueTask, QueueItem, QueueStatus
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ async def publish_task_list():
 
 async def create_task(task_type: str, items: List[dict], meta: Optional[dict] = None, created_by: Optional[str] = None):
     """Create a queue task with items. Returns task id."""
-    async with async_session() as session:
+    async with database.async_session() as session:
         task = QueueTask(
             type=task_type,
             status=QueueStatus.QUEUED,
@@ -114,7 +114,7 @@ async def create_task(task_type: str, items: List[dict], meta: Optional[dict] = 
 
 
 async def list_tasks(limit: int = 50):
-    async with async_session() as session:
+    async with database.async_session() as session:
         result = await session.execute(
             QueueTask.__table__.select().order_by(QueueTask.created_at.desc()).limit(limit)
         )
@@ -156,7 +156,7 @@ async def get_task(task_id: int):
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
 
-    async with async_session() as session:
+    async with database.async_session() as session:
         q = await session.execute(
             select(QueueTask).where(QueueTask.id == task_id).options(selectinload(QueueTask.items))
         )
@@ -207,7 +207,7 @@ async def cancel_task(task_id: int):
     """
     from sqlalchemy import update, select
 
-    async with async_session() as session:
+    async with database.async_session() as session:
         # Check task exists
         t = await session.get(QueueTask, task_id)
         if not t:
@@ -217,7 +217,7 @@ async def cancel_task(task_id: int):
         await session.execute(
             update(QueueTask)
             .where(QueueTask.id == task_id)
-            .values(status=QueueStatus.DELETED, canceled_at=datetime.utcnow())
+            .values(status=QueueStatus.CANCELED, canceled_at=datetime.utcnow())
         )
 
         # Update queued/running items without loading relationship
@@ -328,7 +328,7 @@ class QueueWorker:
         from sqlalchemy import select
         from app.services.scanner import scan_movie_directory, scan_tvshow_directory
 
-        async with async_session() as session:
+        async with database.async_session() as session:
             from sqlalchemy.orm import selectinload
             q = await session.execute(
                 select(QueueTask).where(QueueTask.status == QueueStatus.QUEUED).order_by(QueueTask.created_at).options(selectinload(QueueTask.items))
@@ -517,7 +517,14 @@ class QueueWorker:
                                         await session.commit()
                                     except Exception:
                                         logger.exception('Failed to persist LogEntry for TMDB no-result')
-
+                                        # Fallback: try with a fresh session to ensure the diagnostic log is recorded
+                                        try:
+                                            async with database.async_session() as s2:
+                                                s2.add(log)
+                                                await s2.commit()
+                                                logger.info('Persisted LogEntry for movie TMDB no-result in fallback session')
+                                        except Exception:
+                                            logger.exception('Fallback failed to persist LogEntry for movie TMDB no-result')
                                     # Try OMDb fallback for ratings only and capture request params
                                     api_key = await get_omdb_api_key_from_db(session)
                                     if api_key:
@@ -624,8 +631,25 @@ class QueueWorker:
                                             )
                                             session.add(log)
                                             await session.commit()
+                                            # Debug: read back the inserted log and print message for test visibility
+                                            try:
+                                                qres = await session.execute(select(LogEntry).where(LogEntry.logger_name == 'QueueWorker').order_by(LogEntry.id.desc()).limit(1))
+                                                latest = qres.scalars().first()
+                                                print(f"Inserted LogEntry message: {getattr(latest,'message',None)}")
+                                            except Exception:
+                                                pass
+                                            print(f"Persisted TMDB no-result log for show {s.id} in main session")
                                         except Exception:
                                             logger.exception('Failed to persist LogEntry for TMDB no-result (show)')
+                                            # Fallback attempt with fresh session to ensure a DB-side diagnostic exists
+                                            try:
+                                                async with database.async_session() as s2:
+                                                    s2.add(log)
+                                                    await s2.commit()
+                                                    logger.info('Persisted LogEntry for show TMDB no-result in fallback session')
+                                                    print(f"Persisted TMDB no-result log for show {s.id} in fallback session")
+                                            except Exception:
+                                                logger.exception('Fallback failed to persist LogEntry for TMDB no-result (show)')
 
                                         item.result = json.dumps({'updated_from': None, 'note': 'no metadata found from TMDB or OMDb'})
                                         item.status = QueueStatus.COMPLETED
@@ -797,7 +821,13 @@ class QueueWorker:
                     logger.exception(f"Failed to publish update for task {task.id} after item {item.id}")
 
             # Finalize task
-            if task.status != QueueStatus.CANCELED:
+            # Refresh the task from the DB to pick up any external updates (e.g., cancel requests)
+            try:
+                await session.refresh(task)
+            except Exception:
+                logger.exception(f"Failed to refresh task {task.id} before finalizing")
+
+            if task.status not in (QueueStatus.CANCELED, QueueStatus.DELETED):
                 # Determine final status
                 if any(i.status == QueueStatus.FAILED for i in task.items):
                     task.status = QueueStatus.FAILED
@@ -836,7 +866,7 @@ class QueueWorker:
             # record last processed timestamp
             self.last_processed_at = datetime.utcnow()
 
-        return True
+            return True
 
     async def run(self):
         while not self._stop.is_set():
