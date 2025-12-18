@@ -7,6 +7,7 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import { SidebarProvider } from './contexts/SidebarContext'
 import { NotificationProvider } from './contexts/NotificationContext'
 import { ToastProvider } from './contexts/ToastContext'
+import { QueueProvider } from './contexts/QueueContext'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -28,9 +29,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <SidebarProvider>
           <NotificationProvider>
             <ToastProvider>
-              <BrowserRouter>
-                <App />
-              </BrowserRouter>
+              <QueueProvider>
+                <BrowserRouter>
+                  <App />
+                </BrowserRouter>
+              </QueueProvider>
             </ToastProvider>
           </NotificationProvider>
         </SidebarProvider>
