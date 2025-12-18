@@ -1,6 +1,4 @@
 import React from 'react'
-
-import React from 'react'
 import { useQueues } from '../contexts/QueueContext'
 
 export default function Queues() {
