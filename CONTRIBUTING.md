@@ -63,8 +63,10 @@ Thank you for your interest in contributing to MediaPruner! This document provid
 
 ## Pull Request Process
 
-1. Create a feature branch from `main`:
+1. Create a feature branch from `dev`:
    ```bash
+   git checkout dev
+   git pull origin dev
    git checkout -b feature/your-feature-name
    ```
 
@@ -74,11 +76,19 @@ Thank you for your interest in contributing to MediaPruner! This document provid
    git commit -m "fix: resolve issue with..."
    ```
 
-3. Push to your fork and create a Pull Request
+3. Push to your fork and create a Pull Request targeting the `dev` branch
 
 4. Ensure CI checks pass
 
 5. Wait for review and address any feedback
+
+## Branching Strategy
+
+- **`main`** - Production-ready code
+- **`dev`** - Integration branch for feature development
+- **Feature branches** - Created from `dev` and merged back into `dev`
+
+See [BRANCHING.md](BRANCHING.md) for detailed branching strategy.
 
 ## Commit Message Convention
 
