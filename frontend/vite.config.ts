@@ -7,8 +7,10 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
+      // Use explicit 127.0.0.1 to avoid IPv6/localhost resolution issues that can
+      // cause proxy connection refusals when the backend binds to IPv4 only.
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
     },

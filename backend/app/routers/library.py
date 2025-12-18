@@ -306,12 +306,51 @@ async def add_library_path(
 
 
 @router.delete("/paths/{path_id}")
-async def remove_library_path(
-        path_id: int,
-        db: AsyncSession = Depends(get_db)):
-    """Remove a library path and all associated media"""
-    result = await db.execute(select(LibraryPath).where(LibraryPath.id == path_id))
-    path = result.scalar_one_or_none()
+
+async def remove_library_path(path_id: int, db: AsyncSession = Depends(get_db)):
+    """Remove a library path and all associated media
+
+    This endpoint is resilient to legacy rows that store lowercase media_type
+    values (e.g., 'tv' or 'movie') which can cause SQLAlchemy Enum conversion
+    to fail when loading ORM objects. If the ORM query raises LookupError, we
+    fall back to raw SQL to determine the media_type and perform deletes using
+    table-level operations.
+    """
+    try:
+        result = await db.execute(select(LibraryPath).where(LibraryPath.id == path_id))
+        path = result.scalar_one_or_none()
+    except LookupError:
+        # Corrupt or legacy enum value (e.g., 'tv' lowercase) prevented ORM mapping.
+        # Fallback to raw select to detect existence and media_type without triggering
+        # SQLAlchemy Enum processing.
+        from sqlalchemy import text as _text
+        r = await db.execute(_text('SELECT id, path, media_type FROM library_paths WHERE id = :id'), {'id': path_id})
+        row = r.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Path not found")
+
+        _id, _path, _media_type = row
+        # Normalize media_type and map to MediaType enum
+        mt_norm = (_media_type.upper() if isinstance(_media_type, str) else 'MOVIE')
+        try:
+            media_type_value = MediaType[mt_norm]
+        except Exception:
+            media_type_value = MediaType.MOVIE
+
+        # Perform deletes using table-level operations to avoid ORM loading
+        if media_type_value == MediaType.MOVIE:
+            await db.execute(Movie.__table__.delete().where(Movie.library_path_id == path_id))
+        else:
+            shows_result = await db.execute(select(TVShow.id).where(TVShow.library_path_id == path_id))
+            show_ids = [row[0] for row in shows_result.fetchall()]
+            if show_ids:
+                await db.execute(Episode.__table__.delete().where(Episode.tvshow_id.in_(show_ids)))
+                await db.execute(Season.__table__.delete().where(Season.tvshow_id.in_(show_ids)))
+                await db.execute(TVShow.__table__.delete().where(TVShow.library_path_id == path_id))
+
+        await db.execute(LibraryPath.__table__.delete().where(LibraryPath.id == path_id))
+        await db.commit()
+        return {"message": "Path removed successfully"}
 
     if not path:
         raise HTTPException(status_code=404, detail="Path not found")
