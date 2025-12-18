@@ -1,10 +1,8 @@
 """Tests for queue worker metadata refresh functionality."""
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from sqlalchemy import select
-from contextlib import asynccontextmanager
 
-from app.models import Movie, TVShow, LogEntry, QueueTask, QueueItem, QueueStatus
+from app.models import LogEntry, QueueTask, QueueItem, QueueStatus
 from app.services.queue import QueueWorker, create_task
 
 

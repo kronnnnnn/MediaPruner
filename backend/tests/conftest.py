@@ -2,13 +2,12 @@
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy import text
 from pathlib import Path
 import tempfile
 import shutil
 
 from app.database import Base
-from app.models import Movie, TVShow, LogEntry, QueueTask, QueueItem, QueueStatus, LibraryPath, MediaType
+from app.models import LibraryPath, MediaType, Movie, TVShow
 
 
 @pytest.fixture(scope="function")
