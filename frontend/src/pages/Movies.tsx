@@ -8,6 +8,7 @@ import MediaGrid from '../components/MediaGrid'
 import MediaList, { getDefaultVisibleColumns, AVAILABLE_COLUMNS, ColumnDef } from '../components/MediaList'
 import MovieDetail from '../components/MovieDetail'
 import MessageModal, { useMessageModal } from '../components/MessageModal'
+import { useToast } from '../contexts/ToastContext'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { moviesApi, libraryApi, Movie } from '../services/api'
 import logger from '../services/logger'
@@ -53,6 +54,7 @@ export default function Movies() {
 
   const queryClient = useQueryClient()
   const { messageState, showMessage, hideMessage } = useMessageModal()
+  const { showToast } = useToast()
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEY_PAGE_SIZE)
@@ -538,6 +540,9 @@ export default function Movies() {
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; actionName?: string } | null>(null)
   const cancelRequestedRef = useRef(false)
 
+  // Scope Confirmation Modal state (confirm whether to apply to filtered results or all matches)
+  const [scopeModal, setScopeModal] = useState<{ isOpen: boolean; actionName?: string; total?: number; currentCount?: number; onConfirmAll?: () => void; onConfirmPage?: () => void }>({ isOpen: false })
+
   const processIdsWithProgress = async (ids: number[], actionName: string) => {
     if (!ids || ids.length === 0) return
     cancelRequestedRef.current = false
@@ -556,16 +561,24 @@ export default function Movies() {
           await moviesApi.analyzeMovie(id)
           successCount += 1
         } else if (actionName === 'Refresh Metadata') {
-          await moviesApi.scrapeMovie(id)
-          successCount += 1
+          // Enqueue refresh task for the whole batch instead of per-item processing
+          // This will be handled outside the loop by the caller when selected ids are provided
+          // For safety, call single-item enqueue here (fallback)
+          const res = await moviesApi.scrapeMovie(id)
+          if (res && res.data && res.data.task_id) {
+            successCount += 1
+          }
         } else if (actionName === 'Fetch Ratings') {
           // Use batch ratings endpoint with single id so server logic is reused
           const resp = await moviesApi.fetchOmdbRatings([id])
           // Consider it success if request did not error
           if (resp.status === 200) successCount += 1
         } else if (actionName === 'Sync Watch History') {
-          await moviesApi.syncWatchHistory(id)
-          successCount += 1
+          // Enqueue sync per-item as a fallback (don't run inline)
+          const resp = await moviesApi.syncWatchHistoryBatch([id])
+          if (resp && resp.data && resp.data.task_id) {
+            successCount += 1
+          }
         } else {
           // For other actions fallback to batch mutation (shouldn't happen here)
           // leave successCount unchanged
@@ -675,10 +688,32 @@ export default function Movies() {
           // Keep the dialog open while running so users can see progress and cancel
           onConfirmAll: async () => {
             const allIds = await getAllMatchingMovieIds()
+            if (actionName === 'Refresh Metadata' || actionName === 'Analyze' || actionName === 'Sync Watch History') {
+              // Enqueue a single batch task
+              const resp = actionName === 'Refresh Metadata'
+                ? await moviesApi.refreshMoviesBatch(allIds)
+                : actionName === 'Analyze'
+                  ? await moviesApi.analyzeMoviesBatch(allIds)
+                  : await moviesApi.syncWatchHistoryBatch(allIds)
+              // Use a toast not modal for confirmations
+              showToast(`${actionName} Enqueued`, `Task ${resp.data.task_id} enqueued for ${allIds.length} movies.`, 'info')
+              setScopeModal(s => ({ ...s, isOpen: false }))
+              return
+            }
             // Start per-item processing with progress
             processIdsWithProgress(allIds, actionName)
           },
           onConfirmPage: () => {
+            if (actionName === 'Refresh Metadata' || actionName === 'Analyze' || actionName === 'Sync Watch History') {
+              const resp = actionName === 'Refresh Metadata'
+                ? moviesApi.refreshMoviesBatch(ids)
+                : actionName === 'Analyze'
+                  ? moviesApi.analyzeMoviesBatch(ids)
+                  : moviesApi.syncWatchHistoryBatch(ids)
+              resp.then(r => showToast(`${actionName} Enqueued`, `Task ${r.data.task_id} enqueued for ${ids.length} movies.`, 'info'))
+              setScopeModal(s => ({ ...s, isOpen: false }))
+              return
+            }
             // Start per-item processing for current page
             processIdsWithProgress(ids, actionName)
           }
@@ -687,8 +722,22 @@ export default function Movies() {
       }
       }
       // If it's one of the actions that supports per-item progress, run per-item so we can show progress
-      if (['Analyze', 'Refresh Metadata', 'Fetch Ratings', 'Sync Watch History'].includes(actionName)) {
+      if (['Analyze', 'Refresh Metadata', 'Fetch Ratings'].includes(actionName)) {
+        if (actionName === 'Refresh Metadata' || actionName === 'Analyze') {
+          const resp = actionName === 'Refresh Metadata'
+            ? await moviesApi.refreshMoviesBatch(ids)
+            : await moviesApi.analyzeMoviesBatch(ids)
+          showToast(`${actionName} Enqueued`, `Task ${resp.data.task_id} enqueued for ${ids.length} movies.`, 'info')
+        }
+
         await processIdsWithProgress(ids, actionName)
+        return
+      }
+
+      // Sync Watch History should be enqueued when run from grid/batch workflows
+      if (actionName === 'Sync Watch History') {
+        const resp = await moviesApi.syncWatchHistoryBatch(ids)
+        showToast(`${actionName} Enqueued`, `Task ${resp.data.task_id} enqueued for ${ids.length} movies.`, 'info')
         return
       }
 
@@ -696,7 +745,7 @@ export default function Movies() {
       mutation.mutate(ids)
     } catch (error: any) {
       logger.error(`${actionName} failed to start`, 'Movies', { error })
-      showMessage(`${actionName} Failed`, 'Could not start operation', 'error')
+      showToast(`${actionName} Failed`, 'Could not start operation', 'error')
     }
   }
 
@@ -707,7 +756,7 @@ export default function Movies() {
   }
 
   // Confirmation modal state (confirm whether to apply to filtered results or all matches)
-  const [scopeModal, setScopeModal] = useState<{ isOpen: boolean; actionName?: string; total?: number; currentCount?: number; onConfirmAll?: () => void; onConfirmPage?: () => void }>({ isOpen: false })
+  // (Moved earlier to be available to functions that call it)
 
   // Toggle edit mode - clears selection when exiting
   const toggleEditMode = () => {

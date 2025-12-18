@@ -4,64 +4,49 @@ from sqlalchemy import select, func
 import re
 from pathlib import Path
 from typing import Optional
-from pydantic import BaseModel
+
+import re
 import logging
 
+from app.schemas import MovieResponse, MovieListResponse, MovieUpdate
 from app.database import get_db
 from app.models import Movie
-from app.schemas import MovieResponse, MovieListResponse, MovieUpdate
+from app.services.renamer import MOVIE_RENAME_PRESETS, parse_filename, get_movie_filename, rename_movie
 from app.services.tmdb import TMDBService
-from app.services.renamer import (
-    rename_movie, 
-    parse_filename,
-    get_movie_filename,
-    MOVIE_RENAME_PRESETS,
-)
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-
-class RenameRequest(BaseModel):
-    pattern: str = "{title} ({year})"
-    include_quality: bool = False
-    include_resolution: bool = False
-    include_edition: bool = False
-    include_release_group: bool = False
-
-
 @router.get("", response_model=MovieListResponse)
 async def get_movies(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=500),
+    page_size: int = Query(25, ge=1, le=1000),
     search: Optional[str] = None,
     genre: Optional[str] = None,
     year: Optional[int] = None,
     watched: Optional[bool] = None,
+    scraped: Optional[str] = None,
+    analyzed: Optional[str] = None,
+    hasNfo: Optional[str] = None,
+    resolution: Optional[str] = None,
+    minRating: Optional[float] = None,
+    maxRating: Optional[float] = None,
+    minImdbRating: Optional[float] = None,
+    maxImdbRating: Optional[float] = None,
+    minRottenTomatoes: Optional[int] = None,
+    maxRottenTomatoes: Optional[int] = None,
+    minMetacritic: Optional[int] = None,
+    maxMetacritic: Optional[int] = None,
     sort_by: str = Query("title"),
     sort_order: str = Query("asc", pattern="^(asc|desc)$"),
     db: AsyncSession = Depends(get_db)
 ):
     """Get paginated list of movies with filtering and sorting"""
-    # Validate sort_by against actual Movie columns
-    allowed_sort_columns = [
-        'title', 'year', 'rating', 'created_at', 'file_size', 'runtime', 'file_name',
-        'release_group', 'quality', 'edition', 'duration', 'video_codec', 'video_resolution',
-        'video_width', 'video_height', 'audio_codec', 'audio_channels', 'container',
-        'tmdb_id', 'imdb_id', 'genres', 'scraped', 'media_info_scanned', 'has_nfo',
-        'original_title', 'votes', 'folder_name',
-        # Additional rating sources
-        'imdb_rating', 'imdb_votes', 'rotten_tomatoes_score', 'rotten_tomatoes_audience', 'metacritic_score',
-        # Watch history
-        'watched', 'watch_count', 'last_watched_date'
-    ]
-    if sort_by not in allowed_sort_columns:
-        sort_by = 'title'
-    
     query = select(Movie)
-    
-    # Apply filters - search across multiple fields
+
+    # Basic text search
     if search:
         search_term = f"%{search}%"
         from sqlalchemy import or_
@@ -78,7 +63,7 @@ async def get_movies(
                 Movie.file_name.ilike(search_term),
             )
         )
-    
+
     if genre:
         query = query.where(Movie.genres.ilike(f"%{genre}%"))
     
@@ -345,161 +330,133 @@ async def scrape_movie_metadata(movie_id: int, db: AsyncSession = Depends(get_db
     4. Try searching by parsed title from filename
     5. Try progressively simplified searches
     """
-    # Create TMDB service with API key from database
+    # Enqueue a refresh_metadata task so metadata refresh runs in the queue worker
+    from app.services.queue import create_task
+
+    task = await create_task('refresh_metadata', items=[{"movie_id": movie_id}], meta={"trigger": "manual"})
+    return {"task_id": task.id, "status": task.status.value}
+
+
+class ScrapeNowRequest(BaseModel):
+    title: Optional[str] = None
+    year: Optional[int] = None
+
+
+@router.post("/{movie_id}/scrape-now")
+async def scrape_movie_metadata_now(movie_id: int, request: ScrapeNowRequest | None = None, db: AsyncSession = Depends(get_db)):
+    """Immediately scrape metadata for a single movie (runs inline and returns result). Accepts optional `title` and `year` overrides to customize the search."""
     tmdb_service = await TMDBService.create_with_db_key(db)
-    
-    if not tmdb_service.is_configured:
-        raise HTTPException(status_code=400, detail="TMDB API key not configured. Please set it in Settings.")
-    
+
     result = await db.execute(select(Movie).where(Movie.id == movie_id))
     movie = result.scalar_one_or_none()
-    
+
     if not movie:
         raise HTTPException(status_code=404, detail="Movie not found")
-    
+
     tmdb_result = None
-    search_method = None
-    
+    tried_searches: list[dict] = []
+
+    # If user provided an override title/year, try that first
+    if request and request.title:
+        tried_searches.append({'method': 'override', 'title': request.title, 'year': request.year})
+        tmdb_result = await tmdb_service.search_movie_and_get_details(request.title, request.year)
+
     # Strategy 1: Check for IMDB/TMDB ID in filename
-    ids_from_filename = extract_ids_from_string(movie.file_name)
-    
-    if ids_from_filename["imdb_id"]:
-        tmdb_result = await tmdb_service.find_movie_by_imdb(ids_from_filename["imdb_id"])
-        if tmdb_result:
-            search_method = f"IMDB ID from filename ({ids_from_filename['imdb_id']})"
-    
-    if not tmdb_result and ids_from_filename["tmdb_id"]:
-        tmdb_result = await tmdb_service.find_movie_by_tmdb_id(ids_from_filename["tmdb_id"])
-        if tmdb_result:
-            search_method = f"TMDB ID from filename ({ids_from_filename['tmdb_id']})"
-    
-    # Strategy 2: Check for IMDB/TMDB ID in folder name
+    if not tmdb_result:
+        ids_from_filename = extract_ids_from_string(movie.file_name or '')
+        if ids_from_filename.get('imdb_id'):
+            tried_searches.append({'method': 'imdb_from_filename', 'imdb_id': ids_from_filename['imdb_id']})
+            tmdb_result = await tmdb_service.find_movie_by_imdb(ids_from_filename['imdb_id'])
+        if not tmdb_result and ids_from_filename.get('tmdb_id'):
+            tried_searches.append({'method': 'tmdb_from_filename', 'tmdb_id': ids_from_filename['tmdb_id']})
+            tmdb_result = await tmdb_service.find_movie_by_tmdb_id(ids_from_filename['tmdb_id'])
+
+    # Strategy 2: Check folder name
     if not tmdb_result and movie.folder_name:
         ids_from_folder = extract_ids_from_string(movie.folder_name)
-        
-        if ids_from_folder["imdb_id"]:
-            tmdb_result = await tmdb_service.find_movie_by_imdb(ids_from_folder["imdb_id"])
-            if tmdb_result:
-                search_method = f"IMDB ID from folder ({ids_from_folder['imdb_id']})"
-        
-        if not tmdb_result and ids_from_folder["tmdb_id"]:
-            tmdb_result = await tmdb_service.find_movie_by_tmdb_id(ids_from_folder["tmdb_id"])
-            if tmdb_result:
-                search_method = f"TMDB ID from folder ({ids_from_folder['tmdb_id']})"
-    
-    # Strategy 3: Search by folder name (usually more reliable)
+        if ids_from_folder.get('imdb_id'):
+            tried_searches.append({'method': 'imdb_from_folder', 'imdb_id': ids_from_folder['imdb_id']})
+            tmdb_result = await tmdb_service.find_movie_by_imdb(ids_from_folder['imdb_id'])
+        if not tmdb_result and ids_from_folder.get('tmdb_id'):
+            tried_searches.append({'method': 'tmdb_from_folder', 'tmdb_id': ids_from_folder['tmdb_id']})
+            tmdb_result = await tmdb_service.find_movie_by_tmdb_id(ids_from_folder['tmdb_id'])
+
+    # Strategy 3: Search by folder title
     if not tmdb_result and movie.folder_name:
         folder_title, folder_year = parse_title_from_string(movie.folder_name)
         if folder_title and len(folder_title) > 2:
+            tried_searches.append({'method': 'folder_title', 'title': folder_title, 'year': folder_year})
             tmdb_result = await tmdb_service.search_movie_and_get_details(folder_title, folder_year)
-            if tmdb_result:
-                search_method = f"Folder name search: '{folder_title}' ({folder_year or 'no year'})"
-    
-    # Strategy 4: Search by stored title (parsed from filename)
+
+    # Strategy 4: Search by stored title
     if not tmdb_result:
-        tmdb_result = await tmdb_service.search_movie_and_get_details(movie.title, movie.year)
-        if tmdb_result:
-            search_method = f"Title search: '{movie.title}' ({movie.year or 'no year'})"
-    
-    # Strategy 5: Try filename with fresh parsing
+        tried_searches.append({'method': 'stored_title', 'title': movie.title, 'year': movie.year})
+        tmdb_result = await tmdb_service.search_movie_and_get_details(movie.title or '', movie.year)
+
+    # Strategy 5: Filename parsing fallback
     if not tmdb_result:
-        file_title, file_year = parse_title_from_string(movie.file_name)
+        file_title, file_year = parse_title_from_string(movie.file_name or '')
         if file_title and file_title != movie.title and len(file_title) > 2:
+            tried_searches.append({'method': 'parsed_filename', 'title': file_title, 'year': file_year})
             tmdb_result = await tmdb_service.search_movie_and_get_details(file_title, file_year)
-            if tmdb_result:
-                search_method = f"Filename re-parse: '{file_title}' ({file_year or 'no year'})"
-    
-    # Strategy 6: Try title without year (broader search)
+
+    # Strategy 6: Try title without year
     if not tmdb_result and movie.title:
+        tried_searches.append({'method': 'stored_title_no_year', 'title': movie.title})
         tmdb_result = await tmdb_service.search_movie_and_get_details(movie.title, None)
-        if tmdb_result:
-            search_method = f"Title without year: '{movie.title}'"
-    
-    if not tmdb_result:
-        # Attempt OMDb fallback if an API key is configured
+
+    omdb_ratings = None
+    already_has_omdb = movie.imdb_rating is not None or movie.rotten_tomatoes_score is not None or movie.metacritic_score is not None
+
+    if tmdb_result:
+        # Update movie with TMDB data
+        movie.tmdb_id = tmdb_result.tmdb_id
+        movie.title = tmdb_result.title
+        movie.original_title = tmdb_result.original_title
+        movie.overview = tmdb_result.overview
+        movie.tagline = tmdb_result.tagline
+        movie.release_date = tmdb_result.release_date
+        movie.runtime = tmdb_result.runtime
+        movie.genres = ",".join(tmdb_result.genres) if tmdb_result.genres else None
+        movie.poster_path = tmdb_result.poster_path
+        movie.backdrop_path = tmdb_result.backdrop_path
+        movie.imdb_id = tmdb_result.imdb_id
+        movie.rating = tmdb_result.rating
+        movie.votes = tmdb_result.votes
+        movie.scraped = True
+        if tmdb_result.release_date:
+            movie.year = tmdb_result.release_date.year
+
+    else:
+        # Try OMDb fallback for ratings only if TMDB failed
         from app.services.omdb import fetch_omdb_ratings, get_omdb_api_key_from_db
         api_key = await get_omdb_api_key_from_db(db)
-        omdb_ratings = None
         if api_key:
             omdb_ratings = await fetch_omdb_ratings(db, title=movie.title, year=movie.year)
             if omdb_ratings:
-                # Persist OMDb ratings and mark as scraped (best-effort fallback)
                 movie.imdb_rating = omdb_ratings.imdb_rating or movie.imdb_rating
                 movie.imdb_votes = omdb_ratings.imdb_votes or movie.imdb_votes
                 movie.rotten_tomatoes_score = omdb_ratings.rotten_tomatoes_score or movie.rotten_tomatoes_score
                 movie.rotten_tomatoes_audience = omdb_ratings.rotten_tomatoes_audience or movie.rotten_tomatoes_audience
                 movie.metacritic_score = omdb_ratings.metacritic_score or movie.metacritic_score
                 movie.scraped = True
-                await db.commit()
-                logger.info(f"OMDb fallback succeeded for movie_id={movie.id}: applied OMDb ratings")
-                return {
-                    "message": "Metadata updated from OMDb (fallback)",
-                    "omdb_ratings_fetched": True
-                }
 
-        # Provide helpful error message and log it for analysis
-        details = [f"Filename: {movie.file_name}"]
-        if movie.folder_name:
-            details.append(f"Folder: {movie.folder_name}")
-        details.append(f"Parsed title: {movie.title}")
-        if movie.year:
-            details.append(f"Year: {movie.year}")
-        msg = f"Movie not found on TMDB for movie_id={movie.id}. Tried: {'; '.join(details)}"
-        logger.warning(f"Scrape failed for movie_id={movie.id}: {msg}")
-        raise HTTPException(
-            status_code=404, 
-            detail=msg
-        )
-    
-    # Update movie with TMDB data
-    movie.tmdb_id = tmdb_result.tmdb_id
-    movie.title = tmdb_result.title
-    movie.original_title = tmdb_result.original_title
-    movie.overview = tmdb_result.overview
-    movie.tagline = tmdb_result.tagline
-    movie.release_date = tmdb_result.release_date
-    movie.runtime = tmdb_result.runtime
-    movie.genres = ",".join(tmdb_result.genres) if tmdb_result.genres else None
-    movie.poster_path = tmdb_result.poster_path
-    movie.backdrop_path = tmdb_result.backdrop_path
-    movie.imdb_id = tmdb_result.imdb_id
-    movie.rating = tmdb_result.rating
-    movie.votes = tmdb_result.votes
-    movie.scraped = True
-
-    # If TMDB provides no detected video codec but media file exists, log for diagnosis
-    if not movie.video_codec:
-        logger.debug(f"After TMDB update, movie_id={movie.id} has no video_codec stored; file_path={movie.file_path}")
-    
-    if tmdb_result.release_date:
-        movie.year = tmdb_result.release_date.year
-    
-    # Fetch additional ratings from OMDb (IMDB, Rotten Tomatoes, Metacritic)
-    # Skip if movie already has OMDb ratings (to save API calls)
-    omdb_ratings = None
-    already_has_omdb = movie.imdb_rating is not None or movie.rotten_tomatoes_score is not None or movie.metacritic_score is not None
-    
-    if tmdb_result.imdb_id and not already_has_omdb:
-        from app.services.omdb import fetch_omdb_ratings
-        omdb_ratings = await fetch_omdb_ratings(db, imdb_id=tmdb_result.imdb_id)
-        
-        if omdb_ratings:
-            movie.imdb_rating = omdb_ratings.imdb_rating
-            movie.imdb_votes = omdb_ratings.imdb_votes
-            movie.rotten_tomatoes_score = omdb_ratings.rotten_tomatoes_score
-            movie.rotten_tomatoes_audience = omdb_ratings.rotten_tomatoes_audience
-            movie.metacritic_score = omdb_ratings.metacritic_score
-    
     await db.commit()
-    
-    return {
-        "message": "Movie metadata updated", 
-        "tmdb_id": tmdb_result.tmdb_id,
-        "title": tmdb_result.title,
-        "search_method": search_method,
-        "omdb_ratings_fetched": omdb_ratings is not None,
-        "omdb_skipped": already_has_omdb
-    }
+
+    if tmdb_result:
+        return {
+            "message": "Movie metadata updated",
+            "tmdb_id": tmdb_result.tmdb_id,
+            "title": tmdb_result.title,
+            "omdb_ratings_fetched": omdb_ratings is not None,
+            "omdb_skipped": already_has_omdb
+        }
+
+    if omdb_ratings:
+        return {"message": "Metadata updated from OMDb (fallback)", "omdb_ratings_fetched": True}
+
+    # Not found anywhere
+    raise HTTPException(status_code=404, detail={"message": "Movie not found on TMDB and OMDb fallback unavailable", "tried": tried_searches})
 
 
 @router.get("/{movie_id}/rename-preview")
@@ -1237,58 +1194,38 @@ async def analyze_movies_batch(
     else:
         result = await db.execute(select(Movie))
     movies = result.scalars().all()
-    
-    analyzed = 0
-    errors = []
-    
+
+    # Enqueue analyze tasks for provided movies
+    items = []
     for movie in movies:
         if not movie.file_path:
-            logger.warning(f"Skipping analyze for movie_id={movie.id} because file_path is empty")
+            logger.warning(f"Skipping analyze enqueue for movie_id={movie.id} because file_path is empty")
             continue
-        
-        logger.info(f"Analyzing movie_id={movie.id}, path={movie.file_path}")
-        try:
-            info = mediainfo.analyze_file(movie.file_path)
-            
-            if info.success:
-                movie.duration = info.duration
-                movie.video_codec = info.video_codec
-                movie.video_profile = info.video_codec_profile
-                movie.video_resolution = info.video_resolution
-                movie.video_width = info.video_width
-                movie.video_height = info.video_height
-                movie.video_aspect_ratio = info.video_aspect_ratio
-                movie.video_bitrate = info.video_bitrate
-                movie.video_framerate = info.video_framerate
-                movie.video_hdr = info.video_hdr
-                movie.audio_codec = info.audio_codec
-                movie.audio_channels = info.audio_channels
-                movie.audio_bitrate = info.audio_bitrate
-                movie.audio_language = info.audio_language
-                movie.audio_tracks = mediainfo.get_audio_tracks_json(info)
-                movie.subtitle_languages = mediainfo.get_subtitle_languages_json(info)
-                movie.subtitle_count = info.subtitle_count
-                movie.container = info.container
-                movie.overall_bitrate = info.overall_bitrate
-                movie.file_size = info.file_size
-                movie.media_info_scanned = True
-                analyzed += 1
-                logger.info(f"Analyze succeeded for movie_id={movie.id}")
-            else:
-                logger.warning(f"Analyze failed for movie_id={movie.id}: {info.error}")
-                errors.append(f"{movie.title}: {info.error}")
-        except Exception as e:
-            logger.error(f"Exception analyzing movie_id={movie.id}, path={movie.file_path}: {e}")
-            errors.append(f"{movie.title}: {str(e)}")
-    
-    await db.commit()
-    
-    return {
-        "message": f"Analyzed {analyzed} of {len(movies)} movies",
-        "analyzed": analyzed,
-        "total": len(movies),
-        "errors": errors[:10] if errors else []
-    }
+        items.append({"movie_id": movie.id})
+
+    if not items:
+        raise HTTPException(status_code=400, detail="No movies with files to analyze")
+
+    from app.services.queue import create_task
+    task = await create_task('analyze', items=items, meta={"batch": True})
+
+    return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
+
+
+@router.post("/refresh-batch")
+async def refresh_movies_batch(request: MovieIdsRequest, db: AsyncSession = Depends(get_db)):
+    """Enqueue refresh metadata for a batch of movies"""
+    if not request.movie_ids:
+        raise HTTPException(status_code=400, detail="movie_ids required")
+
+    from app.services.queue import create_task
+
+    items = []
+    for mid in request.movie_ids:
+        items.append({"movie_id": mid})
+
+    task = await create_task('refresh_metadata', items=items, meta={"batch": True})
+    return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
 
 
 @router.post("/analyze-all")
@@ -1304,58 +1241,21 @@ async def analyze_all_movies(db: AsyncSession = Depends(get_db)):
     
     result = await db.execute(select(Movie))
     movies = result.scalars().all()
-    
-    analyzed = 0
-    errors = []
-    
+
+    items = []
     for movie in movies:
         if not movie.file_path:
-            logger.warning(f"Skipping analyze for movie_id={movie.id} because file_path is empty")
+            logger.warning(f"Skipping analyze enqueue for movie_id={movie.id} because file_path is empty")
             continue
-        
-        logger.info(f"Analyzing movie_id={movie.id}, path={movie.file_path}")
-        try:
-            info = mediainfo.analyze_file(movie.file_path)
-            
-            if info.success:
-                movie.duration = info.duration
-                movie.video_codec = info.video_codec
-                movie.video_profile = info.video_codec_profile
-                movie.video_resolution = info.video_resolution
-                movie.video_width = info.video_width
-                movie.video_height = info.video_height
-                movie.video_aspect_ratio = info.video_aspect_ratio
-                movie.video_bitrate = info.video_bitrate
-                movie.video_framerate = info.video_framerate
-                movie.video_hdr = info.video_hdr
-                movie.audio_codec = info.audio_codec
-                movie.audio_channels = info.audio_channels
-                movie.audio_bitrate = info.audio_bitrate
-                movie.audio_language = info.audio_language
-                movie.audio_tracks = mediainfo.get_audio_tracks_json(info)
-                movie.subtitle_languages = mediainfo.get_subtitle_languages_json(info)
-                movie.subtitle_count = info.subtitle_count
-                movie.container = info.container
-                movie.overall_bitrate = info.overall_bitrate
-                movie.file_size = info.file_size
-                movie.media_info_scanned = True
-                analyzed += 1
-                logger.info(f"Analyze succeeded for movie_id={movie.id}")
-            else:
-                logger.warning(f"Analyze failed for movie_id={movie.id}: {info.error}")
-                errors.append(f"{movie.title}: {info.error}")
-        except Exception as e:
-            logger.error(f"Exception analyzing movie_id={movie.id}, path={movie.file_path}: {e}")
-            errors.append(f"{movie.title}: {str(e)}")
-    
-    await db.commit()
-    
-    return {
-        "message": f"Analyzed {analyzed} of {len(movies)} movies",
-        "analyzed": analyzed,
-        "total": len(movies),
-        "errors": errors[:10] if errors else []
-    }
+        items.append({"movie_id": movie.id})
+
+    if not items:
+        raise HTTPException(status_code=400, detail="No movies with files to analyze")
+
+    from app.services.queue import create_task
+    task = await create_task('analyze', items=items, meta={"batch": True})
+
+    return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
 
 
 @router.post("/scrape-batch")
@@ -1807,12 +1707,44 @@ async def sync_movie_watch_history(movie_id: int, db: AsyncSession = Depends(get
         history = await tautulli.get_history(rating_key=movie.rating_key)
         resolved_rating_key = movie.rating_key
     else:
-        # Search for watch history (include imdb_id when available for more reliable matching)
-        history, resolved_rating_key = await tautulli.search_movie_history(movie.title, movie.year, imdb_id=movie.imdb_id, db=db)
+        # Try resolving rating_key via Plex first (faster) when available
+        resolved_rating_key = None
+        from app.services.plex import get_plex_service
+        try:
+            plex = await get_plex_service(db)
+            if plex:
+                # Prefer resolving by imdb_id when available
+                if movie.imdb_id:
+                    rk = await plex.get_rating_key_by_imdb(movie.imdb_id)
+                    if rk:
+                        resolved_rating_key = rk
+                # If still unresolved, attempt a Plex title search
+                if not resolved_rating_key and movie.title:
+                    plex_results = await plex.search(movie.title)
+                    if plex_results:
+                        for pr in plex_results:
+                            rk = pr.get('ratingKey') or pr.get('rating_key') or pr.get('ratingkey')
+                            if rk:
+                                try:
+                                    resolved_rating_key = int(rk)
+                                    break
+                                except Exception:
+                                    continue
+        except Exception:
+            # Plex may not be configured or lookup failed; fall back to Tautulli search
+            resolved_rating_key = None
 
-        # If we resolved a rating_key from Plex/Tautulli, persist it to the movie record for future syncs
-        if resolved_rating_key and movie.rating_key != resolved_rating_key:
+        if resolved_rating_key:
+            # If Plex resolved the rating_key, use it to fetch history
+            history = await tautulli.get_history(rating_key=resolved_rating_key)
             movie.rating_key = resolved_rating_key
+        else:
+            # Search for watch history via Tautulli (includes multiple fallbacks)
+            history, resolved_rating_key = await tautulli.search_movie_history(movie.title, movie.year, imdb_id=movie.imdb_id, db=db)
+
+            # If we resolved a rating_key from Plex/Tautulli, persist it to the movie record for future syncs
+            if resolved_rating_key and movie.rating_key != resolved_rating_key:
+                movie.rating_key = resolved_rating_key
     
     if history:
         # Update movie watch status
@@ -1928,55 +1860,18 @@ async def sync_movies_watch_history_batch(
     from app.services.tautulli import get_tautulli_service
     from datetime import datetime
 
-    tautulli = await get_tautulli_service(db)
-    if not tautulli:
-        raise HTTPException(status_code=400, detail="Tautulli not configured")
-
-    if request.movie_ids:
-        result = await db.execute(select(Movie).where(Movie.id.in_(request.movie_ids)))
-    else:
+    # Enqueue a queued task to sync watch history for the requested movies
+    movie_ids = request.movie_ids if request.movie_ids else None
+    if movie_ids is None:
+        # If no specific ids provided, run for all movies (but do not block) by creating a task for all.
         result = await db.execute(select(Movie))
+        movie_ids = [m.id for m in result.scalars().all()]
 
-    movies = result.scalars().all()
-    synced_count = 0
-    watched_count = 0
-    errors = []
+    if not movie_ids:
+        raise HTTPException(status_code=400, detail="No movies found to sync")
 
-    for movie in movies:
-        try:
-            if movie.rating_key:
-                history = await tautulli.get_history(rating_key=movie.rating_key)
-                resolved_rating_key = movie.rating_key
-            else:
-                history, resolved_rating_key = await tautulli.search_movie_history(movie.title, movie.year, imdb_id=movie.imdb_id, db=db)
-                if resolved_rating_key and movie.rating_key != resolved_rating_key:
-                    movie.rating_key = resolved_rating_key
+    from app.services.queue import create_task
+    items = [{'movie_id': mid} for mid in movie_ids]
+    task = await create_task('sync_watch_history', items)
 
-            if history:
-                movie.watched = True
-                movie.watch_count = len(history)
-                watched_count += 1
-                most_recent = history[0]
-                movie.last_watched_date = datetime.fromtimestamp(most_recent.get('date', 0))
-                movie.last_watched_user = most_recent.get('user', 'Unknown')
-            else:
-                movie.watched = False
-                movie.watch_count = 0
-                movie.last_watched_date = None
-                movie.last_watched_user = None
-
-            synced_count += 1
-        except Exception as e:
-            logger.error(f"Error syncing watch history for movie {movie.id}: {str(e)}")
-            errors.append(str(e))
-            continue
-
-    await db.commit()
-
-    return {
-        "success": True,
-        "requested": len(request.movie_ids) if request.movie_ids else None,
-        "synced_count": synced_count,
-        "watched_count": watched_count,
-        "errors": errors[:10] if errors else []
-    }
+    return {"task_id": task.id, "status": task.status.value, "requested": len(movie_ids)}

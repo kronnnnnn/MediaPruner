@@ -280,6 +280,7 @@ class QueueStatus(enum.Enum):
     QUEUED = "queued"
     RUNNING = "running"
     CANCELED = "canceled"
+    DELETED = "deleted"
     COMPLETED = "completed"
     FAILED = "failed"
 

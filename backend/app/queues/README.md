@@ -112,7 +112,7 @@ GET /api/queues/ongoing
 
 - New DB tables: `queue_tasks`, `queue_items` (with indexes on status, created_at)
 - Add models: `QueueTask`, `QueueItem` in `backend/app/models.py` and corresponding Pydantic schemas in `schemas.py`.
-- Add simple unit tests and integration tests to cover enqueueing, processing, cancelation, and restart recovery.
+- Add simple unit tests and integration tests to cover enqueueing, processing, cancelation, and restart recovery. (See `backend/tests/test_queue_cancel.py`)
 
 ---
 
@@ -123,6 +123,28 @@ GET /api/queues/ongoing
 - Canceling a parent request stops further items and sets status correctly.
 - When a folder is added, a scan job is enqueued automatically.
 - Tests exist that validate enqueue → process → complete and enqueue → cancel behaviors.
+
+---
+
+## Post-scan processing workflow ✅
+
+When new folders are added (or a library path is scanned), the system will automatically enqueue a short pipeline of background tasks to finish preparing discovered media.
+
+Pipeline (enqueued in this order):
+1. analyze — inspect media files and populate technical metadata (codec, resolution, audio, subtitle info)
+2. refresh_metadata — query TMDB/OMDb to enrich titles, dates, poster/backdrop, and provider ids (IMDB/TMDB)
+3. sync_watch_history — query Tautulli (and Plex if needed) to resolve `rating_key` and fetch watch history; persists `rating_key` for future fast syncs
+
+Implementation notes:
+- The scanner endpoints add discovered media to the DB, collect their IDs, and enqueue three tasks:
+  - `create_task('analyze', items=[{"movie_id": 1}, ...])`
+  - `create_task('refresh_metadata', items=[{"movie_id": 1}, ...])`
+  - `create_task('sync_watch_history', items=[{"movie_id": 1}, ...])`
+- Tasks are created sequentially so the worker will process them in the requested order.
+- `sync_watch_history` handler prefers a stored `Movie.rating_key` (fast). If missing, it first tries Plex (IMDB id or title search) and then Tautulli search/history fallbacks.
+
+UI behavior:
+- The Movies grid "Sync Watch History" action enqueues a batch `sync_watch_history` task (instead of running per-item inline). Only the Movie Details page uses the one-off synchronous `POST /api/movies/{id}/sync-watch-history` endpoint.
 
 ---
 

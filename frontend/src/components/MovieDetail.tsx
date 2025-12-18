@@ -83,8 +83,43 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
   const { messageState, showMessage, hideMessage } = useMessageModal()
   const { showToast } = useToast()
 
+  const [showSearchEditModal, setShowSearchEditModal] = useState(false)
+  const [editTitle, setEditTitle] = useState<string | null>(null)
+  const [editYear, setEditYear] = useState<number | null>(null)
+  const [searchTries, setSearchTries] = useState<any[] | null>(null)
+  const [modalError, setModalError] = useState<string | null>(null)
+
+  const scrapeNowOverrideMutation = useMutation({
+    mutationFn: (payload: { title?: string; year?: number }) => moviesApi.scrapeMovieNow(movieId, payload),
+    onSuccess: async (response: any) => {
+      await queryClient.invalidateQueries({ queryKey: ['movie', movieId] })
+      await queryClient.invalidateQueries({ queryKey: ['movies'] })
+      const data = response?.data
+      setShowSearchEditModal(false)
+      setModalError(null)
+      if (data?.omdb_ratings_fetched) {
+        showToast('Metadata updated', 'OMDb was used as a fallback and ratings were applied', 'info')
+      } else {
+        // Use a toast instead of a modal confirmation — details refresh automatically
+        showToast('Metadata updated', 'Movie metadata refreshed', 'success')
+      }
+    },
+    onError: (error: any) => {
+      const detail = error?.response?.data?.detail
+      if (detail && typeof detail === 'object' && detail.tried) {
+        // Update tries and allow the user to edit/retry
+        setSearchTries(detail.tried)
+        setModalError('Search did not find a match — you can edit the search and try again')
+      } else {
+        setShowSearchEditModal(false)
+        setModalError(null)
+        showMessage('Metadata refresh failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
+      }
+    }
+  })
+
   const scrapeMutation = useMutation({
-    mutationFn: () => moviesApi.scrapeMovie(movieId),
+    mutationFn: () => moviesApi.scrapeMovieNow(movieId),
     onSuccess: async (response: any) => {
       await queryClient.invalidateQueries({ queryKey: ['movie', movieId] })
       await queryClient.invalidateQueries({ queryKey: ['movies'] })
@@ -93,10 +128,30 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
         // Use the global toast for OMDb fallbacks instead of a modal popup
         showToast('Metadata updated', 'OMDb was used as a fallback and ratings were applied', 'info')
       } else {
-        showMessage('Metadata updated', 'Movie metadata refreshed', 'success')
+        // Use a toast rather than a modal confirmation; details auto-refresh
+        showToast('Metadata updated', 'Movie metadata refreshed', 'success')
       }
     },
     onError: (error: any) => {
+      // If the server returned search attempts, surface an edit-dialog with the tried searches
+      const detail = error?.response?.data?.detail
+      if (detail && typeof detail === 'object' && detail.tried) {
+        setSearchTries(detail.tried)
+        // Pre-fill the edit fields with the most relevant attempted search (override or stored_title)
+        const override = detail.tried.find((t: any) => t.method === 'override')
+        const stored = detail.tried.find((t: any) => t.method === 'stored_title')
+        const parsed = detail.tried.find((t: any) => t.method === 'parsed_filename')
+        const initial = override?.title ?? stored?.title ?? parsed?.title ?? movie?.title ?? ''
+        const initialYear = override?.year ?? stored?.year ?? parsed?.year ?? movie?.year ?? null
+        const cleaned = parseTitleAndYear(initial)
+        setEditTitle(cleaned.title)
+        // Prefer parsed year (from right-most match) if available
+        setEditYear(cleaned.year ?? initialYear ?? null)
+        setModalError('Search did not find a match — you can edit the search and try again')
+        setShowSearchEditModal(true)
+        return
+      }
+
       showMessage('Metadata refresh failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
     }
   })
@@ -138,6 +193,7 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
         await queryClient.invalidateQueries({ queryKey: ['movie', movieId] })
         await queryClient.invalidateQueries({ queryKey: ['movie-watch-history', movieId] })
         await queryClient.invalidateQueries({ queryKey: ['movies'] })
+        showToast('Sync Complete', 'Watch history synced', 'success')
       },
     })
 
@@ -205,6 +261,14 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
     scrapeMutation.mutate()
   }
 
+  const handleRetryWithOverrides = () => {
+    const payload: any = {}
+    if (editTitle) payload.title = editTitle
+    if (editYear) payload.year = editYear
+    logger.buttonClick('Refresh Metadata (override)', 'MovieDetail', { movieId, title: editTitle, year: editYear })
+    scrapeNowOverrideMutation.mutate(payload)
+  }
+
   const handleAnalyze = () => {
     logger.buttonClick('Analyze File', 'MovieDetail', { movieId })
     analyzeMutation.mutate()
@@ -232,6 +296,39 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
     setShowRenameModal(false)
   }
 
+  const closeSearchEditModal = () => {
+    setShowSearchEditModal(false)
+    setModalError(null)
+    setSearchTries(null)
+  }
+
+  // Try to extract a clean movie title and optional year from filenames or raw strings
+  function parseTitleAndYear(raw: string | null | undefined): { title: string; year?: number | null } {
+    if (!raw) return { title: '' }
+    let s = String(raw)
+    // Remove file extension
+    s = s.replace(/\.(mkv|mp4|avi|mov|wmv|flv|mpg|mpeg)$/i, '')
+    // Remove bracketed expressions
+    s = s.replace(/\[.*?\]|\(.*?\)/g, ' ')
+    // Replace dots/underscores with spaces
+    s = s.replace(/[._]/g, ' ')
+    // Remove common quality/release tags and anything after them
+    s = s.replace(/\b(720p|1080p|2160p|4k|web[- ]?dl|webrip|web[- ]?dl|bluray|hdr|h264|x264|h\.264|x265|hevc|yts|rarbg|ptp|brrip|dvdrip)\b.*/i, '')
+    s = s.replace(/\s+/g, ' ').trim()
+    // Extract year if present (prefer the rightmost year in the string)
+    const yearMatches = Array.from(s.matchAll(/(19|20)\d{2}/g))
+    const lastMatch = yearMatches.length ? yearMatches[yearMatches.length - 1] : null
+    const year = lastMatch ? parseInt(lastMatch[0], 10) : null
+    // If year found, take title up to the rightmost year
+    let title = s
+    if (lastMatch && typeof lastMatch.index === 'number') {
+      title = s.slice(0, lastMatch.index).trim()
+    }
+    // Fallback to the whole string if nothing left
+    if (!title) title = s
+    return { title: title, year }
+  }
+
   const confirmDelete = () => {
     deleteMutation.mutate(deleteOptions)
     setShowDeleteConfirm(false)
@@ -247,6 +344,8 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
       </div>
     )
   }
+
+
 
   const genres = movie.genres ? movie.genres.split(',').map(g => g.trim()) : []
   
@@ -812,6 +911,20 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
         />
       )}
 
+      {showSearchEditModal && (
+        <SearchEditModalComponent
+          title={editTitle ?? ''}
+          year={editYear ?? null}
+          setTitle={setEditTitle}
+          setYear={setEditYear}
+          tries={searchTries}
+          error={modalError}
+          onClose={closeSearchEditModal}
+          onRetry={handleRetryWithOverrides}
+          isRetrying={(scrapeNowOverrideMutation as any).isLoading}
+        />
+      )}
+
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         isOpen={showDeleteConfirm}
@@ -853,6 +966,68 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
       />
 
 
+    </div>
+  )
+}
+
+// Stable modal component declared outside MovieDetail to avoid being re-created on each render
+function SearchEditModalComponent({
+  title,
+  year,
+  setTitle,
+  setYear,
+  tries,
+  error,
+  onClose,
+  onRetry,
+  isRetrying
+}: {
+  title: string
+  year: number | null
+  setTitle: (t: string) => void
+  setYear: (y: number | null) => void
+  tries: any[] | null
+  error: string | null
+  onClose: () => void
+  onRetry: () => void
+  isRetrying: boolean
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={(e) => e.stopPropagation()}>
+      <div onClick={(e) => e.stopPropagation()} className="w-[540px] p-6 bg-white dark:bg-gray-800 rounded-lg">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold">Edit search and retry</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+
+        {error && <div className="mb-4 text-sm text-yellow-400">{error}</div>}
+
+        <div className="mb-4">
+          <label className="block text-sm text-gray-500 mb-1">Title</label>
+          <input className="w-full px-3 py-2 rounded bg-gray-100 dark:bg-gray-700" value={title} onChange={(e) => setTitle(e.target.value)} />
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm text-gray-500 mb-1">Year</label>
+          <input className="w-40 px-3 py-2 rounded bg-gray-100 dark:bg-gray-700" value={year ?? ''} onChange={(e) => setYear(Number(e.target.value) || null)} />
+        </div>
+
+        {tries && (
+          <div className="mb-4 text-sm text-gray-400">
+            <div className="font-medium mb-1">Tried searches:</div>
+            <ul className="list-disc list-inside">
+              {tries.map((t: any, idx: number) => (
+                <li key={idx}>{t.method}: {t.title ?? t.imdb_id ?? t.tmdb_id ?? t.path ?? ''} {t.year ? `(${t.year})` : ''}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-2">
+          <button className="px-4 py-2 rounded-lg border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-700 transition-colors" onClick={onClose}>Cancel</button>
+          <button className={`px-4 py-2 rounded-lg text-white transition-colors ${isRetrying ? 'bg-indigo-500' : 'bg-indigo-600 hover:bg-indigo-700'}`} onClick={onRetry} disabled={isRetrying}>{isRetrying ? 'Retrying...' : 'Retry'}</button>
+        </div>
+      </div>
     </div>
   )
 }

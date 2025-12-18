@@ -9,6 +9,7 @@ import { tvShowsApi, Episode } from '../services/api'
 import MessageModal, { useMessageModal } from '../components/MessageModal'
 import TVRenameModal from '../components/TVRenameModal'
 import MuxConfirmDialog from '../components/MuxConfirmDialog'
+import { useToast } from '../contexts/ToastContext'
 import logger from '../services/logger'
 
 // Format duration from seconds to HH:MM:SS
@@ -37,6 +38,7 @@ export default function TVShowDetailPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { messageState, showMessage, hideMessage } = useMessageModal()
+  const { showToast } = useToast()
   const showId = parseInt(id || '0')
 
   // Log page view
@@ -54,6 +56,13 @@ export default function TVShowDetailPage() {
   const [muxProgress, setMuxProgress] = useState<{ current: number; total: number } | null>(null)
   const [isMuxing, setIsMuxing] = useState(false)
   const [metadataProvider, setMetadataProvider] = useState<'auto' | 'tmdb' | 'omdb'>('auto')
+  const [searching, setSearching] = useState(false)
+  const [searchResults, setSearchResults] = useState<any[] | null>(null)
+  const [searchProvider, setSearchProvider] = useState<'tmdb' | 'omdb' | null>(null)
+  const [showSearchModal, setShowSearchModal] = useState(false)
+  const [selectedCandidate, setSelectedCandidate] = useState<any | null>(null)
+  const [manualTitle, setManualTitle] = useState<string>('')
+  const [manualYear, setManualYear] = useState<string>('')
   const seasonRefs = useRef<Record<number, HTMLDivElement | null>>({})
 
   // Fetch show details
@@ -72,12 +81,19 @@ export default function TVShowDetailPage() {
 
   // Scrape show mutation (also scrapes episodes)
   const scrapeMutation = useMutation({
-    mutationFn: (provider?: 'tmdb' | 'omdb') => tvShowsApi.scrapeTVShow(showId, provider),
+    mutationFn: (provider?: 'tmdb' | 'omdb') => tvShowsApi.scrapeTVShow(showId, undefined, provider),
     onSuccess: async (result: any) => {
+      const data = result.data
+      if (data?.task_id) {
+        // Enqueued
+        showToast('Refresh Enqueued', `Task ${data.task_id} enqueued to refresh show metadata`, 'info')
+        logger.dataOperation('refresh_metadata', 'enqueued', 'TVShowDetail', { showId, task_id: data.task_id })
+        return
+      }
+
       await queryClient.invalidateQueries({ queryKey: ['tvshow', showId] })
       await queryClient.invalidateQueries({ queryKey: ['tvshows'] })
       await queryClient.invalidateQueries({ queryKey: ['episodes', showId] })
-      const data = result.data
       logger.dataOperation('refresh_metadata', 'success', 'TVShowDetail', { 
         showId, 
         source: data?.source,
@@ -121,6 +137,14 @@ export default function TVShowDetailPage() {
     onSuccess: async (result: any) => {
       await queryClient.invalidateQueries({ queryKey: ['episodes', showId] })
       const data = result.data
+
+      // If the backend enqueued a task, it returns a task_id instead of analyzed/total counts
+      if (data?.task_id) {
+        showToast('Analysis Enqueued', `Task ${data.task_id} enqueued to analyze ${data.total_enqueued ?? 'episodes'}`, 'info')
+        logger.dataOperation('analyze_episodes', 'enqueued', 'TVShowDetail', { showId, task_id: data.task_id, total_enqueued: data.total_enqueued })
+        return
+      }
+
       logger.dataOperation('analyze_episodes', 'success', 'TVShowDetail', { 
         showId, 
         analyzed: data.analyzed, 
@@ -215,7 +239,54 @@ export default function TVShowDetailPage() {
   const handleScrapeShow = () => {
     logger.buttonClick('Scrape Show', 'TVShowDetail', { provider: metadataProvider })
     const provider = metadataProvider === 'auto' ? undefined : metadataProvider
-    scrapeMutation.mutate(provider)
+
+    // Preflight search at provider to surface candidates before enqueuing
+    setSearching(true)
+    setSearchResults(null)
+    setSearchProvider(provider as any || 'tmdb')
+    tvShowsApi.searchTVShow(showId, provider as any).then(res => {
+      const data = res.data
+      setSearchResults(data.results || [])
+      setShowSearchModal(true)
+    }).catch(err => {
+      // If search fails, fall back to enqueuing and show error toast
+      showToast('Search Failed', err?.response?.data?.detail || 'Search failed, enqueuing anyway', 'warning')
+      scrapeMutation.mutate(provider)
+    }).finally(() => setSearching(false))
+  }
+
+  const handleConfirmSearch = async () => {
+    // If a candidate selected, enqueue with tmdb_id/imdb_id override
+    const provider = metadataProvider === 'auto' ? undefined : metadataProvider
+    try {
+      let res: any = null
+      if (selectedCandidate) {
+        const body: any = {}
+        if (selectedCandidate.tmdb_id) body.tmdb_id = selectedCandidate.tmdb_id
+        if (selectedCandidate.imdb_id) body.imdb_id = selectedCandidate.imdb_id
+        res = await tvShowsApi.scrapeTVShow(showId, body, provider as any)
+      } else if (manualTitle) {
+        const body: any = { title: manualTitle }
+        if (manualYear) body.year = parseInt(manualYear)
+        res = await tvShowsApi.scrapeTVShow(showId, body, provider as any)
+      } else {
+        // No selection - enqueue normally
+        res = await tvShowsApi.scrapeTVShow(showId, undefined, provider as any)
+      }
+
+      const data = res?.data
+      if (data?.task_id) {
+        showToast('Refresh Enqueued', `Task ${data.task_id} enqueued to refresh show metadata`, 'info')
+        logger.dataOperation('refresh_metadata', 'enqueued', 'TVShowDetail', { showId, task_id: data.task_id, total_enqueued: data.total_enqueued })
+      } else {
+        showToast('Refresh Enqueued', `Task enqueued to refresh show metadata`, 'info')
+        logger.dataOperation('refresh_metadata', 'enqueued', 'TVShowDetail', { showId })
+      }
+
+      setShowSearchModal(false)
+    } catch (err: any) {
+      showMessage('Scrape Failed', err?.response?.data?.detail || 'Failed to enqueue scrape', 'error')
+    }
   }
 
   const handleRenameEpisodes = () => {
@@ -226,6 +297,15 @@ export default function TVShowDetailPage() {
   const handleCloseRenameModal = () => {
     logger.buttonClick('Rename Episodes - Close Modal', 'TVShowDetail')
     setRenameModalOpen(false)
+  }
+
+  // Search modal handlers / state for preflight scraping
+  const closeSearchModal = () => {
+    setShowSearchModal(false)
+    setSearchResults(null)
+    setSelectedCandidate(null)
+    setManualTitle('')
+    setManualYear('')
   }
 
   const handleGenerateNfo = () => {
@@ -644,6 +724,51 @@ export default function TVShowDetailPage() {
         message={messageState.message}
         type={messageState.type}
       />
+
+      {/* Search / selection modal for scraping */}
+      {showSearchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/70" onClick={closeSearchModal} />
+          <div className="relative bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <h3 className="text-lg font-semibold">Search for "{show?.title}" ({searchProvider?.toUpperCase()})</h3>
+              <button onClick={closeSearchModal} className="p-1 hover:bg-gray-700 rounded"><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            <div className="p-4">
+              {searching && <div className="text-sm text-gray-400">Searching…</div>}
+              {!searching && searchResults && searchResults.length === 0 && (
+                <div className="space-y-3">
+                  <div className="text-sm text-gray-300">No matches were found for the show's title. You can edit the title or year and enqueue anyway.</div>
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <input value={manualTitle} onChange={(e) => setManualTitle(e.target.value)} placeholder="Title override" className="p-2 rounded bg-gray-700 border border-gray-600" />
+                    <input value={manualYear} onChange={(e) => setManualYear(e.target.value)} placeholder="Year override" className="p-2 rounded bg-gray-700 border border-gray-600" />
+                  </div>
+                </div>
+              )}
+              {!searching && searchResults && searchResults.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-sm text-gray-400">Select the best match to use for scraping (or leave none to enqueue as-is):</div>
+                  <div className="mt-3 space-y-2">
+                    {searchResults.map((r, idx) => (
+                      <label key={idx} className={`flex items-center gap-3 p-2 rounded ${selectedCandidate === r ? 'bg-gray-700 border border-gray-600' : 'hover:bg-gray-700/20'}`}>
+                        <input type="radio" name="candidate" checked={selectedCandidate === r} onChange={() => setSelectedCandidate(r)} />
+                        <div className="flex-1">
+                          <div className="text-white font-medium">{r.title} {r.year ? `(${r.year})` : ''}</div>
+                          {r.overview && <div className="text-sm text-gray-400 truncate">{r.overview}</div>}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-end p-4 border-t border-gray-700 gap-3">
+              <button onClick={closeSearchModal} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded">Cancel</button>
+              <button onClick={handleConfirmSearch} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded">Enqueue Scrape</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* TV Rename Modal */}
       {renameModalOpen && show && (

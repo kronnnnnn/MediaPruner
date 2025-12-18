@@ -274,10 +274,12 @@ export const moviesApi = {
   getMovie: (id: number) => api.get<Movie>(`/movies/${id}`),
   updateMovie: (id: number, data: Partial<Movie>) => api.patch<Movie>(`/movies/${id}`, data),
   scrapeMovie: (id: number) => api.post(`/movies/${id}/scrape`),
+  scrapeMovieNow: (id: number, data?: { title?: string; year?: number }) => api.post(`/movies/${id}/scrape-now`, data),
   scrapeAllMovies: () => api.post('/movies/scrape-all'),
   scrapeMoviesBatch: (movieIds: number[]) => api.post('/movies/scrape-batch', { movie_ids: movieIds }),
   analyzeMovie: (id: number) => api.post(`/movies/${id}/analyze`),
   analyzeAllMovies: () => api.post('/movies/analyze-all'),
+  refreshMoviesBatch: (movieIds: number[]) => api.post('/movies/refresh-batch', { movie_ids: movieIds }),
   analyzeMoviesBatch: (movieIds: number[]) => api.post('/movies/analyze-batch', { movie_ids: movieIds }),
   fetchOmdbRatings: (movieIds?: number[]) => api.post('/movies/fetch-omdb-ratings', { movie_ids: movieIds || null }),
   syncWatchHistoryBatch: (movieIds?: number[]) => api.post('/movies/sync-watch-history-batch', { movie_ids: movieIds || null }),
@@ -328,8 +330,20 @@ export const tvShowsApi = {
     api.get<Episode[]>(`/tvshows/${showId}/episodes`, { params: { season } }),
   getSeasons: (showId: number) => api.get<Season[]>(`/tvshows/${showId}/seasons`),
   updateTVShow: (id: number, data: Partial<TVShow>) => api.patch<TVShow>(`/tvshows/${id}`, data),
-  scrapeTVShow: (id: number, provider?: 'tmdb' | 'omdb') => 
-    api.post(`/tvshows/${id}/scrape`, null, { params: provider ? { provider } : {} }),
+  scrapeTVShow: (id: number, bodyOrProvider?: any, provider?: 'tmdb' | 'omdb') => {
+    let body = null
+    let params: any = {}
+    // Backwards compatibility: if second arg is a string provider, treat it as provider
+    if (typeof bodyOrProvider === 'string') {
+      params = { provider: bodyOrProvider }
+    } else {
+      body = bodyOrProvider || null
+      if (provider) params = { provider }
+    }
+    return api.post(`/tvshows/${id}/scrape`, body, { params })
+  },
+  searchTVShow: (id: number, provider?: 'tmdb' | 'omdb') =>
+    api.get(`/tvshows/${id}/search`, { params: provider ? { provider } : {} }),
   scrapeEpisodes: (id: number, provider?: 'tmdb' | 'omdb') => 
     api.post(`/tvshows/${id}/scrape-episodes`, null, { params: provider ? { provider } : {} }),
   renameTVShow: (id: number, pattern?: string, organizeInSeasonFolder?: boolean, replaceSpacesWith?: string | null) => 
@@ -423,6 +437,13 @@ export const settingsApi = {
     api.get<LogsResponse>('/settings/logs', { params }),
   getLogStats: () => api.get<LogStats>('/settings/logs/stats'),
   clearLogs: (level?: string) => api.delete('/settings/logs', { params: level ? { level } : undefined }),
+}
+
+// Queues API
+export const queuesApi = {
+  listTasks: () => api.get<any[]>('/queues/tasks'),
+  getTask: (id: number) => api.get(`/queues/tasks/${id}`),
+  cancelTask: (id: number) => api.post(`/queues/tasks/${id}/cancel`),
 }
 
 // Tautulli API

@@ -26,6 +26,15 @@ async def lifespan(app: FastAPI):
     log_level = logging.DEBUG if settings.debug else logging.INFO
     setup_database_logging(level=log_level)
 
+    # Recover any stale RUNNING tasks left from a previous crash
+    from app.services.queue import clear_queued_tasks
+    try:
+        recovered = await clear_queued_tasks(older_than_seconds=60 * 30)  # clear tasks older than 30m
+        if recovered and recovered.get('tasks_cleared'):
+            logger.warning(f"Recovered and cleared {recovered['tasks_cleared']} stale queue task(s) on startup")
+    except Exception as e:
+        logger.exception(f"Failed to recover stale tasks on startup: {e}")
+
     # Start queue worker
     app.state.queue_worker = QueueWorker()
     await app.state.queue_worker.start()

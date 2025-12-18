@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import Movies from './pages/Movies'
 import TVShows from './pages/TVShows'
 import TVShowDetail from './pages/TVShowDetail'
+import Queues from './pages/Queues'
 import Settings from './pages/Settings'
 
 function App() {
@@ -14,6 +15,7 @@ function App() {
         <Route path="movies" element={<Movies />} />
         <Route path="tvshows" element={<TVShows />} />
         <Route path="tvshows/:id" element={<TVShowDetail />} />
+        <Route path="queues" element={<Queues />} />
         <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>
