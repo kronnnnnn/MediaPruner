@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+=======
+import type React from 'react'
+>>>>>>> d2f6649 (fix(frontend): resolve TS unused-import errors and remove unused handler param)
 import { useQueues } from '../contexts/QueueContext'
 import { Check, X, Clock, Play, Trash2, Copy, Film, ChevronRight, ChevronDown } from 'lucide-react' 
 import MovieDetail from '../components/MovieDetail'

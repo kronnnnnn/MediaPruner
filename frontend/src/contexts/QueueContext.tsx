@@ -37,6 +37,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const [tasks, setTasks] = useState<QueueTask[]>([])
   const [connected, setConnected] = useState(false)
 
+<<<<<<< HEAD
   // Try an initial HTTP fetch as a fallback in case the SSE 'init' event is missed/delivered before listeners are attached
   const fetchInitial = async (limit = 500) => {
     try {
@@ -44,6 +45,23 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       const res = await fetch(`/api/queues/tasks?limit=${limit}`)
       if (res.ok) {
         const data = await res.json()
+=======
+  useEffect(() => {
+    const es = new EventSource('/api/queues/stream')
+
+    es.addEventListener('open', () => {
+      setConnected(true)
+    })
+
+    es.addEventListener('error', () => {
+      // If connection closed or error, update connection state
+      setConnected(false)
+    })
+
+    es.addEventListener('init', (ev: MessageEvent) => {
+      try {
+        const data = JSON.parse((ev as any).data)
+>>>>>>> d2f6649 (fix(frontend): resolve TS unused-import errors and remove unused handler param)
         setTasks(data as QueueTask[])
         console.debug('[queues] Loaded initial snapshot via HTTP', data.length)
       } else {

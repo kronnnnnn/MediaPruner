@@ -1,16 +1,9 @@
-<<<<<<< HEAD
 import { Search, RefreshCw, Bell, Sun, Moon } from 'lucide-react'
-=======
-import { Search, RefreshCw, Bell, Sun, Moon, X } from 'lucide-react'
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
 import { useState, useRef, useEffect } from 'react'
 import { useTheme } from '../contexts/ThemeContext'
 import logger from '../services/logger'
 import { useNotifications } from '../contexts/NotificationContext'
-<<<<<<< HEAD
 import { useNavigate } from 'react-router-dom'
-=======
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
 
 export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('')
@@ -18,10 +11,7 @@ export default function Navbar() {
   const { notifications, markRead, clearAll } = useNotifications()
   const [showNotifications, setShowNotifications] = useState(false)
   const dropdownRef = useRef<HTMLDivElement | null>(null)
-<<<<<<< HEAD
   const navigate = useNavigate()
-=======
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -92,7 +82,6 @@ export default function Navbar() {
                   {notifications.length === 0 ? (
                     <div className="p-4 text-sm text-gray-500">No notifications</div>
                   ) : notifications.map(n => (
-<<<<<<< HEAD
                     <div key={n.id} onClick={() => {
                       markRead(n.id)
                       // If the notification has a task meta, navigate to queues and open it via hash
@@ -105,9 +94,6 @@ export default function Navbar() {
                         // ignore
                       }
                     }} className={`p-3 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${n.read ? 'opacity-60' : ''}`}>
-=======
-                    <div key={n.id} onClick={() => { markRead(n.id) }} className={`p-3 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${n.read ? 'opacity-60' : ''}`}>
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
                       <div className="flex items-center justify-between">
                         <div className="text-sm font-medium text-gray-900 dark:text-white">{n.title}</div>
                         <div className="text-xs text-gray-400">{new Date(n.timestamp).toLocaleString()}</div>
