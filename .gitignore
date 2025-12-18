@@ -59,6 +59,10 @@ htmlcov/
 .pytest_cache/
 .ruff_cache/
 
+# Security scanning reports
+detect-secrets-report.json
+gitleaks-report.json
+
 # Production
 *.bak
 *.tmp
