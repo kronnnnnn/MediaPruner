@@ -13,10 +13,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run gitleaks
-        uses: zricethezav/gitleaks-action@v8
-        with:
-          args: detect --source . --report-format json --report-path gitleaks-report.json --redact
+      - name: Run gitleaks (docker)
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/repo zricethezav/gitleaks:8 detect --source /repo --report-format json --report-path gitleaks-report.json --redact
 
       - name: Upload gitleaks report
         uses: actions/upload-artifact@v4
