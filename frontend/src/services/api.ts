@@ -279,7 +279,11 @@ export const moviesApi = {
   scrapeMoviesBatch: (movieIds: number[]) => api.post('/movies/scrape-batch', { movie_ids: movieIds }),
   analyzeMovie: (id: number) => api.post(`/movies/${id}/analyze`),
   analyzeAllMovies: () => api.post('/movies/analyze-all'),
+<<<<<<< HEAD
   refreshMoviesBatch: (movieIds: number[], include_ratings?: boolean) => api.post(`/movies/refresh-batch${include_ratings ? '?include_ratings=true' : ''}`, { movie_ids: movieIds }),
+=======
+  refreshMoviesBatch: (movieIds: number[]) => api.post('/movies/refresh-batch', { movie_ids: movieIds }),
+>>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
   analyzeMoviesBatch: (movieIds: number[]) => api.post('/movies/analyze-batch', { movie_ids: movieIds }),
   fetchOmdbRatings: (movieIds?: number[]) => api.post('/movies/fetch-omdb-ratings', { movie_ids: movieIds || null }),
   syncWatchHistoryBatch: (movieIds?: number[]) => api.post('/movies/sync-watch-history-batch', { movie_ids: movieIds || null }),

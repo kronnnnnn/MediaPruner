@@ -72,6 +72,7 @@ class OMDbService:
         self.client = httpx.AsyncClient(timeout=30.0)
         # Diagnostics: remember last request params
         self.last_request_params = None
+
     async def close(self):
         await self.client.aclose()
 
@@ -148,7 +149,7 @@ class OMDbService:
             data = response.json()
 
             if data.get('Response') == 'False':
-                logger.warning(f"OMDb: TV show not found for '{title}' ({year}): {data.get('Error')} (params: {params})")
+                logger.warning(f"OMDb: TV show not found for IMDb id {imdb_id}: {data.get('Error')} (params: {params})")
                 return None
 
             return self._parse_tvshow(data)

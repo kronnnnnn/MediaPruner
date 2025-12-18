@@ -324,11 +324,9 @@ class QueueStatus(enum.Enum):
     QUEUED = "queued"
     RUNNING = "running"
     CANCELED = "canceled"
-    DELETED = "deleted"
-=======
->>>>>>> d028972 (feat(queue): add QueueTask/QueueItem models, service, worker, router; enqueue scans on folder add)
     COMPLETED = "completed"
     FAILED = "failed"
+    DELETED = "deleted"
 
 
 class QueueTask(Base):

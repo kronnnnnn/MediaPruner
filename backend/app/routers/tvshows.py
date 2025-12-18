@@ -337,7 +337,17 @@ async def scrape_tvshow_metadata(
     provider: Optional[str] = Query(None, pattern="^(tmdb|omdb)$", description="Force a specific provider (tmdb or omdb)"),
     request_body: Any = Body(None),
     db: AsyncSession = Depends(get_db)
+<<<<<<< HEAD
 ):
+=======
+):=======
+    show_id: int,
+    provider: Optional[str] = Query(None, pattern="^(tmdb|omdb)$", description="Force a specific provider (tmdb or omdb)"),
+    request_body: Any = Body(None),
+    db: AsyncSession = Depends(get_db)
+):
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
+>>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
     """Scrape metadata for a TV show and its episodes from TMDB or OMDb
 
     Args:
@@ -506,6 +516,45 @@ async def search_tvshow_candidates(
         status_code=404,
         detail=f"TV show not found{provider_msg}. Searched for: '{search_title}'. Please check the show title or try a different provider."
     )
+<<<<<<< HEAD
+=======
+=======
+    if not show:
+        raise HTTPException(status_code=404, detail="TV show not found")
+
+    title = show.title or ''
+    year = None
+    if show.first_air_date:
+        try:
+            year = int(str(show.first_air_date).split('-')[0])
+        except Exception:
+            year = None
+
+    # Try TMDB first unless provider forced to OMDb
+    if provider in (None, 'tmdb'):
+        tmdb_service = await TMDBService.create_with_db_key(db)
+        logger.info(f"Search candidates requested for show_id={show_id} title='{title}' provider=tmdb")
+        if tmdb_service.is_configured:
+            results = await tmdb_service.search_tvshow(title, year)
+            mapped = []
+            for r in results:
+                mapped.append({
+                    'tmdb_id': r.get('id'),
+                    'title': r.get('name') or r.get('original_name'),
+                    'year': (r.get('first_air_date') or '')[:4] if r.get('first_air_date') else None,
+                    'overview': r.get('overview'),
+                    'poster_path': r.get('poster_path'),
+                })
+            logger.info(f"TMDB search returned {len(mapped)} candidates for show_id={show_id}")
+            return {'provider': 'tmdb', 'results': mapped, 'tried': getattr(tmdb_service, 'last_search_tried', None)}
+
+    # Fallback to OMDb if configured or forced
+    if provider in (None, 'omdb'):
+        from app.services.omdb import get_omdb_api_key_from_db, OMDbService
+
+        api_key = await get_omdb_api_key_from_db(db)
+        logger.info(f"Search candidates requested for show_id={show_id} title='{title}' provider=omdb")
+>>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
         if api_key:
             omdb_svc = OMDbService(api_key)
             try:
@@ -521,7 +570,13 @@ async def search_tvshow_candidates(
                     }], 'tried': getattr(omdb_svc, 'last_request_params', None)}
             finally:
                 await omdb_svc.close()
+<<<<<<< HEAD
     return {'provider': provider or 'tmdb', 'results': []}
+=======
+
+    return {'provider': provider or 'tmdb', 'results': []}
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
+>>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
 
 
 @router.post("/{show_id}/scrape-episodes")
@@ -826,47 +881,26 @@ async def analyze_episode_file(
             detail="MediaInfo library not available. Please install MediaInfo on the system."
         )
 
-    # Analyze the file
-    info = mediainfo.analyze_file(episode.file_path)
+    # Enqueue analyze task (queue-based processing)
+    from app.services.queue import create_task
 
-    if not info.success:
-        raise HTTPException(status_code=400,
-                            detail=info.error or "Failed to analyze file")
+    task = await create_task('analyze', items=[{"episode_id": episode.id}], meta={"show_id": show_id})
 
-    # Update episode with media info
-    episode.duration = info.duration
-    episode.video_codec = info.video_codec
-    episode.video_resolution = info.video_resolution
-    episode.video_width = info.video_width
-    episode.video_height = info.video_height
-    episode.audio_codec = info.audio_codec
-    episode.audio_channels = info.audio_channels
-    episode.audio_language = info.audio_language
-    episode.subtitle_languages = mediainfo.get_subtitle_languages_json(info)
-    episode.container = info.container
-    episode.file_size = info.file_size
-    episode.media_info_scanned = True
-
-    await db.commit()
-
-    return {
-        "message": "Episode file analyzed successfully",
-        "media_info": {
-            "container": info.container,
-            "duration": info.duration,
-            "video_codec": info.video_codec,
-            "video_resolution": info.video_resolution,
-            "audio_codec": info.audio_codec,
-            "audio_channels": info.audio_channels,
-            "subtitle_languages": info.subtitle_languages,
-        }
-    }
+    return {"task_id": task.id, "status": task.status.value}
+=======
+=======
+    
+>>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
     # Enqueue analyze task
     from app.services.queue import create_task
 
     task = await create_task('analyze', items=[{"episode_id": episode.id}], meta={"show_id": show_id})
 
     return {"task_id": task.id, "status": task.status.value}
+<<<<<<< HEAD
+=======
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
+>>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
 
 
 @router.post("/{show_id}/analyze-all")
@@ -900,10 +934,21 @@ async def analyze_all_episodes(
         )
         episodes = episodes_result.scalars().all()
     except Exception as e:
+<<<<<<< HEAD
         raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
     
     # Enqueue analyze tasks for all episodes
     from app.services.queue import create_task
+=======
+<<<<<<< HEAD
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch episodes: {
+                str(e)}")
+
+    analyzed = 0
+    errors = []
+>>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
 
     items = []
     for episode in episodes:
@@ -927,8 +972,36 @@ async def analyze_all_episodes(
             continue
         items.append({"episode_id": episode.id})
 
+<<<<<<< HEAD
     if not items:
         raise HTTPException(status_code=400, detail="No episodes with files to analyze")
+=======
+    return {
+        "message": f"Analyzed {analyzed} of {len(episodes)} episodes",
+        "analyzed": analyzed,
+        "total": len(episodes),
+        "errors": errors[:10] if errors else []  # Limit errors to 10
+    }
+=======
+        raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
+    
+    # Enqueue analyze tasks for all episodes
+    from app.services.queue import create_task
+
+    items = []
+    for episode in episodes:
+        if not episode.file_path:
+            continue
+        items.append({"episode_id": episode.id})
+
+    if not items:
+        raise HTTPException(status_code=400, detail="No episodes with files to analyze")
+
+    task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
+
+    return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
+>>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
 
     task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
 
@@ -952,10 +1025,18 @@ async def get_mux_subtitles_preview(
     episodes_result = await db.execute(
         select(Episode).where(
             Episode.tvshow_id == show_id,
+<<<<<<< HEAD
             Episode.subtitle_path.isnot(None),
             Episode.has_subtitle
+<<<<<<< HEAD
                 Episode.subtitle_path.isnot(None),
                 Episode.has_subtitle
+=======
+=======
+                Episode.subtitle_path.isnot(None),
+                Episode.has_subtitle
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
+>>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
         )
     )
     episodes = episodes_result.scalars().all()
@@ -1038,10 +1119,18 @@ async def mux_all_subtitles(
     episodes_result = await db.execute(
         select(Episode).where(
             Episode.tvshow_id == show_id,
+<<<<<<< HEAD
             Episode.subtitle_path.isnot(None),
             Episode.has_subtitle
+<<<<<<< HEAD
                 Episode.subtitle_path.isnot(None),
                 Episode.has_subtitle
+=======
+=======
+                Episode.subtitle_path.isnot(None),
+                Episode.has_subtitle
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
+>>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
         )
     )
     episodes = episodes_result.scalars().all()

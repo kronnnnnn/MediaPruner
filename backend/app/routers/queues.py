@@ -21,9 +21,7 @@ from app.schemas import QueueTaskResponse, QueueItemResponse
 from app.config import settings
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter(tags=["queues"])
-
 
 @router.post("/tasks")
 async def api_create_task(body: dict, db: AsyncSession = Depends(get_db)):
@@ -52,43 +50,20 @@ async def api_get_task(task_id: int):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-
-    # Basic serialization
-    items = []
-    for i in task.items:
-        items.append({
-            "id": i.id,
-            "index": i.index,
-            "status": i.status.value,
-            "payload": i.payload,
-            "result": i.result,
-            "started_at": i.started_at,
-            "finished_at": i.finished_at,
-        })
-
-    return {
-        "id": task.id,
-        "type": task.type,
-        "status": task.status.value,
-        "created_by": task.created_by,
-        "created_at": task.created_at,
-        "started_at": task.started_at,
-        "finished_at": task.finished_at,
-        "total_items": task.total_items,
-        "completed_items": task.completed_items,
-        "meta": task.meta,
-        "items": items,
-    }
+    # get_task now returns a serialized mapping
+    return task
 
 
 @router.post("/tasks/{task_id}/cancel")
 async def api_cancel_task(task_id: int):
-
-    t = await cancel_task(task_id)
-    if not t:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return {"task_id": t.id, "status": t.status.value}
->>>>>>> d028972 (feat(queue): add QueueTask/QueueItem models, service, worker, router; enqueue scans on folder add)
+    try:
+        res = await cancel_task(task_id)
+        if not res:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return {"task_id": res.get('id'), "status": res.get('status')}
+    except Exception as e:
+        logger.exception(f"Failed to cancel task {task_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to cancel task")
 
 
 @router.get("/ongoing")
@@ -135,7 +110,11 @@ async def api_worker_run_once(request: Request):
 
 
 @router.get('/stream')
+<<<<<<< HEAD
 async def api_queues_stream(request: Request):
+=======
+async def api_queues_stream():
+>>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
     """Server-sent events stream of queue changes (init + task_update events)."""
     # subscribe
     q = subscribe_events()
@@ -149,8 +128,8 @@ async def api_queues_stream(request: Request):
         try:
             initial = await list_tasks()
             yield f"event: init\ndata: {json.dumps(initial, default=str)}\n\n"
-        except Exception as e:
-            logger.exception(f"Failed to send initial task list: {e}")
+        except Exception:
+            logger.exception("Failed to send initial task list")
 
         try:
             # Keepalive ping to prevent idle timeouts/closed proxies
@@ -171,7 +150,7 @@ async def api_queues_stream(request: Request):
                     else:
                         now = asyncio.get_event_loop().time()
                         if now - last_send >= ping_interval:
-                            # send a ping comment (some clients ignore comments, so we send a ping event)
+                            # send a ping event
                             yield f"event: ping\ndata: {{}}\n\n"
                             last_send = now
                         # small sleep to avoid tight loop
@@ -181,25 +160,20 @@ async def api_queues_stream(request: Request):
         except asyncio.CancelledError:
             # Client disconnected
             logger.info(f"SSE client disconnected: {client_info}")
-            pass
         finally:
             unsubscribe_events(q)
 
     return StreamingResponse(event_generator(), media_type='text/event-stream')
 
 @router.post("/tasks/clear")
-async def api_clear_tasks(scope: str | None = 'current', older_than_seconds: int | None = None):
-    """Hard purge tasks by scope (DEBUG only).
+async def api_clear_tasks(older_than_seconds: int | None = None):
+    """Clear queued/running tasks (DEBUG only).
 
-    scope values: 'current' (queued/running), 'history' (completed/failed/canceled/deleted), 'all'.
-    Permanently DELETEs matching tasks and their items (irreversible). Only enabled when app is running in debug mode.
+    Marks matching tasks as DELETED and queued/running items as CANCELED. Only enabled when app is running in debug mode.
     """
     if not settings.debug:
         raise HTTPException(status_code=403, detail="Clearing tasks is only allowed in debug mode")
-    try:
-        res = await clear_queued_tasks(scope=scope, older_than_seconds=older_than_seconds)
-    except ValueError:
-        raise HTTPException(status_code=400, detail='Invalid scope')
+    res = await clear_queued_tasks(older_than_seconds)
     return res
 
 
@@ -242,4 +216,7 @@ async def api_worker_stop(request: Request):
         return {'stopped': False, 'reason': 'worker not running'}
     await worker.stop()
     return {'stopped': True}
+<<<<<<< HEAD
 
+=======
+>>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))

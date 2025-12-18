@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
     log_level = logging.DEBUG if settings.debug else logging.INFO
     setup_database_logging(level=log_level)
 
-<<<<<<< HEAD
+
     # Recover any stale RUNNING tasks left from a previous crash
     from app.services.queue import clear_queued_tasks
     try:
