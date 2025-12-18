@@ -29,17 +29,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <SidebarProvider>
           <NotificationProvider>
             <ToastProvider>
-<<<<<<< HEAD
               <QueueProvider>
                 <BrowserRouter>
                   <App />
                 </BrowserRouter>
               </QueueProvider>
-=======
-              <BrowserRouter>
-                <App />
-              </BrowserRouter>
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
             </ToastProvider>
           </NotificationProvider>
         </SidebarProvider>

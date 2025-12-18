@@ -37,8 +37,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const [tasks, setTasks] = useState<QueueTask[]>([])
   const [connected, setConnected] = useState(false)
 
-
-
   // Try an initial HTTP fetch as a fallback in case the SSE 'init' event is missed/delivered before listeners are attached
   const fetchInitial = async (limit = 500) => {
     try {
@@ -175,8 +173,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       // Remove global listeners in case component unmounts
       if (onFocus) window.removeEventListener('focus', onFocus)
       if (onVisibility) window.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [])
+
 
   return (
     <QueueContext.Provider value={{ tasks, connected, refresh }}>
