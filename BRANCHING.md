@@ -32,16 +32,27 @@ The `dev` branch serves as the integration branch for all feature development.
 ## Branch Status
 
 - ✅ `main` - Production branch (exists on origin)
-- 🔄 `dev` - Integration branch (created locally, needs to be pushed to origin)
+- 🔄 `dev` - Integration branch (created locally, ready to be pushed to origin)
 
-## Next Steps
+## Pushing the Dev Branch
 
-To push the `dev` branch to origin, run:
+The `dev` branch has been created locally and is ready to be pushed to the origin repository. Due to environment constraints in the automated setup, the branch push requires manual execution by a user with GitHub credentials.
+
+### Option 1: Run the provided script
 ```bash
 ./scripts/push-dev-branch.sh
 ```
 
-Or manually:
+### Option 2: Push manually
 ```bash
 git push -u origin dev
 ```
+
+### Option 3: Use GitHub CLI
+```bash
+gh api /repos/kronnnnnn/MediaPruner/git/refs \
+  -f ref='refs/heads/dev' \
+  -f sha='2a1fdc325e96aab5eba72fc8d6ab9f549d736e32'
+```
+
+Once pushed, the `dev` branch will be available on GitHub for the team to use as the integration branch for feature development.
