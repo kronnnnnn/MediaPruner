@@ -21,6 +21,14 @@ frontend/dist/
 .env
 .env.local
 .env.*.local
+# Sensitive keys and certificates
+*.pem
+*.key
+id_rsa
+id_rsa.pub
+secrets.*
+deploy/*.env
+
 
 # IDE
 .idea/

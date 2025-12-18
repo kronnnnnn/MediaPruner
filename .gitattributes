@@ -1,0 +1,8 @@
+.env export-ignore
+deploy/*.env export-ignore
+deploy/*.secrets export-ignore
+**/*.pem export-ignore
+**/*.key export-ignore
+**/id_rsa export-ignore
+**/id_rsa.pub export-ignore
+**/secrets.* export-ignore
