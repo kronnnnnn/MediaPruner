@@ -1,11 +1,11 @@
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import AsyncClient
 
 pytestmark = pytest.mark.asyncio
 
 async def test_scrape_rejects_string_body(temp_db):
     from app.main import app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+    async with AsyncClient(app=app, base_url='http://test') as client:
         # Create a dummy show first
         from app.database import async_session
         from app.models import TVShow, LibraryPath
