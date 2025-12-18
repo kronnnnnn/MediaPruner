@@ -50,7 +50,7 @@ git push -u origin dev
 
 ### Option 3: Use GitHub CLI
 ```bash
-gh api /repos/kronnnnnn/MediaPruner/git/refs \
+gh api /repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/git/refs \
   -f ref='refs/heads/dev' \
   -f sha='2a1fdc325e96aab5eba72fc8d6ab9f549d736e32'
 ```
