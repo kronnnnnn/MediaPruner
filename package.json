@@ -6,18 +6,20 @@
   "scripts": {
     "dev": "concurrently -k -n \"BACKEND,FRONTEND\" -c \"yellow,cyan\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "cd frontend && npm run dev",
-    "dev:backend": "C:/apps/MediaPruner/.venv/Scripts/python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend",
+    "dev:backend": "node scripts/dev-backend.js",
     "build": "cd frontend && npm run build",
-    "build:prod": "cd frontend && npm run build && xcopy /E /I /Y dist ..\\backend\\static",
+    "build:prod": "cd frontend && npm run build && shx rm -rf ../backend/static && shx cp -r dist ../backend/static",
     "start:prod": "cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000",
     "docker:build": "docker build -t mediapruner:latest .",
     "docker:run": "docker run -p 8000:8000 -v mediapruner_data:/app/data mediapruner:latest",
     "install:all": "npm install && cd frontend && npm install && cd ../backend && pip install -r requirements.txt",
-    "clean": "cd frontend && rmdir /s /q dist 2>nul & cd ../backend && rmdir /s /q static 2>nul",
+    "clean": "rimraf frontend/dist backend/static",
     "start": "npm run dev"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "rimraf": "^5.0.5",
+    "shx": "^0.3.4"
   },
   "engines": {
     "node": ">=18.0.0"
