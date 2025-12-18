@@ -13,7 +13,8 @@ async def test_get_library_paths_handles_lowercase_media_type(monkeypatch, tmp_p
     # Ensure we have a fresh insertion and then call the API
     async with async_session() as s:
         # Insert a legacy row with lowercase media_type directly via SQL
-        await s.execute(text("INSERT INTO library_paths (path, name, media_type, created_at) VALUES ('/tmp/legacy', 'Legacy', 'tv', datetime('now'))"))
+        legacy_path = str(tmp_path / 'legacy')
+        await s.execute(text("INSERT INTO library_paths (path, name, media_type, created_at) VALUES (:path, 'Legacy', 'tv', datetime('now'))"), {'path': legacy_path})
         await s.commit()
 
     transport = ASGITransport(app=fastapi_app)
