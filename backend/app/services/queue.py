@@ -367,7 +367,7 @@ async def clear_queued_tasks(older_than_seconds: int | None = None):
     from sqlalchemy import update, select, and_, or_
     from datetime import datetime, timedelta
 
-    async with async_session() as session:
+    async with database.async_session() as session:
         # Build where clause
         where_clause = QueueTask.status.in_([QueueStatus.QUEUED, QueueStatus.RUNNING])
         if older_than_seconds is not None:
