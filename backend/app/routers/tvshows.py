@@ -337,13 +337,7 @@ async def scrape_tvshow_metadata(
     provider: Optional[str] = Query(None, pattern="^(tmdb|omdb)$", description="Force a specific provider (tmdb or omdb)"),
     request_body: Any = Body(None),
     db: AsyncSession = Depends(get_db)
-):=======
-    show_id: int,
-    provider: Optional[str] = Query(None, pattern="^(tmdb|omdb)$", description="Force a specific provider (tmdb or omdb)"),
-    request_body: Any = Body(None),
-    db: AsyncSession = Depends(get_db)
 ):
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
     """Scrape metadata for a TV show and its episodes from TMDB or OMDb
 
     Args:
@@ -530,6 +524,21 @@ async def search_tvshow_candidates(
         tmdb_service = await TMDBService.create_with_db_key(db)
         logger.info(f"Search candidates requested for show_id={show_id} title='{title}' provider=tmdb")
         if tmdb_service.is_configured:
+=======
+    title = show.title or ''
+    year = None
+    if show.first_air_date:
+        try:
+            year = int(str(show.first_air_date).split('-')[0])
+        except Exception:
+            year = None
+
+    # Try TMDB first unless provider forced to OMDb
+    if provider in (None, 'tmdb'):
+        tmdb_service = await TMDBService.create_with_db_key(db)
+        logger.info(f"Search candidates requested for show_id={show_id} title='{title}' provider=tmdb")
+        if tmdb_service.is_configured:
+>>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
             results = await tmdb_service.search_tvshow(title, year)
             mapped = []
             for r in results:
@@ -566,7 +575,10 @@ async def search_tvshow_candidates(
                 await omdb_svc.close()
 
     return {'provider': provider or 'tmdb', 'results': []}
+<<<<<<< HEAD
 >>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
+=======
+>>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
 
 
 @router.post("/{show_id}/scrape-episodes")
@@ -873,7 +885,6 @@ async def analyze_episode_file(
             status_code=500,
             detail="MediaInfo library not available. Please install MediaInfo on the system."
         )
-<<<<<<< HEAD
 
     # Analyze the file
     info = mediainfo.analyze_file(episode.file_path)
@@ -910,15 +921,12 @@ async def analyze_episode_file(
             "subtitle_languages": info.subtitle_languages,
         }
     }
-=======
-    
     # Enqueue analyze task
     from app.services.queue import create_task
 
     task = await create_task('analyze', items=[{"episode_id": episode.id}], meta={"show_id": show_id})
 
     return {"task_id": task.id, "status": task.status.value}
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
 
 
 @router.post("/{show_id}/analyze-all")
@@ -953,6 +961,7 @@ async def analyze_all_episodes(
         )
         episodes = episodes_result.scalars().all()
     except Exception as e:
+<<<<<<< HEAD
 <<<<<<< HEAD
         raise HTTPException(
             status_code=500,
@@ -1015,6 +1024,17 @@ async def analyze_all_episodes(
     for episode in episodes:
         if not episode.file_path:
             continue
+=======
+        raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
+    
+    # Enqueue analyze tasks for all episodes
+    from app.services.queue import create_task
+
+    items = []
+    for episode in episodes:
+        if not episode.file_path:
+            continue
+>>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
         items.append({"episode_id": episode.id})
 
     if not items:
@@ -1023,7 +1043,10 @@ async def analyze_all_episodes(
     task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
 
     return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
+<<<<<<< HEAD
 >>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
+=======
+>>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
 
 
 @router.get("/{show_id}/mux-subtitles-preview")

@@ -72,7 +72,6 @@ class OMDbService:
         self.client = httpx.AsyncClient(timeout=30.0)
         # Diagnostics: remember last request params
         self.last_request_params = None
-
     async def close(self):
         await self.client.aclose()
 
@@ -107,13 +106,7 @@ class OMDbService:
             data = response.json()
 
             if data.get('Response') == 'False':
-<<<<<<< HEAD
-                logger.warning(
-                    f"OMDb: TV show not found for '{title}' ({year}): {
-                        data.get('Error')}")
-=======
                 logger.warning(f"OMDb: TV show not found for '{title}' ({year}): {data.get('Error')} (params: {params})")
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
                 return None
 
             return self._parse_tvshow(data)
@@ -333,16 +326,22 @@ class OMDbService:
             if year:
                 params['y'] = str(year)
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
             # Record params for diagnostics
             self.last_request_params = params
 >>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
+=======
+            # Record params for diagnostics
+            self.last_request_params = params
+>>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
             response = await self.client.get(OMDB_BASE_URL, params=params)
             response.raise_for_status()
             data = response.json()
 
             if data.get('Response') == 'False':
+<<<<<<< HEAD
 <<<<<<< HEAD
                 logger.warning(
                     f"OMDb: Movie not found for '{title}' ({year}): {
@@ -351,6 +350,10 @@ class OMDbService:
                 logger.warning(f"OMDb: Movie not found for '{title}' ({year}): {data.get('Error')} (params: {params})")
                 logger.debug(f"OMDb request params: {params}")
 >>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
+=======
+                logger.warning(f"OMDb: Movie not found for '{title}' ({year}): {data.get('Error')} (params: {params})")
+                logger.debug(f"OMDb request params: {params}")
+>>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
                 return None
 
             return self._parse_ratings(data)
