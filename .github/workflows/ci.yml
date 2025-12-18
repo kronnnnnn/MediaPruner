@@ -13,7 +13,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-<<<<<<< HEAD
       - name: Run gitleaks
         uses: zricethezav/gitleaks-action@v8
         with:
