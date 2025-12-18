@@ -562,6 +562,7 @@ class QueueWorker:
                                                 )
                                                 session.add(log)
                                                 await session.commit()
+                                                logger.info("Persisted LogEntry for OMDb no-result")
                                             except Exception:
                                                 logger.exception("Failed to persist LogEntry for OMDb no-result")
 
