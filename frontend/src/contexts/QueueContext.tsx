@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 
 export interface QueueItem {
   id: number
@@ -41,7 +42,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       setConnected(true)
     })
 
-    es.addEventListener('error', (e) => {
+    es.addEventListener('error', () => {
       // If connection closed or error, update connection state
       setConnected(false)
     })

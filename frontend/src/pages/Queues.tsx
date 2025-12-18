@@ -1,4 +1,4 @@
-import React from 'react'
+import type React from 'react'
 import { useQueues } from '../contexts/QueueContext'
 
 export default function Queues() {

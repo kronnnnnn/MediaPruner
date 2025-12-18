@@ -1,4 +1,4 @@
-import { Search, RefreshCw, Bell, Sun, Moon, X } from 'lucide-react'
+import { Search, RefreshCw, Bell, Sun, Moon } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useTheme } from '../contexts/ThemeContext'
 import logger from '../services/logger'
