@@ -9,7 +9,10 @@ DATA_DIR.mkdir(exist_ok=True)
 DATABASE_URL = f"sqlite+aiosqlite:///{DATA_DIR}/mediapruner.db"
 
 engine = create_async_engine(DATABASE_URL, echo=False)
-async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+async_session = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False)
 
 
 class Base(DeclarativeBase):
@@ -47,27 +50,28 @@ async def migrate_db():
             ("watch_count", "INTEGER DEFAULT 0"),
             ("last_watched_date", "DATETIME"),
             ("last_watched_user", "VARCHAR(128)"),
-            # Plex rating key to persist resolved rating_key for quicker lookups
+            # Plex rating key to persist resolved rating_key for quicker
+            # lookups
             ("rating_key", "INTEGER"),
             # Option 4: custom external ID field added in UI
             ("option_4", "VARCHAR(255)"),
             # Track if analysis failed
             ("media_info_failed", "BOOLEAN DEFAULT 0"),
         ]
-        
+
         for col_name, col_type in movies_columns:
             try:
                 await conn.execute(text(f"ALTER TABLE movies ADD COLUMN {col_name} {col_type}"))
             except Exception:
                 # Column already exists
                 pass
-        
+
         # Check and add new columns to episodes table
         episodes_columns = [
             ("subtitle_path", "VARCHAR(1024)"),
             ("has_subtitle", "BOOLEAN DEFAULT 0"),
         ]
-        
+
         for col_name, col_type in episodes_columns:
             try:
                 await conn.execute(text(f"ALTER TABLE episodes ADD COLUMN {col_name} {col_type}"))

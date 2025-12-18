@@ -25,7 +25,9 @@ async def get_rating_key_by_imdb(
 
 
 @router.get("/raw-search")
-async def plex_raw_search(query: str = Query(..., description="Search query"), db: AsyncSession = Depends(get_db)):
+async def plex_raw_search(query: str = Query(...,
+                                             description="Search query"),
+                          db: AsyncSession = Depends(get_db)):
     plex = await get_plex_service(db)
     if not plex:
         raise HTTPException(status_code=404, detail="Plex not configured")
@@ -35,7 +37,9 @@ async def plex_raw_search(query: str = Query(..., description="Search query"), d
 
 
 @router.get("/metadata")
-async def plex_metadata(rating_key: int = Query(..., description="rating_key"), db: AsyncSession = Depends(get_db)):
+async def plex_metadata(rating_key: int = Query(...,
+                                                description="rating_key"),
+                        db: AsyncSession = Depends(get_db)):
     plex = await get_plex_service(db)
     if not plex:
         raise HTTPException(status_code=404, detail="Plex not configured")

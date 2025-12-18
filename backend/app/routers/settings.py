@@ -2,11 +2,10 @@
 Settings API Router - Manages application settings stored in the database
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
-from starlette.status import HTTP_200_OK, HTTP_400_BAD_REQUEST
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, delete, func
 from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import Optional, List
 from datetime import datetime
 
 from app.database import get_db
@@ -52,9 +51,9 @@ async def get_all_settings(db: AsyncSession = Depends(get_db)):
     """Get all application settings"""
     result = await db.execute(select(AppSettings))
     settings_list = result.scalars().all()
-    
+
     settings_dict = {s.key: s.value for s in settings_list}
-    
+
     # Mask the API key for security (only show last 4 chars)
     tmdb_key = settings_dict.get("tmdb_api_key")
     if tmdb_key and len(tmdb_key) > 4:
@@ -64,11 +63,9 @@ async def get_all_settings(db: AsyncSession = Depends(get_db)):
     plex_token = settings_dict.get("plex_token")
     if plex_token and len(plex_token) > 4:
         plex_token = "•" * (len(plex_token) - 4) + plex_token[-4:]
-    
+
     return AllSettingsResponse(
-        tmdb_api_key=tmdb_key
-        , plex_host=plex_host
-        , plex_token=plex_token
+        tmdb_api_key=tmdb_key, plex_host=plex_host, plex_token=plex_token
     )
 
 
@@ -79,13 +76,12 @@ async def get_tmdb_api_key_status(db: AsyncSession = Depends(get_db)):
         select(AppSettings).where(AppSettings.key == "tmdb_api_key")
     )
     setting = result.scalar_one_or_none()
-    
-    has_key = setting is not None and setting.value is not None and len(setting.value) > 0
-    
-    return {
-        "configured": has_key,
-        "masked_value": ("•" * (len(setting.value) - 4) + setting.value[-4:]) if has_key and len(setting.value) > 4 else None
-    }
+
+    has_key = setting is not None and setting.value is not None and len(
+        setting.value) > 0
+
+    return {"configured": has_key, "masked_value": (
+        "•" * (len(setting.value) - 4) + setting.value[-4:]) if has_key and len(setting.value) > 4 else None}
 
 
 @router.put("/tmdb-api-key")
@@ -98,7 +94,7 @@ async def set_tmdb_api_key(
         select(AppSettings).where(AppSettings.key == "tmdb_api_key")
     )
     setting = result.scalar_one_or_none()
-    
+
     if setting:
         setting.value = data.api_key
     else:
@@ -108,9 +104,9 @@ async def set_tmdb_api_key(
             description="TMDB API Key for metadata scraping"
         )
         db.add(setting)
-    
+
     await db.commit()
-    
+
     return {"message": "TMDB API key saved successfully"}
 
 
@@ -121,11 +117,11 @@ async def delete_tmdb_api_key(db: AsyncSession = Depends(get_db)):
         select(AppSettings).where(AppSettings.key == "tmdb_api_key")
     )
     setting = result.scalar_one_or_none()
-    
+
     if setting:
         await db.delete(setting)
         await db.commit()
-    
+
     return {"message": "TMDB API key removed"}
 
 
@@ -145,7 +141,7 @@ async def verify_tmdb_api_key(
             return {"valid": True}
         else:
             return {"valid": False}
-    except Exception as e:
+    except Exception:
         await tmdb_service.close()
         return {"valid": False}
 
@@ -162,13 +158,12 @@ async def get_omdb_api_key_status(db: AsyncSession = Depends(get_db)):
         select(AppSettings).where(AppSettings.key == "omdb_api_key")
     )
     setting = result.scalar_one_or_none()
-    
-    has_key = setting is not None and setting.value is not None and len(setting.value) > 0
-    
-    return {
-        "configured": has_key,
-        "masked_value": ("•" * (len(setting.value) - 4) + setting.value[-4:]) if has_key and len(setting.value) > 4 else None
-    }
+
+    has_key = setting is not None and setting.value is not None and len(
+        setting.value) > 0
+
+    return {"configured": has_key, "masked_value": (
+        "•" * (len(setting.value) - 4) + setting.value[-4:]) if has_key and len(setting.value) > 4 else None}
 
 
 @router.put("/omdb-api-key")
@@ -181,19 +176,18 @@ async def set_omdb_api_key(
         select(AppSettings).where(AppSettings.key == "omdb_api_key")
     )
     setting = result.scalar_one_or_none()
-    
+
     if setting:
         setting.value = data.api_key
     else:
         setting = AppSettings(
             key="omdb_api_key",
             value=data.api_key,
-            description="OMDb API Key for IMDB/Rotten Tomatoes/Metacritic ratings"
-        )
+            description="OMDb API Key for IMDB/Rotten Tomatoes/Metacritic ratings")
         db.add(setting)
-    
+
     await db.commit()
-    
+
     return {"message": "OMDb API key saved successfully"}
 
 
@@ -204,11 +198,11 @@ async def delete_omdb_api_key(db: AsyncSession = Depends(get_db)):
         select(AppSettings).where(AppSettings.key == "omdb_api_key")
     )
     setting = result.scalar_one_or_none()
-    
+
     if setting:
         await db.delete(setting)
         await db.commit()
-    
+
     return {"message": "OMDb API key removed"}
 
 
@@ -219,7 +213,7 @@ async def verify_omdb_api_key(
 ):
     """Verify if the provided OMDb API key is valid by making a test request to OMDb."""
     from app.services.omdb import OMDbService
-    
+
     # Use the provided key for verification
     omdb_service = OMDbService(api_key=data.api_key)
     try:
@@ -230,7 +224,7 @@ async def verify_omdb_api_key(
             return {"valid": True}
         else:
             return {"valid": False}
-    except Exception as e:
+    except Exception:
         await omdb_service.close()
         return {"valid": False}
 
@@ -250,18 +244,17 @@ async def get_tautulli_status(db: AsyncSession = Depends(get_db)):
     result_key = await db.execute(
         select(AppSettings).where(AppSettings.key == "tautulli_api_key")
     )
-    
+
     host_setting = result_host.scalar_one_or_none()
     key_setting = result_key.scalar_one_or_none()
-    
-    has_host = host_setting is not None and host_setting.value is not None and len(host_setting.value) > 0
-    has_key = key_setting is not None and key_setting.value is not None and len(key_setting.value) > 0
-    
-    return {
-        "configured": has_host and has_key,
-        "host": host_setting.value if has_host else None,
-        "masked_api_key": ("•" * (len(key_setting.value) - 4) + key_setting.value[-4:]) if has_key and len(key_setting.value) > 4 else None
-    }
+
+    has_host = host_setting is not None and host_setting.value is not None and len(
+        host_setting.value) > 0
+    has_key = key_setting is not None and key_setting.value is not None and len(
+        key_setting.value) > 0
+
+    return {"configured": has_host and has_key, "host": host_setting.value if has_host else None, "masked_api_key": (
+        "•" * (len(key_setting.value) - 4) + key_setting.value[-4:]) if has_key and len(key_setting.value) > 4 else None}
 
 
 @router.put("/tautulli")
@@ -275,7 +268,7 @@ async def set_tautulli_settings(
         select(AppSettings).where(AppSettings.key == "tautulli_host")
     )
     host_setting = result_host.scalar_one_or_none()
-    
+
     if host_setting:
         host_setting.value = data.host
     else:
@@ -285,13 +278,13 @@ async def set_tautulli_settings(
             description="Tautulli server URL (e.g., http://localhost:8181)"
         )
         db.add(host_setting)
-    
+
     # Update or create API key setting
     result_key = await db.execute(
         select(AppSettings).where(AppSettings.key == "tautulli_api_key")
     )
     key_setting = result_key.scalar_one_or_none()
-    
+
     if key_setting:
         key_setting.value = data.api_key
     else:
@@ -301,9 +294,9 @@ async def set_tautulli_settings(
             description="Tautulli API key for watch history tracking"
         )
         db.add(key_setting)
-    
+
     await db.commit()
-    
+
     return {"message": "Tautulli settings saved successfully"}
 
 
@@ -316,17 +309,17 @@ async def delete_tautulli_settings(db: AsyncSession = Depends(get_db)):
     result_key = await db.execute(
         select(AppSettings).where(AppSettings.key == "tautulli_api_key")
     )
-    
+
     host_setting = result_host.scalar_one_or_none()
     key_setting = result_key.scalar_one_or_none()
-    
+
     if host_setting:
         await db.delete(host_setting)
     if key_setting:
         await db.delete(key_setting)
-    
+
     await db.commit()
-    
+
     return {"message": "Tautulli settings removed"}
 
 
@@ -337,7 +330,7 @@ async def verify_tautulli_settings(
 ):
     """Verify if the provided Tautulli settings are valid by making a test request."""
     from app.services.tautulli import TautulliService
-    
+
     # Use the provided settings for verification
     tautulli_service = TautulliService(host=data.host, api_key=data.api_key)
     try:
@@ -347,7 +340,7 @@ async def verify_tautulli_settings(
             return {"valid": True}
         else:
             return {"valid": False}
-    except Exception as e:
+    except Exception:
         return {"valid": False}
 
 
@@ -370,14 +363,13 @@ async def get_plex_status(db: AsyncSession = Depends(get_db)):
     host_setting = result_host.scalar_one_or_none()
     token_setting = result_token.scalar_one_or_none()
 
-    has_host = host_setting is not None and host_setting.value is not None and len(host_setting.value) > 0
-    has_token = token_setting is not None and token_setting.value is not None and len(token_setting.value) > 0
+    has_host = host_setting is not None and host_setting.value is not None and len(
+        host_setting.value) > 0
+    has_token = token_setting is not None and token_setting.value is not None and len(
+        token_setting.value) > 0
 
-    return {
-        "configured": has_host and has_token,
-        "host": host_setting.value if has_host else None,
-        "masked_token": ("•" * (len(token_setting.value) - 4) + token_setting.value[-4:]) if has_token and len(token_setting.value) > 4 else None
-    }
+    return {"configured": has_host and has_token, "host": host_setting.value if has_host else None, "masked_token": (
+        "•" * (len(token_setting.value) - 4) + token_setting.value[-4:]) if has_token and len(token_setting.value) > 4 else None}
 
 
 @router.put("/plex")
@@ -451,7 +443,9 @@ class PlexFetchTokenRequest(BaseModel):
 
 
 @router.post("/plex/fetch-token")
-async def fetch_plex_token(data: PlexFetchTokenRequest, db: AsyncSession = Depends(get_db)):
+async def fetch_plex_token(
+        data: PlexFetchTokenRequest,
+        db: AsyncSession = Depends(get_db)):
     """Fetch Plex authentication token from Plex.tv using username/password.
 
     WARNING: Password is only used for this request and not stored by default unless `save` is true.
@@ -483,16 +477,25 @@ async def fetch_plex_token(data: PlexFetchTokenRequest, db: AsyncSession = Depen
             if token_setting:
                 token_setting.value = token
             else:
-                token_setting = AppSettings(key="plex_token", value=token, description="Plex X-Plex-Token for server access")
+                token_setting = AppSettings(
+                    key="plex_token",
+                    value=token,
+                    description="Plex X-Plex-Token for server access")
                 db.add(token_setting)
             await db.commit()
 
         return {"token": token}
 
     except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch token: {e.response.status_code}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to fetch token: {
+                e.response.status_code}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch token: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch token: {
+                str(e)}")
 
 
 # Allow testing a host/token pair without saving credentials
@@ -513,17 +516,22 @@ async def test_plex_settings(data: PlexTestRequest):
     # Try fetching root XML to validate token/access
     root = await svc._make_request('/')
     if root is None:
-        raise HTTPException(status_code=400, detail='Failed to connect to Plex or invalid token')
+        raise HTTPException(
+            status_code=400,
+            detail='Failed to connect to Plex or invalid token')
 
-    # Try to extract some basic info (friendlyName, machineIdentifier) from root or children
+    # Try to extract some basic info (friendlyName, machineIdentifier) from
+    # root or children
     info = {}
     try:
-        # Many Plex endpoints include a MediaContainer or similar with attributes
+        # Many Plex endpoints include a MediaContainer or similar with
+        # attributes
         info = dict(root.attrib) if root.attrib else {}
         # Also try first child
         first = next(iter(root), None)
         if first is not None and hasattr(first, 'attrib'):
-            info.update({k: v for k, v in first.attrib.items() if k not in info})
+            info.update(
+                {k: v for k, v in first.attrib.items() if k not in info})
     except Exception:
         pass
 
@@ -567,44 +575,52 @@ class LogsResponse(BaseModel):
 
 @router.get("/logs", response_model=LogsResponse)
 async def get_logs(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(100, ge=10, le=500),
-    level: Optional[str] = Query(None, description="Filter by log level: DEBUG, INFO, WARNING, ERROR, CRITICAL"),
-    search: Optional[str] = Query(None, description="Search in message text"),
-    db: AsyncSession = Depends(get_db)
-):
+        page: int = Query(
+            1,
+            ge=1),
+        page_size: int = Query(
+            100,
+            ge=10,
+            le=500),
+        level: Optional[str] = Query(
+            None,
+            description="Filter by log level: DEBUG, INFO, WARNING, ERROR, CRITICAL"),
+        search: Optional[str] = Query(
+            None,
+            description="Search in message text"),
+        db: AsyncSession = Depends(get_db)):
     """Get application logs with pagination and filtering"""
     # Build query
     query = select(LogEntry)
     count_query = select(func.count(LogEntry.id))
-    
+
     # Filter by level
     if level:
         query = query.where(LogEntry.level == level.upper())
         count_query = count_query.where(LogEntry.level == level.upper())
-    
+
     # Search in message
     if search:
         search_pattern = f"%{search}%"
         query = query.where(LogEntry.message.ilike(search_pattern))
         count_query = count_query.where(LogEntry.message.ilike(search_pattern))
-    
+
     # Get total count
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
-    
+
     # Order by timestamp descending (newest first)
     query = query.order_by(desc(LogEntry.timestamp))
-    
+
     # Apply pagination
     offset = (page - 1) * page_size
     query = query.offset(offset).limit(page_size)
-    
+
     result = await db.execute(query)
     logs = result.scalars().all()
-    
+
     total_pages = (total + page_size - 1) // page_size if total > 0 else 1
-    
+
     return LogsResponse(
         logs=[LogEntryResponse.model_validate(log) for log in logs],
         total=total,
@@ -622,7 +638,7 @@ async def get_log_stats(db: AsyncSession = Depends(get_db)):
         .group_by(LogEntry.level)
     )
     stats = {row[0]: row[1] for row in result.all()}
-    
+
     return {
         "debug": stats.get("DEBUG", 0),
         "info": stats.get("INFO", 0),
@@ -635,9 +651,10 @@ async def get_log_stats(db: AsyncSession = Depends(get_db)):
 
 @router.delete("/logs")
 async def clear_logs(
-    level: Optional[str] = Query(None, description="Only clear logs of this level"),
-    db: AsyncSession = Depends(get_db)
-):
+        level: Optional[str] = Query(
+            None,
+            description="Only clear logs of this level"),
+        db: AsyncSession = Depends(get_db)):
     """Clear all logs or logs of a specific level"""
     if level:
         await db.execute(delete(LogEntry).where(LogEntry.level == level.upper()))
@@ -645,7 +662,7 @@ async def clear_logs(
     else:
         await db.execute(delete(LogEntry))
         message = "Cleared all logs"
-    
+
     await db.commit()
     return {"message": message}
 
@@ -682,7 +699,7 @@ async def log_frontend_event(
         message += f": {log_entry.details}"
     if log_entry.metadata:
         message += f" | {log_entry.metadata}"
-    
+
     entry = LogEntry(
         timestamp=datetime.utcnow(),
         level=log_entry.level.upper(),
@@ -693,7 +710,7 @@ async def log_frontend_event(
     )
     db.add(entry)
     await db.commit()
-    
+
     return {"status": "logged"}
 
 
@@ -713,7 +730,7 @@ async def log_frontend_events_batch(
             message += f": {log_entry.details}"
         if log_entry.metadata:
             message += f" | {log_entry.metadata}"
-        
+
         entry = LogEntry(
             timestamp=datetime.utcnow(),
             level=log_entry.level.upper(),
@@ -723,6 +740,6 @@ async def log_frontend_events_batch(
             function=log_entry.action,
         )
         db.add(entry)
-    
+
     await db.commit()
     return {"status": "logged", "count": len(batch.logs)}

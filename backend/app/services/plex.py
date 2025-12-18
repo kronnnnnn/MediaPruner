@@ -14,7 +14,10 @@ class PlexService:
         self.host = host.rstrip('/')
         self.token = token
 
-    async def _make_request(self, path: str, params: Optional[Dict[str, Any]] = None) -> Optional[ET.Element]:
+    async def _make_request(self,
+                            path: str,
+                            params: Optional[Dict[str,
+                                                  Any]] = None) -> Optional[ET.Element]:
         if params is None:
             params = {}
         headers = {
@@ -47,7 +50,8 @@ class PlexService:
             data = dict(elem.attrib)
             # include child elements text
             for child in elem:
-                data[child.tag] = child.attrib if child.attrib else (child.text or '')
+                data[child.tag] = child.attrib if child.attrib else (
+                    child.text or '')
             results.append(data)
         return results
 
@@ -66,7 +70,8 @@ class PlexService:
         results = await self.search(imdb_id)
         for r in results:
             # Many attributes may contain a 'ratingKey' or similar
-            rk = r.get('ratingKey') or r.get('rating_key') or r.get('ratingkey')
+            rk = r.get('ratingKey') or r.get(
+                'rating_key') or r.get('ratingkey')
             if rk:
                 try:
                     return int(rk)
@@ -86,7 +91,8 @@ class PlexService:
             alt = imdb_id[2:]
             results = await self.search(alt)
             for r in results:
-                rk = r.get('ratingKey') or r.get('rating_key') or r.get('ratingkey')
+                rk = r.get('ratingKey') or r.get(
+                    'rating_key') or r.get('ratingkey')
                 if rk:
                     try:
                         return int(rk)
@@ -108,7 +114,8 @@ async def get_plex_service(db) -> Optional[PlexService]:
     try:
         host_val = host_setting.value if host_setting else None
         token_present = bool(token_setting and token_setting.value)
-        logger.info(f"Plex settings found - host: {host_val}, token_present: {token_present}")
+        logger.info(
+            f"Plex settings found - host: {host_val}, token_present: {token_present}")
     except Exception:
         logger.debug("Plex settings missing or unreadable from DB")
 
