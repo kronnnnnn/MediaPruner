@@ -506,7 +506,21 @@ async def search_tvshow_candidates(
         status_code=404,
         detail=f"TV show not found{provider_msg}. Searched for: '{search_title}'. Please check the show title or try a different provider."
     )
-
+        if api_key:
+            omdb_svc = OMDbService(api_key)
+            try:
+                omdb_res = await omdb_svc.search_tvshow(title, year)
+                if omdb_res:
+                    logger.info(f"OMDb search returned candidate for show_id={show_id} imdb_id={omdb_res.imdb_id}")
+                    return {'provider': 'omdb', 'results': [{
+                        'imdb_id': omdb_res.imdb_id,
+                        'title': omdb_res.title,
+                        'year': omdb_res.year,
+                        'plot': omdb_res.plot,
+                        'poster': omdb_res.poster,
+                    }], 'tried': getattr(omdb_svc, 'last_request_params', None)}
+            finally:
+                await omdb_svc.close()
     return {'provider': provider or 'tmdb', 'results': []}
 
 
@@ -919,7 +933,6 @@ async def analyze_all_episodes(
     task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
 
     return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
-
 
 @router.get("/{show_id}/mux-subtitles-preview")
 async def get_mux_subtitles_preview(

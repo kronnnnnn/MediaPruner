@@ -2063,4 +2063,3 @@ async def sync_movies_watch_history_batch(
     task = await create_task('sync_watch_history', items)
 
     return {"task_id": task.id, "status": task.status.value, "requested": len(movie_ids)}
-    return {"task_id": task.id, "status": task.status.value, "requested": len(movie_ids)}
