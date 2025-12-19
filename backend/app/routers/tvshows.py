@@ -507,6 +507,7 @@ async def search_tvshow_candidates(
         detail=f"TV show not found{provider_msg}. Searched for: '{search_title}'. Please check the show title or try a different provider."
     )
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 =======
     if not show:
@@ -545,6 +546,8 @@ async def search_tvshow_candidates(
         api_key = await get_omdb_api_key_from_db(db)
         logger.info(f"Search candidates requested for show_id={show_id} title='{title}' provider=omdb")
 >>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
+=======
+>>>>>>> 032dd35 (chore(rebase): fix leftover merge artifacts and syntax issues after rebase)
         if api_key:
             omdb_svc = OMDbService(api_key)
             try:
@@ -874,24 +877,11 @@ async def analyze_episode_file(
     # Enqueue analyze task (queue-based processing)
     from app.services.queue import create_task
 
-    task = await create_task('analyze', items=[{"episode_id": episode.id}], meta={"show_id": show_id})
-
-    return {"task_id": task.id, "status": task.status.value}
-=======
-=======
-    
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
-    # Enqueue analyze task
     from app.services.queue import create_task
 
     task = await create_task('analyze', items=[{"episode_id": episode.id}], meta={"show_id": show_id})
 
     return {"task_id": task.id, "status": task.status.value}
-<<<<<<< HEAD
-=======
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
-
 
 @router.post("/{show_id}/analyze-all")
 async def analyze_all_episodes(
@@ -924,6 +914,7 @@ async def analyze_all_episodes(
         )
         episodes = episodes_result.scalars().all()
     except Exception as e:
+<<<<<<< HEAD
 <<<<<<< HEAD
         raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
     
@@ -973,6 +964,8 @@ async def analyze_all_episodes(
         "errors": errors[:10] if errors else []  # Limit errors to 10
     }
 =======
+=======
+>>>>>>> 032dd35 (chore(rebase): fix leftover merge artifacts and syntax issues after rebase)
         raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
     
     # Enqueue analyze tasks for all episodes
@@ -982,6 +975,26 @@ async def analyze_all_episodes(
     for episode in episodes:
         if not episode.file_path:
             continue
+<<<<<<< HEAD
+=======
+        items.append({"episode_id": episode.id})
+
+    if not items:
+        raise HTTPException(status_code=400, detail="No episodes with files to analyze")
+
+    task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
+    return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}=======
+        raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
+    
+    # Enqueue analyze tasks for all episodes
+    from app.services.queue import create_task
+
+    items = []
+    for episode in episodes:
+        if not episode.file_path:
+            continue
+>>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
+>>>>>>> 032dd35 (chore(rebase): fix leftover merge artifacts and syntax issues after rebase)
         items.append({"episode_id": episode.id})
 
     if not items:

@@ -528,6 +528,10 @@ async def scrape_movie_metadata_now(movie_id: int, request: ScrapeNowRequest | N
 
     logger.warning(f"Scrape failed for movie_id={movie.id}: Tried: {'; '.join(details)}")
     raise HTTPException(status_code=404, detail={"message": "Movie not found on TMDB and OMDb fallback unavailable", "tried": tried_searches})
+<<<<<<< HEAD
+=======
+
+>>>>>>> 032dd35 (chore(rebase): fix leftover merge artifacts and syntax issues after rebase)
 
 @router.get("/{movie_id}/rename-preview")
 async def preview_rename(
@@ -820,10 +824,7 @@ async def rename_movie_folder(
         }
 
     except OSError as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to rename folder: {
-                str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to rename folder: {str(e)}")
 
 
 @router.post("/{movie_id}/nfo")
@@ -866,10 +867,7 @@ async def generate_nfo(movie_id: int, db: AsyncSession = Depends(get_db)):
         return {"message": "NFO generated successfully", "path": str(nfo_path)}
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate NFO: {
-                str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate NFO: {str(e)}")
 
 
 class DeleteMovieRequest(BaseModel):
@@ -965,9 +963,7 @@ async def delete_movies_batch(
                     file_path.unlink()
                     deleted_files.append(str(file_path))
         except Exception as e:
-            errors.append(
-                f"Failed to delete files for movie {movie_id}: {
-                    str(e)}")
+            errors.append(f"Failed to delete files for movie {movie_id}: {str(e)}")
 
         await db.delete(movie)
         deleted += 1
@@ -1041,10 +1037,7 @@ async def rename_movies_batch(
             )
 
             if not rename_result.success:
-                errors.append(
-                    f"Failed to rename {
-                        movie.title}: {
-                        rename_result.error}")
+                errors.append(f"Failed to rename {movie.title}: {rename_result.error}")
                 continue
 
             movie.file_path = rename_result.new_path
@@ -1133,9 +1126,7 @@ async def rename_folders_batch(
                 continue  # Already has correct name
 
             if new_folder_path.exists():
-                errors.append(
-                    f"Target folder already exists for {
-                        movie.title}")
+                errors.append(f"Target folder already exists for {movie.title}")
                 continue
 
             # Rename the folder
@@ -1180,21 +1171,12 @@ async def analyze_movie_file(
         )
 
     # Analyze the file
-    logger.info(
-        f"Starting media analysis for movie_id={
-            movie.id}, path={
-            movie.file_path}")
+    logger.info(f"Starting media analysis for movie_id={movie.id}, path={movie.file_path}")
     try:
         info = mediainfo.analyze_file(movie.file_path)
     except Exception as e:
-        logger.error(
-            f"Exception while analyzing movie_id={
-                movie.id}, path={
-                movie.file_path}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error analyzing file: {
-                str(e)}")
+        logger.error(f"Exception while analyzing movie_id={movie.id}, path={movie.file_path}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error analyzing file: {str(e)}")
 
     if not info.success:
         # Mark as failed for follow-up and log details
@@ -1211,10 +1193,7 @@ async def analyze_movie_file(
                 timestamp=datetime.utcnow(),
                 level='WARNING',
                 logger_name='app.services.mediainfo',
-                message=f"Analyze failed for movie_id={
-                    movie.id}, path={
-                    movie.file_path}: {
-                    info.error}",
+                message=f"Analyze failed for movie_id={movie.id}, path={movie.file_path}: {info.error}",
                 module='app.services.mediainfo',
                 function='analyze_file',
                 exception=track_summary,
@@ -1223,17 +1202,9 @@ async def analyze_movie_file(
             await db.commit()
         except Exception:
             # If DB logging fails, still emit a warning to the normal logger
-            logger.warning(
-                f"Media analysis failed for movie_id={
-                    movie.id}, path={
-                    movie.file_path}: {
-                    info.error}")
+            logger.warning(f"Media analysis failed for movie_id={movie.id}, path={movie.file_path}: {info.error}")
 
-        logger.warning(
-            f"Media analysis failed for movie_id={
-                movie.id}, path={
-                movie.file_path}: {
-                info.error}")
+        logger.warning(f"Media analysis failed for movie_id={movie.id}, path={movie.file_path}: {info.error}")
         raise HTTPException(status_code=400,
                             detail=info.error or "Failed to analyze file")
 
@@ -1305,83 +1276,12 @@ async def analyze_movies_batch(
         result = await db.execute(select(Movie))
     movies = result.scalars().all()
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-    analyzed = 0
-    errors = []
-
-    for movie in movies:
-        if not movie.file_path:
-            logger.warning(
-                f"Skipping analyze for movie_id={
-                    movie.id} because file_path is empty")
-            continue
-
-        logger.info(f"Analyzing movie_id={movie.id}, path={movie.file_path}")
-        try:
-            info = mediainfo.analyze_file(movie.file_path)
-
-            if info.success:
-                movie.duration = info.duration
-                movie.video_codec = info.video_codec
-                movie.video_profile = info.video_codec_profile
-                movie.video_resolution = info.video_resolution
-                movie.video_width = info.video_width
-                movie.video_height = info.video_height
-                movie.video_aspect_ratio = info.video_aspect_ratio
-                movie.video_bitrate = info.video_bitrate
-                movie.video_framerate = info.video_framerate
-                movie.video_hdr = info.video_hdr
-                movie.audio_codec = info.audio_codec
-                movie.audio_channels = info.audio_channels
-                movie.audio_bitrate = info.audio_bitrate
-                movie.audio_language = info.audio_language
-                movie.audio_tracks = mediainfo.get_audio_tracks_json(info)
-                movie.subtitle_languages = mediainfo.get_subtitle_languages_json(
-                    info)
-                movie.subtitle_count = info.subtitle_count
-                movie.container = info.container
-                movie.overall_bitrate = info.overall_bitrate
-                movie.file_size = info.file_size
-                movie.media_info_scanned = True
-                analyzed += 1
-                logger.info(f"Analyze succeeded for movie_id={movie.id}")
-            else:
-                logger.warning(
-                    f"Analyze failed for movie_id={
-                        movie.id}: {
-                        info.error}")
-                errors.append(f"{movie.title}: {info.error}")
-        except Exception as e:
-            logger.error(
-                f"Exception analyzing movie_id={
-                    movie.id}, path={
-                    movie.file_path}: {e}")
-            errors.append(f"{movie.title}: {str(e)}")
-
-    await db.commit()
-
-    return {
-        "message": f"Analyzed {analyzed} of {len(movies)} movies",
-        "analyzed": analyzed,
-        "total": len(movies),
-        "errors": errors[:10] if errors else []
-    }
-=======
     # Enqueue analyze tasks for provided movies
     items = []
     for movie in movies:
         if not movie.file_path:
             logger.warning(f"Skipping analyze enqueue for movie_id={movie.id} because file_path is empty")
             continue
-=======
-    # Enqueue analyze tasks for provided movies
-    items = []
-    for movie in movies:
-        if not movie.file_path:
-            logger.warning(f"Skipping analyze enqueue for movie_id={movie.id} because file_path is empty")
-            continue
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
         items.append({"movie_id": movie.id})
 
     if not items:
@@ -1411,10 +1311,6 @@ async def refresh_movies_batch(request: MovieIdsRequest, include_ratings: bool =
 
     task = await create_task('refresh_metadata', items=items, meta=meta)
     return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
-<<<<<<< HEAD
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
-=======
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
 
 
 @router.post("/analyze-all")
@@ -1431,81 +1327,12 @@ async def analyze_all_movies(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Movie))
     movies = result.scalars().all()
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-    analyzed = 0
-    errors = []
-
-    for movie in movies:
-        if not movie.file_path:
-            logger.warning(
-                f"Skipping analyze for movie_id={
-                    movie.id} because file_path is empty")
-            continue
-
-        logger.info(f"Analyzing movie_id={movie.id}, path={movie.file_path}")
-        try:
-            info = mediainfo.analyze_file(movie.file_path)
-
-            if info.success:
-                movie.duration = info.duration
-                movie.video_codec = info.video_codec
-                movie.video_profile = info.video_codec_profile
-                movie.video_resolution = info.video_resolution
-                movie.video_width = info.video_width
-                movie.video_height = info.video_height
-                movie.video_aspect_ratio = info.video_aspect_ratio
-                movie.video_bitrate = info.video_bitrate
-                movie.video_framerate = info.video_framerate
-                movie.video_hdr = info.video_hdr
-                movie.audio_codec = info.audio_codec
-                movie.audio_channels = info.audio_channels
-                movie.audio_bitrate = info.audio_bitrate
-                movie.audio_language = info.audio_language
-                movie.audio_tracks = mediainfo.get_audio_tracks_json(info)
-                movie.subtitle_languages = mediainfo.get_subtitle_languages_json(
-                    info)
-                movie.subtitle_count = info.subtitle_count
-                movie.container = info.container
-                movie.overall_bitrate = info.overall_bitrate
-                movie.file_size = info.file_size
-                movie.media_info_scanned = True
-                analyzed += 1
-                logger.info(f"Analyze succeeded for movie_id={movie.id}")
-            else:
-                logger.warning(
-                    f"Analyze failed for movie_id={
-                        movie.id}: {
-                        info.error}")
-                errors.append(f"{movie.title}: {info.error}")
-        except Exception as e:
-            logger.error(
-                f"Exception analyzing movie_id={
-                    movie.id}, path={
-                    movie.file_path}: {e}")
-            errors.append(f"{movie.title}: {str(e)}")
-
-    await db.commit()
-
-    return {
-        "message": f"Analyzed {analyzed} of {len(movies)} movies",
-        "analyzed": analyzed,
-        "total": len(movies),
-        "errors": errors[:10] if errors else []
-    }
-=======
+    # Enqueue analyze tasks for provided movies
     items = []
     for movie in movies:
         if not movie.file_path:
             logger.warning(f"Skipping analyze enqueue for movie_id={movie.id} because file_path is empty")
             continue
-=======
-    items = []
-    for movie in movies:
-        if not movie.file_path:
-            logger.warning(f"Skipping analyze enqueue for movie_id={movie.id} because file_path is empty")
-            continue
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
         items.append({"movie_id": movie.id})
 
     if not items:
@@ -1515,10 +1342,32 @@ async def analyze_all_movies(db: AsyncSession = Depends(get_db)):
     task = await create_task('analyze', items=items, meta={"batch": True})
 
     return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
-<<<<<<< HEAD
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
-=======
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
+
+    return {
+        "message": f"Analyzed {analyzed} of {len(movies)} movies",
+        "analyzed": analyzed,
+        "total": len(movies),
+        "errors": errors[:10] if errors else []
+    }
+    items = []
+    for movie in movies:
+        if not movie.file_path:
+            logger.warning(f"Skipping analyze enqueue for movie_id={movie.id} because file_path is empty")
+            continue
+    items = []
+    for movie in movies:
+        if not movie.file_path:
+            logger.warning(f"Skipping analyze enqueue for movie_id={movie.id} because file_path is empty")
+            continue
+        items.append({"movie_id": movie.id})
+
+    if not items:
+        raise HTTPException(status_code=400, detail="No movies with files to analyze")
+
+    from app.services.queue import create_task
+    task = await create_task('analyze', items=items, meta={"batch": True})
+
+    return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
 
 
 @router.post("/scrape-batch")
@@ -1630,28 +1479,15 @@ async def scrape_movies_batch(
                         scraped += 1
                         omdb_fallbacks += 1
                         logger.info(
-                            f"OMDb fallback succeeded for movie_id={
-                                movie.id}: applied OMDb ratings")
+                            f"OMDb fallback succeeded for movie_id={movie.id}: applied OMDb ratings")
                     else:
                         err_msg = f"{movie.title}: Not found on TMDB"
                         errors.append(err_msg)
-                        logger.warning(
-                            f"Scrape failed for movie_id={
-                                movie.id}: {err_msg}; filename={
-                                movie.file_name}; folder={
-                                movie.folder_name}; parsed_title={
-                                movie.title}; year={
-                                movie.year}")
+                        logger.warning(f"Scrape failed for movie_id={movie.id}: {err_msg}; filename={movie.file_name}; folder={movie.folder_name}; parsed_title={movie.title}; year={movie.year}")
                 else:
                     err_msg = f"{movie.title}: Not found on TMDB"
                     errors.append(err_msg)
-                    logger.warning(
-                        f"Scrape failed for movie_id={
-                            movie.id}: {err_msg}; filename={
-                            movie.file_name}; folder={
-                            movie.folder_name}; parsed_title={
-                            movie.title}; year={
-                            movie.year}")
+                    logger.warning(f"Scrape failed for movie_id={movie.id}: {err_msg}; filename={movie.file_name}; folder={movie.folder_name}; parsed_title={movie.title}; year={movie.year}")
 
         except Exception as e:
             err_msg = f"{movie.title}: {str(e)}"
@@ -1771,28 +1607,15 @@ async def scrape_all_movies(db: AsyncSession = Depends(get_db)):
                         scraped += 1
                         omdb_fallbacks += 1
                         logger.info(
-                            f"OMDb fallback succeeded for movie_id={
-                                movie.id}: applied OMDb ratings")
+                            f"OMDb fallback succeeded for movie_id={movie.id}: applied OMDb ratings")
                     else:
                         err_msg = f"{movie.title}: Not found on TMDB"
                         errors.append(err_msg)
-                        logger.warning(
-                            f"Scrape failed for movie_id={
-                                movie.id}: {err_msg}; filename={
-                                movie.file_name}; folder={
-                                movie.folder_name}; parsed_title={
-                                movie.title}; year={
-                                movie.year}")
+                        logger.warning(f"Scrape failed for movie_id={movie.id}: {err_msg}; filename={movie.file_name}; folder={movie.folder_name}; parsed_title={movie.title}; year={movie.year}")
                 else:
                     err_msg = f"{movie.title}: Not found on TMDB"
                     errors.append(err_msg)
-                    logger.warning(
-                        f"Scrape failed for movie_id={
-                            movie.id}: {err_msg}; filename={
-                            movie.file_name}; folder={
-                            movie.folder_name}; parsed_title={
-                            movie.title}; year={
-                            movie.year}")
+                    logger.warning(f"Scrape failed for movie_id={movie.id}: {err_msg}; filename={movie.file_name}; folder={movie.folder_name}; parsed_title={movie.title}; year={movie.year}")
 
         except Exception as e:
             err_msg = f"{movie.title}: {str(e)}"
@@ -1968,8 +1791,7 @@ async def mux_subtitle_into_movie(
     if not mux_result.success:
         raise HTTPException(
             status_code=500,
-            detail=f"Muxing failed: {
-                mux_result.error}")
+            detail=f"Muxing failed: {mux_result.error}")
 
     # Update movie record with new file path
     movie.file_path = mux_result.output_path
@@ -2027,8 +1849,6 @@ async def sync_movie_watch_history(
         history = await tautulli.get_history(rating_key=movie.rating_key)
         resolved_rating_key = movie.rating_key
     else:
-<<<<<<< HEAD
-<<<<<<< HEAD
         # Search for watch history (include imdb_id when available for more
         # reliable matching)
         history, resolved_rating_key = await tautulli.search_movie_history(movie.title, movie.year, imdb_id=movie.imdb_id, db=db)
@@ -2038,7 +1858,6 @@ async def sync_movie_watch_history(
         if resolved_rating_key and movie.rating_key != resolved_rating_key:
             movie.rating_key = resolved_rating_key
 
-=======
         # Try resolving rating_key via Plex first (faster) when available
         resolved_rating_key = None
         from app.services.plex import get_plex_service
@@ -2070,7 +1889,6 @@ async def sync_movie_watch_history(
             # If Plex resolved the rating_key, use it to fetch history
             history = await tautulli.get_history(rating_key=resolved_rating_key)
             movie.rating_key = resolved_rating_key
-=======
         # Try resolving rating_key via Plex first (faster) when available
         resolved_rating_key = None
         from app.services.plex import get_plex_service
@@ -2102,7 +1920,6 @@ async def sync_movie_watch_history(
             # If Plex resolved the rating_key, use it to fetch history
             history = await tautulli.get_history(rating_key=resolved_rating_key)
             movie.rating_key = resolved_rating_key
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
         else:
             # Search for watch history via Tautulli (includes multiple fallbacks)
             history, resolved_rating_key = await tautulli.search_movie_history(movie.title, movie.year, imdb_id=movie.imdb_id, db=db)
@@ -2111,7 +1928,6 @@ async def sync_movie_watch_history(
             if resolved_rating_key and movie.rating_key != resolved_rating_key:
                 movie.rating_key = resolved_rating_key
     
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
     if history:
         # Update movie watch status
         movie.watched = True
@@ -2203,10 +2019,7 @@ async def sync_all_movies_watch_history(db: AsyncSession = Depends(get_db)):
 
             synced_count += 1
         except Exception as e:
-            logger.error(
-                f"Error syncing watch history for movie {
-                    movie.id}: {
-                    str(e)}")
+            logger.error(f"Error syncing watch history for movie {movie.id}: {str(e)}")
             continue
 
     await db.commit()
@@ -2244,43 +2057,5 @@ async def sync_movies_watch_history_batch(
     items = [{'movie_id': mid} for mid in movie_ids]
     task = await create_task('sync_watch_history', items)
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-            if history:
-                movie.watched = True
-                movie.watch_count = len(history)
-                watched_count += 1
-                most_recent = history[0]
-                movie.last_watched_date = datetime.fromtimestamp(
-                    most_recent.get('date', 0))
-                movie.last_watched_user = most_recent.get('user', 'Unknown')
-            else:
-                movie.watched = False
-                movie.watch_count = 0
-                movie.last_watched_date = None
-                movie.last_watched_user = None
-
-            synced_count += 1
-        except Exception as e:
-            logger.error(
-                f"Error syncing watch history for movie {
-                    movie.id}: {
-                    str(e)}")
-            errors.append(str(e))
-            continue
-
-    await db.commit()
-
-    return {
-        "success": True,
-        "requested": len(request.movie_ids) if request.movie_ids else None,
-        "synced_count": synced_count,
-        "watched_count": watched_count,
-        "errors": errors[:10] if errors else []
-    }
-=======
     return {"task_id": task.id, "status": task.status.value, "requested": len(movie_ids)}
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
-=======
     return {"task_id": task.id, "status": task.status.value, "requested": len(movie_ids)}
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)

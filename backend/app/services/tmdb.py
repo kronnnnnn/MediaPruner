@@ -284,7 +284,6 @@ class TMDBService:
         return None
     
     async def find_movie_by_imdb(self, imdb_id: str) -> Optional[TMDBMovieResult]:
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
         """Find a movie by its IMDB ID"""
         # Ensure imdb_id starts with 'tt'
         if not imdb_id.startswith('tt'):
@@ -322,9 +321,7 @@ class TMDBService:
             return []
 
         results = data.get("results", [])
-        logger.info(
-            f"TMDB TV search found {
-                len(results)} results for: '{query}'")
+        logger.info(f"TMDB TV search found {len(results)} results for: '{query}'")
         if results:
             logger.debug(
                 f"TMDB TV search top results: {[r.get('name', 'Unknown') for r in results[:3]]}")
@@ -401,22 +398,6 @@ class TMDBService:
             ))
 
         return episodes
-
-    async def search_tvshow_and_get_details(
-            self,
-            title: str,
-            year: Optional[int] = None) -> Optional[TMDBTVShowResult]:
-        """Search for a TV show and get its details"""
-        results = await self.search_tvshow(title, year)
-        if not results:
-            return None
-
-        # Get details for the first result
-        return await self.get_tvshow_details(results[0]["id"])
-
-=======
-=======
-    
     async def search_tvshow_and_get_details(self, title: str, year: Optional[int] = None) -> Optional[TMDBTVShowResult]:
         """Search for a TV show and get its details using multiple heuristics."""
         tried = []
@@ -466,9 +447,8 @@ class TMDBService:
         logger.info(f"TMDB TV search exhausted variants for '{title}' year={year}. Tried: {tried}")
         self.last_search_tried = tried
         return None
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
-    
-    async def search_tvshow_and_get_details(self, title: str, year: Optional[int] = None) -> Optional[TMDBTVShowResult]:
+
+
         """Search for a TV show and get its details using multiple heuristics."""
         tried = []
         import difflib
@@ -517,8 +497,7 @@ class TMDBService:
         logger.info(f"TMDB TV search exhausted variants for '{title}' year={year}. Tried: {tried}")
         self.last_search_tried = tried
         return None
-    
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
+
     async def close(self):
         """Close the HTTP client"""
         await self.client.aclose()
