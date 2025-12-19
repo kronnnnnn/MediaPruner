@@ -209,7 +209,3 @@ async def api_worker_stop(request: Request):
         return {'stopped': False, 'reason': 'worker not running'}
     await worker.stop()
     return {'stopped': True}
-<<<<<<< HEAD
-
-=======
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))

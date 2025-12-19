@@ -508,6 +508,7 @@ async def search_tvshow_candidates(
     )
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 =======
     if not show:
@@ -570,6 +571,10 @@ async def search_tvshow_candidates(
     return {'provider': provider or 'tmdb', 'results': []}
 >>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
 >>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
+=======
+
+    return {'provider': provider or 'tmdb', 'results': []}
+>>>>>>> cfc8c4a (chore(rebase): remove leftover git conflict markers)
 
 
 @router.post("/{show_id}/scrape-episodes")
@@ -983,7 +988,7 @@ async def analyze_all_episodes(
         raise HTTPException(status_code=400, detail="No episodes with files to analyze")
 
     task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
-    return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}=======
+    return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
         raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
     
     # Enqueue analyze tasks for all episodes
@@ -993,8 +998,11 @@ async def analyze_all_episodes(
     for episode in episodes:
         if not episode.file_path:
             continue
+<<<<<<< HEAD
 >>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
 >>>>>>> 032dd35 (chore(rebase): fix leftover merge artifacts and syntax issues after rebase)
+=======
+>>>>>>> cfc8c4a (chore(rebase): remove leftover git conflict markers)
         items.append({"episode_id": episode.id})
 
     if not items:
@@ -1003,8 +1011,11 @@ async def analyze_all_episodes(
     task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
 
     return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
+<<<<<<< HEAD
 >>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
 >>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
+=======
+>>>>>>> cfc8c4a (chore(rebase): remove leftover git conflict markers)
 
     task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
 
@@ -1028,9 +1039,9 @@ async def get_mux_subtitles_preview(
     episodes_result = await db.execute(
         select(Episode).where(
             Episode.tvshow_id == show_id,
-<<<<<<< HEAD
             Episode.subtitle_path.isnot(None),
             Episode.has_subtitle
+<<<<<<< HEAD
 <<<<<<< HEAD
                 Episode.subtitle_path.isnot(None),
                 Episode.has_subtitle
@@ -1040,6 +1051,10 @@ async def get_mux_subtitles_preview(
                 Episode.has_subtitle
 >>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
 >>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
+=======
+                Episode.subtitle_path.isnot(None),
+                Episode.has_subtitle
+>>>>>>> cfc8c4a (chore(rebase): remove leftover git conflict markers)
         )
     )
     episodes = episodes_result.scalars().all()
@@ -1122,9 +1137,9 @@ async def mux_all_subtitles(
     episodes_result = await db.execute(
         select(Episode).where(
             Episode.tvshow_id == show_id,
-<<<<<<< HEAD
             Episode.subtitle_path.isnot(None),
             Episode.has_subtitle
+<<<<<<< HEAD
 <<<<<<< HEAD
                 Episode.subtitle_path.isnot(None),
                 Episode.has_subtitle
@@ -1134,6 +1149,10 @@ async def mux_all_subtitles(
                 Episode.has_subtitle
 >>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
 >>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
+=======
+                Episode.subtitle_path.isnot(None),
+                Episode.has_subtitle
+>>>>>>> cfc8c4a (chore(rebase): remove leftover git conflict markers)
         )
     )
     episodes = episodes_result.scalars().all()
