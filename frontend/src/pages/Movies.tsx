@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
   Filter, SortAsc, SortDesc, Search, HardDrive, Loader2, RefreshCw, 
-  LayoutGrid, List, Settings2, Database, X, Star, Trash2, Pencil, Edit2, FolderEdit, Eye
+  LayoutGrid, List, Settings2, Database, X, Trash2, Pencil, Edit2, FolderEdit, Eye
 } from 'lucide-react'
 import MediaGrid from '../components/MediaGrid'
 import MediaList, { getDefaultVisibleColumns, AVAILABLE_COLUMNS, ColumnDef } from '../components/MediaList'
@@ -53,7 +53,7 @@ export default function Movies() {
   }, [])
 
   const queryClient = useQueryClient()
-  const { messageState, showMessage, hideMessage } = useMessageModal()
+  const { messageState, hideMessage } = useMessageModal()
   const { showToast } = useToast()
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(() => {
@@ -193,13 +193,13 @@ export default function Movies() {
       await queryClient.refetchQueries({ queryKey: ['movies'] })
       await queryClient.invalidateQueries({ queryKey: ['library-stats'] })
       if (removed > 0 || added > 0) {
-        showMessage(
+        showToast(
           'Refresh Complete',
           `• Removed ${removed} missing movies\n• Added ${added} new movies`,
           'success'
         )
       } else {
-        showMessage('Library Up to Date', 'No changes detected in your library.', 'info')
+        showToast('Library Up to Date', 'No changes detected in your library.', 'info')
       }
     },
     onError: (error: any) => {
@@ -207,7 +207,7 @@ export default function Movies() {
         error,
         errorMessage: error?.response?.data?.detail || error?.message 
       })
-      showMessage('Refresh Failed', error?.response?.data?.detail || 'Failed to refresh library', 'error')
+      showToast('Refresh Failed', error?.response?.data?.detail || 'Failed to refresh library', 'error')
     }
   })
 
@@ -229,7 +229,7 @@ export default function Movies() {
         message += `\n\n⚠️ Skipped ${data.skipped_count} movies without metadata.\nPlease scrape metadata first for complete sync.`
       }
       
-      showMessage(
+      showToast(
         'Sync Complete',
         message,
         data.skipped_count && data.skipped_count > 0 ? 'info' : 'success'
@@ -240,7 +240,7 @@ export default function Movies() {
         error,
         errorMessage: error?.response?.data?.detail || error?.message 
       })
-      showMessage('Sync Failed', error?.response?.data?.detail || 'Failed to sync watch history. Is Tautulli configured?', 'error')
+      showToast('Sync Failed', error?.response?.data?.detail || 'Failed to sync watch history. Is Tautulli configured?', 'error')
     }
   })
 
@@ -250,11 +250,11 @@ export default function Movies() {
       const data = result.data as { requested?: number | null; synced_count: number; watched_count: number; errors?: string[] }
       await queryClient.invalidateQueries({ queryKey: ['movies'] })
       await queryClient.refetchQueries({ queryKey: ['movies'] })
-      showMessage('Sync Complete', `Synced watch history for ${data.synced_count} movies.`, 'success')
+      showToast('Sync Complete', `Synced watch history for ${data.synced_count} movies.`, 'success')
     },
     onError: (error: any) => {
       logger.error('Sync watch history failed', 'Movies', { error, errorMessage: error?.response?.data?.detail || error?.message })
-      showMessage('Sync Failed', error?.response?.data?.detail || 'Failed to sync watch history', 'error')
+      showToast('Sync Failed', error?.response?.data?.detail || 'Failed to sync watch history', 'error')
     }
   })
 
@@ -264,7 +264,7 @@ export default function Movies() {
       const data = result.data as { analyzed: number; total: number }
       await queryClient.invalidateQueries({ queryKey: ['movies'] })
       await queryClient.refetchQueries({ queryKey: ['movies'] })
-      showMessage(
+      showToast(
         'Analysis Complete',
         `Successfully analyzed ${data.analyzed} of ${data.total} movies.`,
         'success'
@@ -275,7 +275,7 @@ export default function Movies() {
         error,
         errorMessage: error?.response?.data?.detail || error?.message 
       })
-      showMessage('Analysis Failed', error?.response?.data?.detail || 'Failed to analyze movies', 'error')
+      showToast('Analysis Failed', error?.response?.data?.detail || 'Failed to analyze movies', 'error')
     }
   })
 
@@ -285,7 +285,7 @@ export default function Movies() {
       const data = result.data as { scraped: number; total: number; errors?: string[] }
       await queryClient.invalidateQueries({ queryKey: ['movies'] })
       await queryClient.refetchQueries({ queryKey: ['movies'] })
-      showMessage(
+      showToast(
         'Metadata Refresh Complete',
         `Successfully refreshed metadata for ${data.scraped} of ${data.total} movies.${data.errors?.length ? `\n${data.errors.length} errors occurred.` : ''}`,
         data.scraped === data.total ? 'success' : 'warning'
@@ -296,28 +296,25 @@ export default function Movies() {
         error,
         errorMessage: error?.response?.data?.detail || error?.message 
       })
-      showMessage('Metadata Refresh Failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
+      showToast('Metadata Refresh Failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
     }
   })
 
   const fetchOmdbMutation = useMutation({
-    mutationFn: (movieIds?: number[]) => moviesApi.fetchOmdbRatings(movieIds),
+    mutationFn: (movieIds?: number[]) => moviesApi.refreshMoviesBatch(movieIds || [], true),
     onSuccess: async (result) => {
-      const data = result.data as { fetched: number; total: number; errors?: string[] }
+      // The refreshMoviesBatch enqueues a refresh task that will include ratings
+      const data = result.data as { task_id?: number }
       await queryClient.invalidateQueries({ queryKey: ['movies'] })
       await queryClient.refetchQueries({ queryKey: ['movies'] })
-      showMessage(
-        'OMDb Ratings Fetched',
-        `Fetched ratings for ${data.fetched} of ${data.total} movies without ratings.${data.errors?.length ? `\n${data.errors.length} errors occurred.` : ''}`,
-        data.fetched === data.total ? 'success' : 'warning'
-      )
+      showToast('Fetch Ratings Enqueued', `Task ${data.task_id} enqueued to refresh metadata with ratings.`, 'info')
     },
     onError: (error: any) => {
       logger.error('OMDb fetch failed', 'Movies', { 
         error,
         errorMessage: error?.response?.data?.detail || error?.message 
       })
-      showMessage('OMDb Fetch Failed', error?.response?.data?.detail || 'Failed to fetch OMDb ratings', 'error')
+      showToast('OMDb Fetch Failed', error?.response?.data?.detail || 'Failed to fetch OMDb ratings', 'error')
     }
   })
 
@@ -330,7 +327,7 @@ export default function Movies() {
       await queryClient.refetchQueries({ queryKey: ['movies'] })
       await queryClient.invalidateQueries({ queryKey: ['library-stats'] })
       setSelectedIds(new Set())
-      showMessage(
+      showToast(
         'Delete Complete',
         `Deleted ${data.deleted} of ${data.total} movies.${data.errors?.length ? `\n${data.errors.length} errors occurred.` : ''}`,
         data.deleted === data.total ? 'success' : 'warning'
@@ -341,7 +338,7 @@ export default function Movies() {
         error,
         errorMessage: error?.response?.data?.detail || error?.message 
       })
-      showMessage('Delete Failed', error?.response?.data?.detail || 'Failed to delete movies', 'error')
+      showToast('Delete Failed', error?.response?.data?.detail || 'Failed to delete movies', 'error')
     }
   })
 
@@ -354,7 +351,7 @@ export default function Movies() {
       await queryClient.refetchQueries({ queryKey: ['movies'] })
       setSelectedIds(new Set())
       setEditMode(false)
-      showMessage(
+      showToast(
         'Rename Complete',
         `Renamed ${data.renamed} of ${data.total} files.${data.errors?.length ? `\n\nErrors:\n${data.errors.slice(0, 5).join('\n')}${data.errors.length > 5 ? `\n...and ${data.errors.length - 5} more` : ''}` : ''}`,
         data.renamed === data.total ? 'success' : 'warning'
@@ -366,7 +363,7 @@ export default function Movies() {
         count: selectedIds.size,
         errorMessage: error?.response?.data?.detail || error?.message 
       })
-      showMessage('Rename Failed', error?.response?.data?.detail || 'Failed to rename files', 'error')
+      showToast('Rename Failed', error?.response?.data?.detail || 'Failed to rename files', 'error')
     }
   })
 
@@ -379,7 +376,7 @@ export default function Movies() {
       await queryClient.refetchQueries({ queryKey: ['movies'] })
       setSelectedIds(new Set())
       setEditMode(false)
-      showMessage(
+      showToast(
         'Rename Complete',
         `Renamed ${data.renamed} of ${data.total} folders.${data.errors?.length ? `\n\nErrors:\n${data.errors.slice(0, 5).join('\n')}${data.errors.length > 5 ? `\n...and ${data.errors.length - 5} more` : ''}` : ''}`,
         data.renamed === data.total ? 'success' : 'warning'
@@ -391,7 +388,7 @@ export default function Movies() {
         count: selectedIds.size,
         errorMessage: error?.response?.data?.detail || error?.message 
       })
-      showMessage('Rename Failed', error?.response?.data?.detail || 'Failed to rename folders', 'error')
+      showToast('Rename Failed', error?.response?.data?.detail || 'Failed to rename folders', 'error')
     }
   })
 
@@ -435,7 +432,7 @@ export default function Movies() {
     // Require at least 3 characters for search
     const trimmedInput = searchInput.trim()
     if (trimmedInput.length > 0 && trimmedInput.length < 3) {
-      showMessage('Search Too Short', 'Please enter at least 3 characters to search.', 'info')
+      showToast('Search Too Short', 'Please enter at least 3 characters to search.', 'info')
       return
     }
     logger.search(searchInput, 'Movies')
@@ -569,10 +566,9 @@ export default function Movies() {
             successCount += 1
           }
         } else if (actionName === 'Fetch Ratings') {
-          // Use batch ratings endpoint with single id so server logic is reused
-          const resp = await moviesApi.fetchOmdbRatings([id])
-          // Consider it success if request did not error
-          if (resp.status === 200) successCount += 1
+          // Use refresh metadata with include_ratings for this id
+          const resp = await moviesApi.refreshMoviesBatch([id], true)
+          if (resp && resp.status === 200) successCount += 1
         } else if (actionName === 'Sync Watch History') {
           // Enqueue sync per-item as a fallback (don't run inline)
           const resp = await moviesApi.syncWatchHistoryBatch([id])
@@ -598,11 +594,11 @@ export default function Movies() {
     await queryClient.refetchQueries({ queryKey: ['movies'] })
 
     if (cancelRequestedRef.current) {
-      showMessage(`${actionName} Canceled`, `Canceled after ${successCount} of ${ids.length} items.`, 'warning')
+      showToast(`${actionName} Canceled`, `Canceled after ${successCount} of ${ids.length} items.`, 'warning')
     } else if (errors.length > 0) {
-      showMessage(`${actionName} Completed with Errors`, `${successCount} of ${ids.length} succeeded. ${errors.length} errors occurred.`, 'warning')
+      showToast(`${actionName} Completed with Errors`, `${successCount} of ${ids.length} succeeded. ${errors.length} errors occurred.`, 'warning')
     } else {
-      showMessage(`${actionName} Complete`, `Successfully processed ${successCount} of ${ids.length} items.`, 'success')
+      showToast(`${actionName} Complete`, `Successfully processed ${successCount} of ${ids.length} items.`, 'success')
     }
 
     // Reset cancel flag
@@ -688,13 +684,15 @@ export default function Movies() {
           // Keep the dialog open while running so users can see progress and cancel
           onConfirmAll: async () => {
             const allIds = await getAllMatchingMovieIds()
-            if (actionName === 'Refresh Metadata' || actionName === 'Analyze' || actionName === 'Sync Watch History') {
+            if (actionName === 'Refresh Metadata' || actionName === 'Analyze' || actionName === 'Sync Watch History' || actionName === 'Fetch Ratings') {
               // Enqueue a single batch task
               const resp = actionName === 'Refresh Metadata'
                 ? await moviesApi.refreshMoviesBatch(allIds)
                 : actionName === 'Analyze'
                   ? await moviesApi.analyzeMoviesBatch(allIds)
-                  : await moviesApi.syncWatchHistoryBatch(allIds)
+                  : actionName === 'Fetch Ratings'
+                    ? await moviesApi.refreshMoviesBatch(allIds, true)
+                    : await moviesApi.syncWatchHistoryBatch(allIds)
               // Use a toast not modal for confirmations
               showToast(`${actionName} Enqueued`, `Task ${resp.data.task_id} enqueued for ${allIds.length} movies.`, 'info')
               setScopeModal(s => ({ ...s, isOpen: false }))
@@ -704,12 +702,14 @@ export default function Movies() {
             processIdsWithProgress(allIds, actionName)
           },
           onConfirmPage: () => {
-            if (actionName === 'Refresh Metadata' || actionName === 'Analyze' || actionName === 'Sync Watch History') {
+            if (actionName === 'Refresh Metadata' || actionName === 'Analyze' || actionName === 'Sync Watch History' || actionName === 'Fetch Ratings') {
               const resp = actionName === 'Refresh Metadata'
                 ? moviesApi.refreshMoviesBatch(ids)
                 : actionName === 'Analyze'
                   ? moviesApi.analyzeMoviesBatch(ids)
-                  : moviesApi.syncWatchHistoryBatch(ids)
+                  : actionName === 'Fetch Ratings'
+                    ? moviesApi.refreshMoviesBatch(ids, true)
+                    : moviesApi.syncWatchHistoryBatch(ids)
               resp.then(r => showToast(`${actionName} Enqueued`, `Task ${r.data.task_id} enqueued for ${ids.length} movies.`, 'info'))
               setScopeModal(s => ({ ...s, isOpen: false }))
               return
@@ -1183,19 +1183,7 @@ export default function Movies() {
             <span>Refresh Metadata</span>
           </button>
           
-          {/* Fetch OMDb Ratings Button */}
-          <button
-            onClick={() => {
-              logger.buttonClick('Fetch Ratings', 'Movies', { count: movies.length })
-              confirmScopeAndRun('Fetch Ratings', fetchOmdbMutation)
-            }}
-            disabled={isAnyProcessRunning || movies.length === 0}
-            className="flex items-center gap-2 px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 rounded text-white text-sm transition-colors"
-            title="Fetch IMDB, Rotten Tomatoes & Metacritic ratings for movies missing them"
-          >
-            <Star className="w-4 h-4" />
-            <span>Fetch Ratings</span>
-          </button>
+
           
           {/* Refresh Library Button */}
           <button

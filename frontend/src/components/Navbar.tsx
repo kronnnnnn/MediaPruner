@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useTheme } from '../contexts/ThemeContext'
 import logger from '../services/logger'
 import { useNotifications } from '../contexts/NotificationContext'
+import { useNavigate } from 'react-router-dom'
 
 export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('')
@@ -10,6 +11,7 @@ export default function Navbar() {
   const { notifications, markRead, clearAll } = useNotifications()
   const [showNotifications, setShowNotifications] = useState(false)
   const dropdownRef = useRef<HTMLDivElement | null>(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -80,7 +82,18 @@ export default function Navbar() {
                   {notifications.length === 0 ? (
                     <div className="p-4 text-sm text-gray-500">No notifications</div>
                   ) : notifications.map(n => (
-                    <div key={n.id} onClick={() => { markRead(n.id) }} className={`p-3 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${n.read ? 'opacity-60' : ''}`}>
+                    <div key={n.id} onClick={() => {
+                      markRead(n.id)
+                      // If the notification has a task meta, navigate to queues and open it via hash
+                      try {
+                        if (n.meta && n.meta.task_id) {
+                          setShowNotifications(false)
+                          navigate(`/queues#task-${n.meta.task_id}`)
+                        }
+                      } catch (e) {
+                        // ignore
+                      }
+                    }} className={`p-3 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${n.read ? 'opacity-60' : ''}`}>
                       <div className="flex items-center justify-between">
                         <div className="text-sm font-medium text-gray-900 dark:text-white">{n.title}</div>
                         <div className="text-xs text-gray-400">{new Date(n.timestamp).toLocaleString()}</div>

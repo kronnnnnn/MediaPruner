@@ -98,10 +98,14 @@ async def api_worker_run_once(request: Request):
 
 
 @router.get('/stream')
-async def api_queues_stream():
+async def api_queues_stream(request: Request):
     """Server-sent events stream of queue changes (init + task_update events)."""
     # subscribe
     q = subscribe_events()
+
+    client = getattr(request, 'client', None)
+    client_info = f"{client.host}:{client.port}" if client else 'unknown'
+    logger.info(f"SSE client connected: {client_info}")
 
     async def event_generator():
         # Send initial snapshot
@@ -112,11 +116,34 @@ async def api_queues_stream():
             logger.exception(f"Failed to send initial task list: {e}")
 
         try:
+            # Keepalive ping to prevent idle timeouts/closed proxies
+            ping_interval = 15
+            last_send = asyncio.get_event_loop().time()
             while True:
-                msg = await q.get()
-                yield msg
+                try:
+                    # If there's a queued message, send it immediately
+                    msg = None
+                    try:
+                        msg = q.get_nowait()
+                    except asyncio.QueueEmpty:
+                        pass
+
+                    if msg:
+                        yield msg
+                        last_send = asyncio.get_event_loop().time()
+                    else:
+                        now = asyncio.get_event_loop().time()
+                        if now - last_send >= ping_interval:
+                            # send a ping comment (some clients ignore comments, so we send a ping event)
+                            yield f"event: ping\ndata: {{}}\n\n"
+                            last_send = now
+                        # small sleep to avoid tight loop
+                        await asyncio.sleep(1)
+                except asyncio.CancelledError:
+                    raise
         except asyncio.CancelledError:
             # Client disconnected
+            logger.info(f"SSE client disconnected: {client_info}")
             pass
         finally:
             unsubscribe_events(q)
@@ -124,14 +151,18 @@ async def api_queues_stream():
     return StreamingResponse(event_generator(), media_type='text/event-stream')
 
 @router.post("/tasks/clear")
-async def api_clear_tasks(older_than_seconds: int | None = None):
-    """Clear queued/running tasks (DEBUG only).
+async def api_clear_tasks(scope: str | None = 'current', older_than_seconds: int | None = None):
+    """Hard purge tasks by scope (DEBUG only).
 
-    Marks matching tasks as DELETED and queued/running items as CANCELED. Only enabled when app is running in debug mode.
+    scope values: 'current' (queued/running), 'history' (completed/failed/canceled/deleted), 'all'.
+    Permanently DELETEs matching tasks and their items (irreversible). Only enabled when app is running in debug mode.
     """
     if not settings.debug:
         raise HTTPException(status_code=403, detail="Clearing tasks is only allowed in debug mode")
-    res = await clear_queued_tasks(older_than_seconds)
+    try:
+        res = await clear_queued_tasks(scope=scope, older_than_seconds=older_than_seconds)
+    except ValueError:
+        raise HTTPException(status_code=400, detail='Invalid scope')
     return res
 
 

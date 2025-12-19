@@ -4,7 +4,7 @@
   "description": "A modern web-based media management tool",
   "private": true,
   "scripts": {
-    "dev": "concurrently -k -n \"BACKEND,FRONTEND\" -c \"yellow,cyan\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "concurrently -n backend,frontend -c cyan,magenta --prefix name \"npm:dev:backend\" \"node scripts/wait-for-health.js && npm run dev:frontend\"",
     "dev:frontend": "cd frontend && npm run dev",
     "dev:backend": "node scripts/dev-backend.js",
     "build": "cd frontend && npm run build",
@@ -18,6 +18,7 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
+    "wait-on": "^7.0.1",
     "rimraf": "^5.0.5",
     "shx": "^0.3.4"
   },

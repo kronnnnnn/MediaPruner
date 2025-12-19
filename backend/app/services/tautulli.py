@@ -132,6 +132,33 @@ class TautulliService:
             except Exception:
                 return ""
 
+        # First, try to resolve rating_key from Plex using IMDB GUID (fastest)
+        if imdb_id and db is not None:
+            try:
+                from app.services.plex import get_plex_service
+                plex = await get_plex_service(db)
+                if plex:
+                    rk = await plex.get_rating_key_by_imdb(imdb_id)
+                    if rk:
+                        logger.debug(f"Tautulli: resolved rating_key={rk} via Plex IMDB GUID lookup for imdb_id={imdb_id}")
+                        # Persist the rating_key to the Movie record if present
+                        try:
+                            from sqlalchemy import select, update
+                            from app.models import Movie
+                            result = await db.execute(select(Movie).where(Movie.imdb_id == imdb_id))
+                            movie = result.scalar_one_or_none()
+                            if movie and (not movie.rating_key or movie.rating_key != int(rk)):
+                                await db.execute(update(Movie).where(Movie.id == movie.id).values(rating_key=int(rk)))
+                                await db.commit()
+                                logger.debug(f"Tautulli: persisted rating_key={rk} to Movie id={movie.id}")
+                        except Exception as e:
+                            logger.debug(f"Tautulli: failed to persist rating_key to Movie: {e}")
+
+                        history = await self.get_history(rating_key=int(rk))
+                        return history, int(rk)
+            except Exception as e:
+                logger.debug(f"Tautulli: Plex IMDB lookup failed: {e}")
+
         for query in queries:
             logger.debug(
                 f"Tautulli: searching for movie with query='{query}' (imdb_id={imdb_id}, year={year})")
@@ -238,6 +265,18 @@ class TautulliService:
                     logger.debug(
                         f"Tautulli: found imdb match, rating_key={rating_key} for imdb_id={imdb_id}")
                     if rating_key:
+                        try:
+                            from sqlalchemy import select, update
+                            from app.models import Movie
+                            result = await db.execute(select(Movie).where(Movie.imdb_id == imdb_id))
+                            movie = result.scalar_one_or_none()
+                            if movie and (not movie.rating_key or movie.rating_key != int(rating_key)):
+                                await db.execute(update(Movie).where(Movie.id == movie.id).values(rating_key=int(rating_key)))
+                                await db.commit()
+                                logger.debug(f"Tautulli: persisted rating_key={rating_key} to Movie id={movie.id}")
+                        except Exception as e:
+                            logger.debug(f"Tautulli: failed to persist rating_key to Movie: {e}")
+
                         history = await self.get_history(rating_key=rating_key)
                         return history, int(rating_key)
                     else:
@@ -258,8 +297,19 @@ class TautulliService:
                     if imdb_id in text:
                         rating_key = r.get("rating_key")
                         if rating_key:
-                            logger.debug(
-                                f"Tautulli: found imdb match in non-movie result, rating_key={rating_key} for imdb_id={imdb_id}")
+                            try:
+                                from sqlalchemy import select, update
+                                from app.models import Movie
+                                result = await db.execute(select(Movie).where(Movie.imdb_id == imdb_id))
+                                movie = result.scalar_one_or_none()
+                                if movie and (not movie.rating_key or movie.rating_key != int(rating_key)):
+                                    await db.execute(update(Movie).where(Movie.id == movie.id).values(rating_key=int(rating_key)))
+                                    await db.commit()
+                                    logger.debug(f"Tautulli: persisted rating_key={rating_key} to Movie id={movie.id}")
+                            except Exception as e:
+                                logger.debug(f"Tautulli: failed to persist rating_key to Movie: {e}")
+
+                            logger.debug(f"Tautulli: found imdb match in non-movie result, rating_key={rating_key} for imdb_id={imdb_id}")
                             history = await self.get_history(rating_key=rating_key)
                             return history, int(rating_key)
                         else:
@@ -305,6 +355,7 @@ class TautulliService:
                 except Exception as e:
                     logger.debug(f"Tautulli: Plex lookup failed: {e}")
 
+
             # At this point we didn't find a direct imdb->rating_key mapping.
             # Fallback strategies (try in order):
             # 1) Use the first movie search result's rating_key (title-based
@@ -312,8 +363,36 @@ class TautulliService:
             if movies:
                 rating_key = movies[0].get("rating_key")
                 if rating_key:
-                    logger.debug(
-                        f"Tautulli: using first movie search result rating_key={rating_key} for query='{query}'")
+                    try:
+                        from sqlalchemy import select, update
+                        from app.models import Movie
+                        # Try to find movie by imdb_id if available, else try title/year
+                        imdb_candidate = None
+                        try:
+                            imdb_candidate = movies[0].get('guid') or movies[0].get('guid_id') or None
+                        except Exception:
+                            imdb_candidate = None
+
+                        # Persist rating_key if we can match a Movie
+                        if imdb_candidate and imdb_candidate.startswith('com.plexapp.agents.imdb://'):
+                            try:
+                                imdb_val = imdb_candidate.split('://')[-1].split('?')[0]
+                            except Exception:
+                                imdb_val = None
+                        else:
+                            imdb_val = None
+
+                        if imdb_val:
+                            result = await db.execute(select(Movie).where(Movie.imdb_id == imdb_val))
+                            movie = result.scalar_one_or_none()
+                            if movie and (not movie.rating_key or movie.rating_key != int(rating_key)):
+                                await db.execute(update(Movie).where(Movie.id == movie.id).values(rating_key=int(rating_key)))
+                                await db.commit()
+                                logger.debug(f"Tautulli: persisted rating_key={rating_key} to Movie id={movie.id}")
+                    except Exception as e:
+                        logger.debug(f"Tautulli: failed to persist rating_key to Movie: {e}")
+
+                    logger.debug(f"Tautulli: using first movie search result rating_key={rating_key} for query='{query}'")
                     history = await self.get_history(rating_key=rating_key)
                     return history, int(rating_key)
 

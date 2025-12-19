@@ -612,9 +612,9 @@ async def scan_single_path(
         # If new movies were added during this scan, enqueue post-scan processing tasks
         try:
             if new_movie_ids:
-                analyze_task = await create_task('analyze', [{'movie_id': mid} for mid in new_movie_ids])
-                refresh_task = await create_task('refresh_metadata', [{'movie_id': mid} for mid in new_movie_ids])
-                sync_task = await create_task('sync_watch_history', [{'movie_id': mid} for mid in new_movie_ids])
+                analyze_task = await create_task('analyze', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
+                refresh_task = await create_task('refresh_metadata', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
+                sync_task = await create_task('sync_watch_history', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
 
                 logger.info(f"Enqueued post-scan tasks for {len(new_movie_ids)} movies: analyze={analyze_task.id}, refresh={refresh_task.id}, sync={sync_task.id}")
         except Exception:
@@ -722,9 +722,9 @@ async def scan_all_libraries(db: AsyncSession = Depends(get_db)):
     # If new movies were added during this scan, enqueue post-scan processing tasks
     try:
         if new_movie_ids:
-            analyze_task = await create_task('analyze', [{'movie_id': mid} for mid in new_movie_ids])
-            refresh_task = await create_task('refresh_metadata', [{'movie_id': mid} for mid in new_movie_ids])
-            sync_task = await create_task('sync_watch_history', [{'movie_id': mid} for mid in new_movie_ids])
+            analyze_task = await create_task('analyze', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
+            refresh_task = await create_task('refresh_metadata', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
+            sync_task = await create_task('sync_watch_history', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
 
             logger.info(f"Enqueued post-scan tasks for {len(new_movie_ids)} movies: analyze={analyze_task.id}, refresh={refresh_task.id}, sync={sync_task.id}")
     except Exception:
@@ -925,9 +925,9 @@ async def refresh_library(db: AsyncSession = Depends(get_db)):
     # Enqueue post-scan tasks if new movies were added
     try:
         if new_movie_ids:
-            analyze_task = await create_task('analyze', [{'movie_id': mid} for mid in new_movie_ids])
-            refresh_task = await create_task('refresh_metadata', [{'movie_id': mid} for mid in new_movie_ids])
-            sync_task = await create_task('sync_watch_history', [{'movie_id': mid} for mid in new_movie_ids])
+            analyze_task = await create_task('analyze', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
+            refresh_task = await create_task('refresh_metadata', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
+            sync_task = await create_task('sync_watch_history', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
 
             logger.info(f"Enqueued post-refresh tasks for {len(new_movie_ids)} movies: analyze={analyze_task.id}, refresh={refresh_task.id}, sync={sync_task.id}")
     except Exception:

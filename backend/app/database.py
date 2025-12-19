@@ -120,9 +120,15 @@ async def init_db():
     # Run migrations for any new columns
     await migrate_db()
 
-    # Normalize any existing media_type values (e.g., 'tv' -> 'TV') to avoid Enum lookup errors
+    # Normalize any existing media_type values to lowercase to match Enum values (e.g., 'TV' -> 'tv')
     try:
-        await conn.execute(text("UPDATE library_paths SET media_type = UPPER(media_type) WHERE media_type IS NOT NULL AND media_type != UPPER(media_type)"))
+        await conn.execute(text("UPDATE library_paths SET media_type = LOWER(media_type) WHERE media_type IS NOT NULL AND media_type != LOWER(media_type)"))
+    except Exception:
+        pass
+
+    # Normalize queue task statuses to lowercase to match QueueStatus enum values
+    try:
+        await conn.execute(text("UPDATE queue_tasks SET status = LOWER(status) WHERE status IS NOT NULL AND status != LOWER(status)"))
     except Exception:
         pass
 

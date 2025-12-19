@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Filter, SortAsc, SortDesc, Search, RefreshCw, LayoutGrid, List, Star, Check, X, Tv as TvIcon } from 'lucide-react'
 import MediaGrid from '../components/MediaGrid'
 import MessageModal, { useMessageModal } from '../components/MessageModal'
+import { useToast } from '../contexts/ToastContext'
 import { tvShowsApi, libraryApi, TVShow } from '../services/api'
 import logger from '../services/logger'
 
@@ -15,7 +16,8 @@ type ViewMode = 'grid' | 'list'
 export default function TVShows() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { messageState, showMessage, hideMessage } = useMessageModal()
+  const { messageState, hideMessage } = useMessageModal()
+  const { showToast } = useToast()
 
   // Log page view on mount
   useEffect(() => {
@@ -60,13 +62,13 @@ export default function TVShows() {
       const addedShows = data.added.tvshows
       const addedEps = data.added.episodes
       if (removedEps > 0 || addedShows > 0 || addedEps > 0) {
-        showMessage(
+        showToast(
           'Refresh Complete',
           `• Removed ${removedEps} missing episodes\n• Added ${addedShows} new shows, ${addedEps} new episodes`,
           'success'
         )
       } else {
-        showMessage('Library Up to Date', 'No changes found in your TV show library.', 'info')
+        showToast('Library Up to Date', 'No changes found in your TV show library.', 'info')
       }
     },
     onError: (error: any) => {
@@ -74,7 +76,7 @@ export default function TVShows() {
         error,
         errorMessage: error?.response?.data?.detail || error?.message 
       })
-      showMessage('Refresh Failed', error?.response?.data?.detail || 'Failed to refresh library', 'error')
+      showToast('Refresh Failed', error?.response?.data?.detail || 'Failed to refresh library', 'error')
     }
   })
 
@@ -92,7 +94,7 @@ export default function TVShows() {
     // Require at least 3 characters for search
     const trimmedInput = searchInput.trim()
     if (trimmedInput.length > 0 && trimmedInput.length < 3) {
-      showMessage('Search Too Short', 'Please enter at least 3 characters to search.', 'info')
+      showToast('Search Too Short', 'Please enter at least 3 characters to search.', 'info')
       return
     }
     logger.search(searchInput, 'TVShows')

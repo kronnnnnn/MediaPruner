@@ -7,6 +7,7 @@ from typing import List, Optional
 from pathlib import Path
 
 import app.database as database
+from sqlalchemy import text
 from app.models import QueueTask, QueueItem, QueueStatus
 
 logger = logging.getLogger(__name__)
@@ -115,8 +116,10 @@ async def create_task(task_type: str, items: List[dict], meta: Optional[dict] = 
 
 async def list_tasks(limit: int = 50):
     async with database.async_session() as session:
+        # Use a raw SQL select and cast status as TEXT to avoid SQLAlchemy Enum coercion errors
         result = await session.execute(
-            QueueTask.__table__.select().order_by(QueueTask.created_at.desc()).limit(limit)
+            text("SELECT id, type, status, created_by, created_at, started_at, finished_at, canceled_at, total_items, completed_items, meta FROM queue_tasks ORDER BY created_at DESC LIMIT :limit"),
+            {"limit": limit}
         )
         # Use mappings() to get dict-like objects that can be converted to plain dicts
         mappings = result.mappings().all()
@@ -186,16 +189,123 @@ async def get_task(task_id: int):
             except Exception:
                 data['meta'] = task.meta
 
+        from app.models import Movie
         for i in task.items:
-            data['items'].append({
+            payload_parsed = None
+            try:
+                if i.payload:
+                    payload_parsed = json.loads(i.payload)
+                else:
+                    payload_parsed = None
+            except Exception:
+                payload_parsed = None
+
+            # Enrich with movie title if possible
+            movie_title = None
+            try:
+                if payload_parsed and isinstance(payload_parsed, dict) and payload_parsed.get('movie_id'):
+                    movie_id = int(payload_parsed.get('movie_id'))
+                    mv = await session.get(Movie, movie_id)
+                    if mv:
+                        movie_title = mv.title
+            except Exception:
+                movie_title = None
+
+            # Parse result JSON if present and prepare a summary for UI
+            result_parsed = None
+            result_summary = None
+            if i.result:
+                try:
+                    result_parsed = json.loads(i.result)
+                except Exception:
+                    result_parsed = None
+
+            # Build movie summary and URL when applicable
+            movie_url = None
+            movie_summary = None
+            try:
+                if movie_title:
+                    # movie id was looked up earlier
+                    if payload_parsed and isinstance(payload_parsed, dict) and payload_parsed.get('movie_id'):
+                        movie_id = int(payload_parsed.get('movie_id'))
+                        movie_url = f"/movies/{movie_id}"
+                        mv = await session.get(Movie, movie_id)
+                        if mv:
+                            parts = []
+                            if getattr(mv, 'video_resolution', None):
+                                parts.append(str(mv.video_resolution))
+                            elif getattr(mv, 'video_width', None) and getattr(mv, 'video_height', None):
+                                parts.append(f"{mv.video_width}x{mv.video_height}")
+                            if getattr(mv, 'video_codec', None):
+                                parts.append(str(mv.video_codec))
+                            if getattr(mv, 'audio_codec', None):
+                                parts.append(str(mv.audio_codec))
+                            if getattr(mv, 'subtitle_count', None):
+                                parts.append(f"{mv.subtitle_count} subs")
+                            movie_summary = ", ".join(parts) if parts else None
+            except Exception:
+                movie_url = None
+                movie_summary = None
+
+            # Build a human-friendly result summary depending on task type
+            try:
+                t_type = task.type if hasattr(task, 'type') else None
+            except Exception:
+                t_type = None
+
+            if result_parsed is not None:
+                if isinstance(result_parsed, dict):
+                    if t_type == 'refresh_metadata':
+                        if result_parsed.get('updated_from'):
+                            result_summary = f"Updated from {result_parsed.get('updated_from')}"
+                        elif result_parsed.get('error'):
+                            result_summary = f"Error: {result_parsed.get('error')}"
+                        elif result_parsed.get('note'):
+                            result_summary = f"{result_parsed.get('note')}"
+                    elif t_type == 'sync_watch_history':
+                        if 'watched' in result_parsed:
+                            result_summary = f"Watched: {'Yes' if result_parsed.get('watched') else 'No'}"
+                            if result_parsed.get('watch_count') is not None:
+                                result_summary += f" • Count: {result_parsed.get('watch_count')}"
+                        elif result_parsed.get('error'):
+                            result_summary = f"Error: {result_parsed.get('error')}"
+                    elif t_type == 'analyze':
+                        # For analyze, avoid showing 'Found' booleans; only surface explicit errors
+                        if result_parsed.get('error'):
+                            result_summary = f"Error: {result_parsed.get('error')}"
+                    else:
+                        # generic
+                        result_summary = json.dumps(result_parsed)
+                else:
+                    result_summary = str(result_parsed)
+
+            item_obj = {
                 'id': i.id,
                 'index': i.index,
                 'status': i.status.value if hasattr(i.status, 'value') else str(i.status),
+                # keep payload for now but hidden in UI - may be useful for debugging
                 'payload': i.payload,
+                'payload_parsed': payload_parsed,
+                'movie_title': movie_title,
+                'movie_url': movie_url,
+                'movie_summary': movie_summary,
                 'result': i.result,
+                'result_parsed': result_parsed,
+                'result_summary': result_summary,
                 'started_at': i.started_at.isoformat() if i.started_at else None,
                 'finished_at': i.finished_at.isoformat() if i.finished_at else None,
-            })
+            }
+
+            # For analyze tasks, don't expose the raw result object when the item completed
+            try:
+                if task and getattr(task, 'type', None) == 'analyze' and i.status == QueueStatus.COMPLETED:
+                    item_obj['result'] = None
+                    item_obj['result_parsed'] = None
+                    item_obj['result_summary'] = None
+            except Exception:
+                pass
+
+            data['items'].append(item_obj)
 
         return data
 
@@ -247,54 +357,62 @@ async def cancel_task(task_id: int):
         return {"id": task_id, "status": QueueStatus.CANCELED.value if hasattr(QueueStatus.CANCELED, 'value') else str(QueueStatus.CANCELED)}
 
 
-async def clear_queued_tasks(older_than_seconds: int | None = None):
-    """Clear queued or running tasks and cancel their items.
+async def clear_queued_tasks(scope: str = 'current', older_than_seconds: int | None = None):
+    """Permanently delete tasks and their items by scope.
 
-    If older_than_seconds is provided, only tasks with started_at older than that (or tasks created_at older than that when not started) are affected.
-    Returns a dict with counts.
+    scope: 'current' deletes queued/running tasks; 'history' deletes completed/failed/canceled/deleted; 'all' deletes both.
+    If older_than_seconds is provided, only tasks older than the cutoff are affected.
+    This performs irreversible DELETE operations and returns counts of deleted rows.
     """
-    from sqlalchemy import update, select, and_, or_
+    from sqlalchemy import text
     from datetime import datetime, timedelta
 
+    # Normalize scope
+    s = (scope or 'current').lower()
+    if s not in ('current', 'history', 'all'):
+        raise ValueError('Invalid scope')
+
     async with database.async_session() as session:
-        # Build where clause
-        where_clause = QueueTask.status.in_([QueueStatus.QUEUED, QueueStatus.RUNNING])
+        # Build a raw SQL where clause depending on scope
+        if s == 'current':
+            status_clause = "LOWER(status) IN ('queued','running')"
+        elif s == 'history':
+            status_clause = "LOWER(status) IN ('completed','failed','canceled','deleted')"
+        else:
+            status_clause = "LOWER(status) IN ('queued','running','completed','failed','canceled','deleted')"
+
+        where_parts = [status_clause]
+        params = {}
         if older_than_seconds is not None:
             cutoff = datetime.utcnow() - timedelta(seconds=older_than_seconds)
-            # If task started_at exists, compare started_at, else created_at
-            where_clause = and_(
-                where_clause,
-                or_(
-                    and_(QueueTask.started_at != None, QueueTask.started_at < cutoff),
-                    QueueTask.created_at < cutoff,
-                ),
-            )
+            # Compare started_at if present else created_at
+            where_parts.append("(started_at IS NOT NULL AND started_at < :cutoff OR created_at < :cutoff)")
+            params['cutoff'] = cutoff
 
-        q = await session.execute(select(QueueTask).where(where_clause))
-        tasks = q.scalars().all()
-        if not tasks:
+        where_sql = ' AND '.join([f'({p})' for p in where_parts])
+        sel_sql = text(f"SELECT id FROM queue_tasks WHERE {where_sql}")
+        res = await session.execute(sel_sql, params)
+        ids = [r[0] for r in res.fetchall()]
+        if not ids:
             return {"tasks_cleared": 0, "items_affected": 0}
 
-        ids = [t.id for t in tasks]
+        ids_list = ','.join([str(i) for i in ids])
 
-        await session.execute(
-            update(QueueTask).where(QueueTask.id.in_(ids)).values(status=QueueStatus.DELETED)
-        )
-        res = await session.execute(
-            update(QueueItem)
-            .where(QueueItem.task_id.in_(ids))
-            .where(QueueItem.status.in_([QueueStatus.QUEUED, QueueStatus.RUNNING]))
-            .values(status=QueueStatus.CANCELED)
-        )
+        # Delete items first, then tasks (hard purge)
+        del_items_res = await session.execute(text(f"DELETE FROM queue_items WHERE task_id IN ({ids_list})"))
+        items_deleted = getattr(del_items_res, 'rowcount', None)
+        del_tasks_res = await session.execute(text(f"DELETE FROM queue_tasks WHERE id IN ({ids_list})"))
+        tasks_deleted = getattr(del_tasks_res, 'rowcount', None) or len(ids)
+
         await session.commit()
-        rowcount = getattr(res, 'rowcount', None)
-        # Publish update for affected tasks so clients refresh
+
+        # Broadcast a fresh task list so SSE clients refresh their snapshot
         try:
-            for tid in ids:
-                await publish_task_update(tid)
+            await publish_task_list()
         except Exception:
-            logger.exception("Failed to publish updates after clearing tasks")
-        return {"tasks_cleared": len(ids), "items_affected": rowcount}
+            logger.exception("Failed to publish task list after purge")
+
+        return {"tasks_cleared": tasks_deleted, "items_affected": items_deleted}
 
 
 class QueueWorker:
@@ -496,7 +614,38 @@ class QueueWorker:
                                     m.backdrop_path = tmdb_result.backdrop_path
                                     m.imdb_id = tmdb_result.imdb_id
                                     m.scraped = True
-                                    item.result = json.dumps({'updated_from': 'tmdb'})
+
+                                    # Optionally fetch OMDb ratings if requested in task.meta
+                                    try:
+                                        include_ratings = False
+                                        if task.meta and isinstance(task.meta, str):
+                                            try:
+                                                meta_parsed = json.loads(task.meta)
+                                            except Exception:
+                                                meta_parsed = None
+                                        elif task.meta:
+                                            meta_parsed = task.meta
+                                        else:
+                                            meta_parsed = None
+
+                                        if meta_parsed and isinstance(meta_parsed, dict) and meta_parsed.get('include_ratings'):
+                                            include_ratings = True
+                                    except Exception:
+                                        include_ratings = False
+
+                                    if include_ratings:
+                                        try:
+                                            # Prefer imdb_id when available
+                                            omdb = await fetch_omdb_ratings(session, imdb_id=m.imdb_id, title=None, year=None)
+                                            if omdb:
+                                                m.imdb_rating = omdb.imdb_rating or m.imdb_rating
+                                                m.imdb_votes = omdb.imdb_votes or m.imdb_votes
+                                                m.rotten_tomatoes_score = omdb.rotten_tomatoes_score or m.rotten_tomatoes_score
+                                                m.rotten_tomatoes_audience = omdb.rotten_tomatoes_audience or m.rotten_tomatoes_audience
+                                        except Exception:
+                                            logger.exception(f"Failed to fetch OMDb ratings for movie_id={m.id}")
+
+                                    item.result = json.dumps({'updated_from': 'tmdb' + ('+omdb' if include_ratings else '')})
                                     item.status = QueueStatus.COMPLETED
                                     task.completed_items = (task.completed_items or 0) + 1
                                 else:
@@ -562,7 +711,42 @@ class QueueWorker:
                                             item.status = QueueStatus.COMPLETED
                                             task.completed_items = (task.completed_items or 0) + 1
                                     else:
-                                        # No OMDb provider configured - treat as no-op
+                                        # No OMDb provider configured - if include_ratings requested, try fetch_omdb_ratings directly (e.g., mocked or fallback)
+                                        try:
+                                            include_ratings = False
+                                            if task.meta and isinstance(task.meta, str):
+                                                try:
+                                                    meta_parsed = json.loads(task.meta)
+                                                except Exception:
+                                                    meta_parsed = None
+                                            elif task.meta:
+                                                meta_parsed = task.meta
+                                            else:
+                                                meta_parsed = None
+
+                                            if meta_parsed and isinstance(meta_parsed, dict) and meta_parsed.get('include_ratings'):
+                                                include_ratings = True
+                                        except Exception:
+                                            include_ratings = False
+
+                                        if include_ratings:
+                                            try:
+                                                omdb = await fetch_omdb_ratings(session, imdb_id=m.imdb_id, title=m.title, year=m.year)
+                                                if omdb:
+                                                    m.imdb_rating = omdb.imdb_rating or m.imdb_rating
+                                                    m.imdb_votes = omdb.imdb_votes or m.imdb_votes
+                                                    m.rotten_tomatoes_score = omdb.rotten_tomatoes_score or m.rotten_tomatoes_score
+                                                    m.rotten_tomatoes_audience = omdb.rotten_tomatoes_audience or m.rotten_tomatoes_audience
+                                                    m.metacritic_score = omdb.metacritic_score or m.metacritic_score
+                                                    m.scraped = True
+                                                    item.result = json.dumps({'updated_from': 'omdb'})
+                                                    item.status = QueueStatus.COMPLETED
+                                                    task.completed_items = (task.completed_items or 0) + 1
+                                                    # ratings applied, continue
+                                            except Exception:
+                                                logger.exception(f"Failed to fetch OMDb ratings for movie_id={m.id} (no provider)")
+
+                                        # No provider or no include_ratings - treat as no-op
                                         item.result = json.dumps({'note': 'no provider available'})
                                         item.status = QueueStatus.COMPLETED
                                         task.completed_items = (task.completed_items or 0) + 1

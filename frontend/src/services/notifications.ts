@@ -7,6 +7,7 @@ export interface Notification {
   type: NotificationType
   timestamp: string
   read: boolean
+  meta?: any
 }
 
 let _notifications: Notification[] = []
@@ -16,7 +17,7 @@ export function getNotifications() {
   return _notifications.slice()
 }
 
-export function addNotificationToStore(payload: { title: string; message: string; type?: NotificationType }) {
+export function addNotificationToStore(payload: { title: string; message: string; type?: NotificationType; meta?: any }) {
   const n: Notification = {
     id: Date.now(),
     title: payload.title,
@@ -24,6 +25,7 @@ export function addNotificationToStore(payload: { title: string; message: string
     type: payload.type ?? 'info',
     timestamp: new Date().toISOString(),
     read: false,
+    meta: payload.meta,
   }
   _notifications = [n, ..._notifications]
   _notify()

@@ -2,6 +2,7 @@ import asyncio
 import tempfile
 from pathlib import Path
 import pytest  # type: ignore
+import pytest_asyncio
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
@@ -12,7 +13,7 @@ from app.services.queue import create_task, cancel_task, get_task, QueueWorker
 pytestmark = pytest.mark.asyncio
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def temp_db(tmp_path):
     db_file = tmp_path / "test_db.sqlite"
     url = f"sqlite+aiosqlite:///{db_file}"

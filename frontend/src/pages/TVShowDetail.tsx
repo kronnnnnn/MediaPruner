@@ -37,7 +37,7 @@ export default function TVShowDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { messageState, showMessage, hideMessage } = useMessageModal()
+  const { messageState, hideMessage } = useMessageModal()
   const { showToast } = useToast()
   const showId = parseInt(id || '0')
 
@@ -101,7 +101,7 @@ export default function TVShowDetailPage() {
       })
       const episodeSource = data?.episode_source ? ` (episodes from ${data.episode_source.toUpperCase()})` : ''
       const episodeMsg = data?.episodes_updated ? ` and ${data.episodes_updated} episodes` : ''
-      showMessage('Metadata Updated', `Show${episodeMsg} metadata has been refreshed from ${data?.source?.toUpperCase() || 'external source'}${episodeSource}.`, 'success')
+      showToast('Metadata Updated', `Show${episodeMsg} metadata has been refreshed from ${data?.source?.toUpperCase() || 'external source'}${episodeSource}.`, 'success')
     },
     onError: (error: any) => {
       logger.error('Refresh metadata failed', 'TVShowDetail', { 
@@ -109,7 +109,7 @@ export default function TVShowDetailPage() {
         showId,
         errorMessage: error?.response?.data?.detail || error?.message 
       })
-      showMessage('Refresh Failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
+      showToast('Refresh Failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
     }
   })
 
@@ -119,7 +119,7 @@ export default function TVShowDetailPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['tvshow', showId] })
       logger.dataOperation('generate_nfo', 'success', 'TVShowDetail', { showId })
-      showMessage('NFO Generated', 'Show NFO file has been created.', 'success')
+      showToast('NFO Generated', 'Show NFO file has been created.', 'success')
     },
     onError: (error: any) => {
       logger.error('Generate NFO failed', 'TVShowDetail', { 
@@ -127,7 +127,7 @@ export default function TVShowDetailPage() {
         showId,
         errorMessage: error?.response?.data?.detail || error?.message 
       })
-      showMessage('NFO Failed', error?.response?.data?.detail || 'Failed to generate NFO', 'error')
+      showToast('NFO Failed', error?.response?.data?.detail || 'Failed to generate NFO', 'error')
     }
   })
 
@@ -151,7 +151,7 @@ export default function TVShowDetailPage() {
         total: data.total, 
         errors: data.errors?.length || 0 
       })
-      showMessage(
+      showToast(
         'Analysis Complete',
         `Analyzed ${data.analyzed} of ${data.total} episodes.${data.errors?.length ? `\n${data.errors.length} errors occurred.` : ''}`,
         data.analyzed === data.total ? 'success' : 'warning'
@@ -163,7 +163,7 @@ export default function TVShowDetailPage() {
         showId,
         errorMessage: error?.response?.data?.detail || error?.message 
       })
-      showMessage('Analysis Failed', error?.response?.data?.detail || 'Failed to analyze episodes', 'error')
+      showToast('Analysis Failed', error?.response?.data?.detail || 'Failed to analyze episodes', 'error')
     }
   })
 
@@ -214,7 +214,7 @@ export default function TVShowDetailPage() {
     
     queryClient.invalidateQueries({ queryKey: ['episodes', showId] })
     
-    showMessage(
+    showToast(
       'Subtitles Embedded',
       `Embedded subtitles for ${muxed} of ${total} episodes.${errors.length ? `\n${errors.length} errors occurred.` : ''}`,
       muxed === total ? 'success' : 'warning'
@@ -285,7 +285,7 @@ export default function TVShowDetailPage() {
 
       setShowSearchModal(false)
     } catch (err: any) {
-      showMessage('Scrape Failed', err?.response?.data?.detail || 'Failed to enqueue scrape', 'error')
+      showToast('Scrape Failed', err?.response?.data?.detail || 'Failed to enqueue scrape', 'error')
     }
   }
 

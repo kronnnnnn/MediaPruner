@@ -80,7 +80,7 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   })
 
-  const { messageState, showMessage, hideMessage } = useMessageModal()
+  const { messageState, hideMessage } = useMessageModal()
   const { showToast } = useToast()
 
   const [showSearchEditModal, setShowSearchEditModal] = useState(false)
@@ -113,7 +113,7 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
       } else {
         setShowSearchEditModal(false)
         setModalError(null)
-        showMessage('Metadata refresh failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
+        showToast('Metadata refresh failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
       }
     }
   })
@@ -152,7 +152,7 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
         return
       }
 
-      showMessage('Metadata refresh failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
+      showToast('Metadata refresh failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
     }
   })
 
@@ -394,25 +394,27 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
         </button>
 
         {/* Floating prev/next navigation buttons (top of modal) - moved closer and enlarged */}
-        <button
-          onClick={onPrev}
-          disabled={!onPrev}
-          aria-label="Previous movie"
-          title="Previous"
-          className="absolute top-4 left-8 z-20 p-4 bg-white dark:bg-gray-700 rounded-full shadow transform opacity-70 hover:opacity-100 disabled:opacity-40 hover:scale-105 transition-all duration-150"
-        >
-          <ChevronLeft className="w-12 h-12 text-gray-700 dark:text-gray-300" />
-        </button>
+        {onPrev && (
+          <button
+            onClick={onPrev}
+            aria-label="Previous movie"
+            title="Previous"
+            className="absolute top-4 left-8 z-20 p-4 bg-white dark:bg-gray-700 rounded-full shadow transform opacity-70 hover:opacity-100 hover:scale-105 transition-all duration-150"
+          >
+            <ChevronLeft className="w-12 h-12 text-gray-700 dark:text-gray-300" />
+          </button>
+        )}
 
-        <button
-          onClick={onNext}
-          disabled={!onNext}
-          aria-label="Next movie"
-          title="Next"
-          className="absolute top-4 right-8 z-20 p-4 bg-white dark:bg-gray-700 rounded-full shadow transform opacity-70 hover:opacity-100 disabled:opacity-40 hover:scale-105 transition-all duration-150"
-        >
-          <ChevronRight className="w-12 h-12 text-gray-700 dark:text-gray-300" />
-        </button>
+        {onNext && (
+          <button
+            onClick={onNext}
+            aria-label="Next movie"
+            title="Next"
+            className="absolute top-4 right-8 z-20 p-4 bg-white dark:bg-gray-700 rounded-full shadow transform opacity-70 hover:opacity-100 hover:scale-105 transition-all duration-150"
+          >
+            <ChevronRight className="w-12 h-12 text-gray-700 dark:text-gray-300" />
+          </button>
+        )}
 
         {/* Backdrop */}
         {movie.backdrop_path && (

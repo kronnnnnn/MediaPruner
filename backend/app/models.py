@@ -17,7 +17,7 @@ class LibraryPath(Base):
     id = Column(Integer, primary_key=True, index=True)
     path = Column(String(1024), nullable=False, unique=True)
     name = Column(String(255), nullable=False)
-    media_type = Column(SQLEnum(MediaType), nullable=False)
+    media_type = Column(SQLEnum(MediaType, native_enum=False, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(
         DateTime,
@@ -334,7 +334,7 @@ class QueueTask(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     type = Column(String(64), nullable=False, index=True)
-    status = Column(SQLEnum(QueueStatus), default=QueueStatus.QUEUED, index=True)
+    status = Column(SQLEnum(QueueStatus, native_enum=False, values_callable=lambda obj: [e.value for e in obj]), default=QueueStatus.QUEUED, index=True)
     created_by = Column(String(128), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     started_at = Column(DateTime, nullable=True)
@@ -354,7 +354,7 @@ class QueueItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     task_id = Column(Integer, ForeignKey("queue_tasks.id"), nullable=False, index=True)
     index = Column(Integer, nullable=False, default=0)
-    status = Column(SQLEnum(QueueStatus), default=QueueStatus.QUEUED, index=True)
+    status = Column(SQLEnum(QueueStatus, native_enum=False, values_callable=lambda obj: [e.value for e in obj]), default=QueueStatus.QUEUED, index=True)
     payload = Column(Text, nullable=True)  # JSON payload
     result = Column(Text, nullable=True)   # JSON result or error
     started_at = Column(DateTime, nullable=True)
