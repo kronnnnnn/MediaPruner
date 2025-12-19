@@ -139,14 +139,14 @@ async def verify_tmdb_api_key(
     try:
         # Try searching for a well-known movie (Star Wars)
         results = await tmdb_service.search_movie("Star Wars", year=1977)
-        await tmdb_service.close()
         if results and len(results) > 0:
             return {"valid": True}
         else:
             return {"valid": False}
-    except Exception as e:
-        await tmdb_service.close()
+    except Exception:
         return {"valid": False}
+    finally:
+        await tmdb_service.close()
 
 
 # OMDb API Key Endpoints
