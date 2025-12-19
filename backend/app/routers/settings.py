@@ -342,6 +342,9 @@ async def verify_tautulli_settings(
             return {"valid": False}
     except Exception:
         return {"valid": False}
+    finally:
+        if hasattr(tautulli_service, 'close'):
+            await tautulli_service.close()
 
 
 # Plex Settings Endpoints
