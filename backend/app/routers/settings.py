@@ -149,6 +149,8 @@ async def verify_tmdb_api_key(
         return {"valid": True}
     else:
         return {"valid": False}
+    finally:
+        await tmdb_service.close()
 
 
 # OMDb API Key Endpoints
