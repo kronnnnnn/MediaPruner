@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, delete, func
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 from app.database import get_db
@@ -136,14 +136,18 @@ async def verify_tmdb_api_key(
     """Verify if the provided TMDB API key is valid by making a test request to TMDB."""
     # Use the provided key for verification
     tmdb_service = TMDBService(api_key=data.api_key)
+    results = None
     try:
         # Try searching for a well-known movie (Star Wars)
         results = await tmdb_service.search_movie("Star Wars", year=1977)
-        if results and len(results) > 0:
-            return {"valid": True}
-        else:
-            return {"valid": False}
     except Exception:
+        pass
+    finally:
+        await tmdb_service.close()
+    
+    if results and len(results) > 0:
+        return {"valid": True}
+    else:
         return {"valid": False}
     finally:
         await tmdb_service.close()
@@ -226,10 +230,10 @@ async def verify_omdb_api_key(
         # Try fetching ratings for a well-known movie (Star Wars - tt0076759)
         result = await omdb_service.get_ratings_by_imdb_id("tt0076759")
     except Exception:
-        return {"valid": False}
+        pass
     finally:
         await omdb_service.close()
-
+    
     if result:
         return {"valid": True}
     else:
@@ -348,8 +352,11 @@ async def verify_tautulli_settings(
             return {"valid": True}
         else:
             return {"valid": False}
-    except Exception as e:
+    except Exception:
         return {"valid": False}
+    finally:
+        if hasattr(tautulli_service, 'close'):
+            await tautulli_service.close()
 
 
 # Plex Settings Endpoints
