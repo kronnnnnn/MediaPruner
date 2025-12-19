@@ -18,7 +18,7 @@ class LibraryPathResponse(BaseModel):
     exists: bool = True
     file_count: int = 0
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -38,16 +38,18 @@ class MovieBase(BaseModel):
     tmdb_id: Optional[int] = None
     imdb_id: Optional[str] = None
     option_4: Optional[str] = None
-    
+
     # Ratings - TMDB
     rating: Optional[float] = None  # TMDB rating (0-10)
     votes: Optional[int] = None  # TMDB vote count
-    
+
     # Ratings - Additional sources (via OMDb)
     imdb_rating: Optional[float] = None  # IMDB rating (0-10)
     imdb_votes: Optional[int] = None  # IMDB vote count
-    rotten_tomatoes_score: Optional[int] = None  # Rotten Tomatoes Tomatometer (0-100)
-    rotten_tomatoes_audience: Optional[int] = None  # Rotten Tomatoes Audience Score (0-100)
+    # Rotten Tomatoes Tomatometer (0-100)
+    rotten_tomatoes_score: Optional[int] = None
+    # Rotten Tomatoes Audience Score (0-100)
+    rotten_tomatoes_audience: Optional[int] = None
     metacritic_score: Optional[int] = None  # Metacritic Metascore (0-100)
 
 
@@ -81,12 +83,12 @@ class MovieResponse(MovieBase):
     media_info_scanned: bool = False
     created_at: datetime
     updated_at: datetime
-    
+
     # Release info (parsed from filename)
     release_group: Optional[str] = None
     edition: Optional[str] = None
     quality: Optional[str] = None
-    
+
     # Technical media info
     duration: Optional[int] = None
     video_codec: Optional[str] = None
@@ -109,14 +111,14 @@ class MovieResponse(MovieBase):
     has_subtitle: bool = False
     container: Optional[str] = None
     overall_bitrate: Optional[int] = None
-    
+
     # Watch history (from Tautulli)
     watched: bool = False
     watch_count: int = 0
     last_watched_date: Optional[datetime] = None
     last_watched_user: Optional[str] = None
     rating_key: Optional[int] = None
-    
+
     class Config:
         from_attributes = True
 
@@ -162,7 +164,7 @@ class SeasonResponse(BaseModel):
     air_date: Optional[date]
     poster_path: Optional[str]
     episode_count: int
-    
+
     class Config:
         from_attributes = True
 
@@ -182,11 +184,11 @@ class EpisodeResponse(BaseModel):
     file_size: int
     has_nfo: bool
     media_info_scanned: bool = False
-    
+
     # Subtitle file info
     subtitle_path: Optional[str] = None
     has_subtitle: bool = False
-    
+
     # Technical media info
     duration: Optional[int] = None
     video_codec: Optional[str] = None
@@ -198,7 +200,7 @@ class EpisodeResponse(BaseModel):
     audio_language: Optional[str] = None
     subtitle_languages: Optional[str] = None
     container: Optional[str] = None
-    
+
     class Config:
         from_attributes = True
 
@@ -213,7 +215,7 @@ class TVShowResponse(TVShowBase):
     created_at: datetime
     updated_at: datetime
     seasons: list[SeasonResponse] = []
-    
+
     class Config:
         from_attributes = True
 

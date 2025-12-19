@@ -21,7 +21,7 @@ class RenameResult:
     error: Optional[str] = None
 
 
-@dataclass 
+@dataclass
 class ParsedFilename:
     """Parsed information from a media filename"""
     title: Optional[str] = None
@@ -35,7 +35,7 @@ class ParsedFilename:
 # Common release groups (case insensitive matching)
 RELEASE_GROUPS = [
     'HushRips', 'RARBG', 'SPARKS', 'YTS', 'YIFY', 'ETRG', 'EVO', 'AMZN', 'NTb',
-    'FLUX', 'TEPES', 'PSA', 'ION10', 'FGT', 'CM', 'NTG', 'BLOW', 'TOMMY', 
+    'FLUX', 'TEPES', 'PSA', 'ION10', 'FGT', 'CM', 'NTG', 'BLOW', 'TOMMY',
     'GECKOS', 'AMIABLE', 'DRONES', 'SiMPLE', 'USURY', 'ROVERS', 'DEFLATE',
     'DIMENSION', 'LOL', 'KILLERS', 'DEMAND', 'W4F', 'STUTTERSHIT', 'MRCS',
     'PLAYNOW', 'CMRG', 'NOGRP', 'MiNX', 'VETO', 'EVOLVE', 'EXT', 'ZR',
@@ -85,10 +85,10 @@ def parse_release_group(filename: str) -> Optional[str]:
     """Extract release group from filename"""
     # Common pattern: name at the end after a dash/hyphen
     # e.g., "Movie.Name.2023.1080p.BluRay.x264-HushRips.mkv"
-    
+
     # First, remove the extension
     name_without_ext = Path(filename).stem
-    
+
     # Look for pattern: -ReleaseGroup at the end
     match = re.search(r'[\-\.]([A-Za-z0-9]+)$', name_without_ext)
     if match:
@@ -100,10 +100,19 @@ def parse_release_group(filename: str) -> Optional[str]:
         # If not a known group but looks like one (length 2-15, alphanumeric)
         if 2 <= len(potential_group) <= 15 and potential_group.isalnum():
             # Exclude common false positives
-            false_positives = ['mkv', 'mp4', 'avi', 'x264', 'x265', 'h264', 'h265', 'hevc', 'avc']
+            false_positives = [
+                'mkv',
+                'mp4',
+                'avi',
+                'x264',
+                'x265',
+                'h264',
+                'h265',
+                'hevc',
+                'avc']
             if potential_group.lower() not in false_positives:
                 return potential_group
-    
+
     return None
 
 
@@ -149,17 +158,17 @@ def sanitize_filename(name: str) -> str:
     # Replace invalid characters
     invalid_chars = r'[<>:"/\\|?*]'
     name = re.sub(invalid_chars, '', name)
-    
+
     # Replace multiple spaces with single space
     name = ' '.join(name.split())
-    
+
     # Trim leading/trailing spaces and dots
     name = name.strip(' .')
-    
+
     # Limit length (Windows max is 255)
     if len(name) > 200:
         name = name[:200]
-    
+
     return name
 
 
@@ -196,7 +205,7 @@ MOVIE_RENAME_PRESETS = {
         "description": "Movie Title (2023) Extended"
     },
     "with_release_group": {
-        "name": "With Release Group", 
+        "name": "With Release Group",
         "pattern": "{title} ({year}) - {release_group}",
         "description": "Movie Title (2023) - HushRips"
     },
@@ -288,7 +297,7 @@ def get_movie_filename(
 ) -> str:
     """
     Generate a movie filename based on a pattern.
-    
+
     Available placeholders:
     - {title}: Movie title
     - {year}: Release year
@@ -298,10 +307,10 @@ def get_movie_filename(
     - {release_group}: Release group name (HushRips, RARBG, etc.)
     """
     filename = pattern
-    
+
     # Replace title
     filename = filename.replace("{title}", title)
-    
+
     # Replace year
     if year:
         filename = filename.replace("{year}", str(year))
@@ -309,45 +318,48 @@ def get_movie_filename(
         # Remove year placeholder and parentheses if no year
         filename = re.sub(r'\s*\([^)]*\{year\}[^)]*\)', '', filename)
         filename = filename.replace("{year}", "")
-    
+
     # Replace quality
     if quality:
         filename = filename.replace("{quality}", quality)
     else:
         # Remove quality placeholder and brackets
         filename = re.sub(r'\s*\[?\{quality\}[\-\s]*\]?', '', filename)
-        filename = re.sub(r'\[\s*\-?\s*\]', '', filename)  # Clean empty brackets
-    
+        filename = re.sub(
+            r'\[\s*\-?\s*\]',
+            '',
+            filename)  # Clean empty brackets
+
     # Replace resolution
     if resolution:
         filename = filename.replace("{resolution}", resolution)
     else:
         filename = re.sub(r'[\-\s]*\{resolution\}', '', filename)
         filename = re.sub(r'\[\s*\]', '', filename)  # Clean empty brackets
-    
+
     # Replace edition
     if edition:
         filename = filename.replace("{edition}", edition)
     else:
         filename = re.sub(r'\s*\{edition\}', '', filename)
-    
+
     # Replace release group
     if release_group:
         filename = filename.replace("{release_group}", release_group)
     else:
         filename = re.sub(r'\s*[\-\s]*\{release_group\}', '', filename)
-    
+
     # Clean up any leftover empty brackets or multiple spaces
     filename = re.sub(r'\[\s*\]', '', filename)
     filename = re.sub(r'\(\s*\)', '', filename)
     filename = ' '.join(filename.split())
-    
+
     filename = sanitize_filename(filename)
-    
+
     # Add extension
     if not filename.endswith(extension):
         filename += extension
-    
+
     return filename
 
 
@@ -358,15 +370,15 @@ def get_movie_folder(
 ) -> str:
     """Generate a movie folder name based on a pattern"""
     folder = pattern
-    
+
     folder = folder.replace("{title}", title)
-    
+
     if year:
         folder = folder.replace("{year}", str(year))
     else:
         folder = re.sub(r'\s*\([^)]*\{year\}[^)]*\)', '', folder)
         folder = folder.replace("{year}", "")
-    
+
     return sanitize_filename(folder)
 
 
@@ -377,15 +389,15 @@ def get_tvshow_folder(
 ) -> str:
     """Generate a TV show folder name based on a pattern"""
     folder = pattern
-    
+
     folder = folder.replace("{title}", title)
-    
+
     if year:
         folder = folder.replace("{year}", str(year))
     else:
         folder = re.sub(r'\s*\([^)]*\{year\}[^)]*\)', '', folder)
         folder = folder.replace("{year}", "")
-    
+
     return sanitize_filename(folder)
 
 
@@ -413,7 +425,7 @@ def get_episode_filename(
 ) -> str:
     """
     Generate an episode filename based on a pattern.
-    
+
     Available placeholders:
     - {show}: Show title
     - {season}: Season number
@@ -424,61 +436,61 @@ def get_episode_filename(
     - {quality}: Source quality (WEB-DL, BluRay, etc.)
     - {resolution}: Video resolution (1080p, 720p, etc.)
     - {release_group}: Release group name
-    
+
     Args:
         replace_spaces_with: Character to replace spaces with (e.g., '.', '_', or None to keep spaces)
     """
     filename = pattern
-    
+
     # Replace placeholders
     filename = filename.replace("{show}", show_title)
     filename = filename.replace("{season:02d}", f"{season_number:02d}")
     filename = filename.replace("{season}", str(season_number))
     filename = filename.replace("{episode:02d}", f"{episode_number:02d}")
     filename = filename.replace("{episode}", str(episode_number))
-    
+
     if episode_title:
         filename = filename.replace("{title}", episode_title)
     else:
         # Remove title placeholder and separator if no title
         filename = re.sub(r'\s*-\s*\{title\}', '', filename)
         filename = filename.replace("{title}", "")
-    
+
     # Replace quality
     if quality:
         filename = filename.replace("{quality}", quality)
     else:
         filename = re.sub(r'\s*\[?\{quality\}[\-\s]*\]?', '', filename)
         filename = re.sub(r'\[\s*\-?\s*\]', '', filename)
-    
+
     # Replace resolution
     if resolution:
         filename = filename.replace("{resolution}", resolution)
     else:
         filename = re.sub(r'[\-\s]*\{resolution\}', '', filename)
         filename = re.sub(r'\[\s*\]', '', filename)
-    
+
     # Replace release group
     if release_group:
         filename = filename.replace("{release_group}", release_group)
     else:
         filename = re.sub(r'\s*[\-\s]*\{release_group\}', '', filename)
-    
+
     # Clean up any leftover empty brackets or multiple spaces
     filename = re.sub(r'\[\s*\]', '', filename)
     filename = re.sub(r'\(\s*\)', '', filename)
     filename = ' '.join(filename.split())
-    
+
     # Replace spaces with specified character if provided
     if replace_spaces_with is not None and replace_spaces_with != '' and replace_spaces_with != ' ':
         filename = filename.replace(' ', replace_spaces_with)
-    
+
     filename = sanitize_filename(filename)
-    
+
     # Add extension
     if not filename.endswith(extension):
         filename += extension
-    
+
     return filename
 
 
@@ -490,7 +502,7 @@ def rename_file(
 ) -> RenameResult:
     """
     Rename a file.
-    
+
     Args:
         old_path: Current file path
         new_name: New filename (without path)
@@ -505,16 +517,16 @@ def rename_file(
                 old_path=str(old_path),
                 error="File does not exist"
             )
-        
+
         # Determine target folder
         target_folder = new_folder if new_folder else old_path.parent
-        
+
         if create_folder and not target_folder.exists():
             logger.debug(f"Creating folder: {target_folder}")
             target_folder.mkdir(parents=True, exist_ok=True)
-        
+
         new_path = target_folder / new_name
-        
+
         # Check if target already exists
         if new_path.exists() and new_path != old_path:
             logger.warning(f"Rename failed - target exists: {new_path}")
@@ -523,17 +535,17 @@ def rename_file(
                 old_path=str(old_path),
                 error=f"Target file already exists: {new_path}"
             )
-        
+
         # Rename/move the file
         logger.info(f"Renaming: '{old_path.name}' -> '{new_name}'")
         shutil.move(str(old_path), str(new_path))
-        
+
         return RenameResult(
             success=True,
             old_path=str(old_path),
             new_path=str(new_path)
         )
-    
+
     except Exception as e:
         logger.error(f"Rename error for {old_path}: {str(e)}")
         return RenameResult(
@@ -558,7 +570,7 @@ def rename_movie(
     Does not reorganize into folders - just renames the file.
     """
     extension = file_path.suffix
-    
+
     new_filename = get_movie_filename(
         title=title,
         year=year,
@@ -569,7 +581,7 @@ def rename_movie(
         edition=edition,
         release_group=release_group,
     )
-    
+
     # Rename in the same folder (no folder reorganization)
     return rename_file(file_path, new_filename)
 
@@ -590,7 +602,7 @@ def rename_movie_with_folder(
     Use this when you want to create a movie folder structure.
     """
     extension = file_path.suffix
-    
+
     # Create movie folder
     folder_name = get_movie_folder(title, year, folder_pattern)
     new_folder = file_path.parent / folder_name
@@ -604,7 +616,11 @@ def rename_movie_with_folder(
         edition=edition,
         release_group=release_group,
     )
-    return rename_file(file_path, new_filename, create_folder=True, new_folder=new_folder)
+    return rename_file(
+        file_path,
+        new_filename,
+        create_folder=True,
+        new_folder=new_folder)
 
 
 def rename_episode(
@@ -639,17 +655,21 @@ def rename_episode(
         release_group=release_group,
         replace_spaces_with=replace_spaces_with
     )
-    
+
     if organize_in_season_folder:
         season_folder = get_season_folder(season_number, season_folder_pattern)
         # Assume show folder is the parent
         show_folder = file_path.parent.parent if "Season" in file_path.parent.name else file_path.parent
         new_folder = show_folder / season_folder
-        result = rename_file(file_path, new_filename, create_folder=True, new_folder=new_folder)
+        result = rename_file(
+            file_path,
+            new_filename,
+            create_folder=True,
+            new_folder=new_folder)
     else:
         new_folder = None
         result = rename_file(file_path, new_filename)
-    
+
     # Also rename subtitle file if present
     if result.success and subtitle_path and subtitle_path.exists():
         # Generate subtitle filename with same base name but subtitle extension
@@ -666,10 +686,14 @@ def rename_episode(
             release_group=release_group,
             replace_spaces_with=replace_spaces_with
         )
-        
+
         if new_folder:
-            rename_file(subtitle_path, new_subtitle_filename, create_folder=True, new_folder=new_folder)
+            rename_file(
+                subtitle_path,
+                new_subtitle_filename,
+                create_folder=True,
+                new_folder=new_folder)
         else:
             rename_file(subtitle_path, new_subtitle_filename)
-    
+
     return result

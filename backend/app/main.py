@@ -50,27 +50,38 @@ app.include_router(health.router, tags=["Health"])
 app.include_router(library.router, prefix="/api/library", tags=["Library"])
 app.include_router(movies.router, prefix="/api/movies", tags=["Movies"])
 app.include_router(tvshows.router, prefix="/api/tvshows", tags=["TV Shows"])
-app.include_router(settings_router.router, prefix="/api/settings", tags=["Settings"])
-app.include_router(tautulli.router, prefix="/api/integrations/tautulli", tags=["Tautulli"])
+app.include_router(
+    settings_router.router,
+    prefix="/api/settings",
+    tags=["Settings"])
+app.include_router(
+    tautulli.router,
+    prefix="/api/integrations/tautulli",
+    tags=["Tautulli"])
 app.include_router(plex.router, prefix="/api/integrations/plex", tags=["Plex"])
 
 # Serve static files in production (when frontend is built)
 static_dir = Path(__file__).parent.parent / "static"
 if static_dir.exists():
-    app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")
-    
+    app.mount(
+        "/assets",
+        StaticFiles(
+            directory=static_dir /
+            "assets"),
+        name="assets")
+
     @app.get("/{full_path:path}")
     async def serve_spa(request: Request, full_path: str):
         """Serve the SPA for all non-API routes"""
         # Don't intercept API routes
         if full_path.startswith("api/"):
             return {"detail": "Not Found"}
-        
+
         # Try to serve the exact file
         file_path = static_dir / full_path
         if file_path.exists() and file_path.is_file():
             return FileResponse(file_path)
-        
+
         # Fall back to index.html for SPA routing
         return FileResponse(static_dir / "index.html")
 else:
