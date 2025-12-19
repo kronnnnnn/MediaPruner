@@ -222,16 +222,18 @@ async def verify_omdb_api_key(
     
     # Use the provided key for verification
     omdb_service = OMDbService(api_key=data.api_key)
+    result = None
     try:
         # Try fetching ratings for a well-known movie (Star Wars - tt0076759)
         result = await omdb_service.get_ratings_by_imdb_id("tt0076759")
+    except Exception:
+        return {"valid": False}
+    finally:
         await omdb_service.close()
-        if result:
-            return {"valid": True}
-        else:
-            return {"valid": False}
-    except Exception as e:
-        await omdb_service.close()
+
+    if result:
+        return {"valid": True}
+    else:
         return {"valid": False}
 
 
