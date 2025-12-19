@@ -521,12 +521,7 @@ async def search_tvshow_candidates(
                     }], 'tried': getattr(omdb_svc, 'last_request_params', None)}
             finally:
                 await omdb_svc.close()
-
     return {'provider': provider or 'tmdb', 'results': []}
-<<<<<<< HEAD
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
-=======
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
 
 
 @router.post("/{show_id}/scrape-episodes")
@@ -920,7 +915,7 @@ async def analyze_all_episodes(
         raise HTTPException(status_code=400, detail="No episodes with files to analyze")
 
     task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
-    return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}=======
+    return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
         raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
     
     # Enqueue analyze tasks for all episodes
@@ -930,7 +925,6 @@ async def analyze_all_episodes(
     for episode in episodes:
         if not episode.file_path:
             continue
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
         items.append({"episode_id": episode.id})
 
     if not items:
@@ -939,11 +933,6 @@ async def analyze_all_episodes(
     task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
 
     return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
-<<<<<<< HEAD
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
-=======
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
-
 
 @router.get("/{show_id}/mux-subtitles-preview")
 async def get_mux_subtitles_preview(
@@ -963,13 +952,10 @@ async def get_mux_subtitles_preview(
     episodes_result = await db.execute(
         select(Episode).where(
             Episode.tvshow_id == show_id,
-<<<<<<< HEAD
             Episode.subtitle_path.isnot(None),
             Episode.has_subtitle
-=======
                 Episode.subtitle_path.isnot(None),
                 Episode.has_subtitle
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
         )
     )
     episodes = episodes_result.scalars().all()
@@ -1052,13 +1038,10 @@ async def mux_all_subtitles(
     episodes_result = await db.execute(
         select(Episode).where(
             Episode.tvshow_id == show_id,
-<<<<<<< HEAD
             Episode.subtitle_path.isnot(None),
             Episode.has_subtitle
-=======
                 Episode.subtitle_path.isnot(None),
                 Episode.has_subtitle
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
         )
     )
     episodes = episodes_result.scalars().all()

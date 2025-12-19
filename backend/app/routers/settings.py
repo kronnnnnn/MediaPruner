@@ -214,11 +214,7 @@ async def verify_omdb_api_key(
 ):
     """Verify if the provided OMDb API key is valid by making a test request to OMDb."""
     from app.services.omdb import OMDbService
-<<<<<<< HEAD
 
-=======
-    
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
     # Use the provided key for verification
     omdb_service = OMDbService(api_key=data.api_key)
     try:
@@ -229,11 +225,8 @@ async def verify_omdb_api_key(
             return {"valid": True}
         else:
             return {"valid": False}
-<<<<<<< HEAD
     except Exception:
-=======
-    except Exception as e:
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
+
         await omdb_service.close()
         return {"valid": False}
 
@@ -339,11 +332,7 @@ async def verify_tautulli_settings(
 ):
     """Verify if the provided Tautulli settings are valid by making a test request."""
     from app.services.tautulli import TautulliService
-<<<<<<< HEAD
 
-=======
-    
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
     # Use the provided settings for verification
     tautulli_service = TautulliService(host=data.host, api_key=data.api_key)
     try:
@@ -562,7 +551,7 @@ async def get_setting_value(db: AsyncSession, key: str) -> Optional[str]:
     return setting.value if setting else None
 
 
-# ================== Logs Endpoints ==================
+# ==== Logs Endpoints ====
 
 class LogEntryResponse(BaseModel):
     id: int
@@ -681,7 +670,7 @@ async def clear_logs(
     return {"message": message}
 
 
-# ================== Frontend Logging Endpoint ==================
+# ==== Frontend Logging Endpoint ====
 
 class FrontendLogEntry(BaseModel):
     level: str  # INFO, WARNING, ERROR, DEBUG
