@@ -505,13 +505,11 @@ async def fetch_plex_token(
     except httpx.HTTPStatusError as e:
         raise HTTPException(
             status_code=400,
-            detail=f"Failed to fetch token: {
-                e.response.status_code}")
+            detail=f"Failed to fetch token: {e.response.status_code}")
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch token: {
-                str(e)}")
+            detail=f"Failed to fetch token: {str(e)}")
 
 
 # Allow testing a host/token pair without saving credentials

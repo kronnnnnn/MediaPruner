@@ -254,14 +254,12 @@ async def add_library_path(
     if not path_obj.exists():
         raise HTTPException(
             status_code=400,
-            detail=f"Path does not exist: {
-                library_path.path}")
+            detail=f"Path does not exist: {library_path.path}")
 
     if not path_obj.is_dir():
         raise HTTPException(
             status_code=400,
-            detail=f"Path is not a directory: {
-                library_path.path}")
+            detail=f"Path is not a directory: {library_path.path}")
 
     # Check for duplicates
     existing = await db.execute(

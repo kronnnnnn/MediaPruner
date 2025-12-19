@@ -540,8 +540,7 @@ def scan_tvshow_directory(directory: Path) -> list[ParsedTVShow]:
                 continue
 
             # Add to or create show
-            show_key = str(show_folder_path) if show_folder else f"_direct_{
-                parsed.show_title}"
+            show_key = str(show_folder_path) if show_folder else f"_direct_{parsed.show_title}"
             if show_key not in shows:
                 shows[show_key] = ParsedTVShow(
                     folder_path=str(show_folder_path) if show_folder else str(directory),

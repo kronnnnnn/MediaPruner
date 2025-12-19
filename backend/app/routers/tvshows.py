@@ -448,12 +448,12 @@ async def search_tvshow_candidates(
         logger.info(
             f"[{show.title}] Metadata refresh complete: show from TMDB, {episode_result['updated']} episodes updated")
         return {
-            "message": f"TV show and {
-                episode_result['updated']} episodes updated from TMDB",
+            "message": f"TV show and {episode_result['updated']} episodes updated from TMDB",
             "tmdb_id": tmdb_result.tmdb_id,
             "source": source,
             "episodes_updated": episode_result['updated'],
-            "episode_source": episode_result.get('source')}
+            "episode_source": episode_result.get('source')
+        }
 
     # Try OMDb (if not forcing TMDB or TMDB didn't find it)
     if provider != "tmdb":
@@ -491,73 +491,21 @@ async def search_tvshow_candidates(
         logger.info(
             f"[{show.title}] Metadata refresh complete: show from OMDb, {episode_result['updated']} episodes updated")
         return {
-            "message": f"TV show and {
-                episode_result['updated']} episodes updated from OMDb",
+            "message": f"TV show and {episode_result['updated']} episodes updated from OMDb",
             "imdb_id": omdb_result.imdb_id,
             "source": source,
             "episodes_updated": episode_result['updated'],
-            "episode_source": episode_result.get('source')}
+            "episode_source": episode_result.get('source')
+        }
 
     # Neither found the show
-    provider_msg = f" using {
-        provider.upper()}" if provider else " on TMDB or OMDb"
+    provider_msg = f" using {provider.upper()}" if provider else " on TMDB or OMDb"
     logger.warning(
         f"[{original_title}] Not found{provider_msg} (search term: '{search_title}')")
     raise HTTPException(
         status_code=404,
         detail=f"TV show not found{provider_msg}. Searched for: '{search_title}'. Please check the show title or try a different provider."
     )
-=======
-    if not show:
-        raise HTTPException(status_code=404, detail="TV show not found")
-
-    title = show.title or ''
-    year = None
-    if show.first_air_date:
-        try:
-            year = int(str(show.first_air_date).split('-')[0])
-        except Exception:
-            year = None
-
-    # Try TMDB first unless provider forced to OMDb
-    if provider in (None, 'tmdb'):
-        tmdb_service = await TMDBService.create_with_db_key(db)
-        logger.info(f"Search candidates requested for show_id={show_id} title='{title}' provider=tmdb")
-        if tmdb_service.is_configured:
-=======
-    title = show.title or ''
-    year = None
-    if show.first_air_date:
-        try:
-            year = int(str(show.first_air_date).split('-')[0])
-        except Exception:
-            year = None
-
-    # Try TMDB first unless provider forced to OMDb
-    if provider in (None, 'tmdb'):
-        tmdb_service = await TMDBService.create_with_db_key(db)
-        logger.info(f"Search candidates requested for show_id={show_id} title='{title}' provider=tmdb")
-        if tmdb_service.is_configured:
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
-            results = await tmdb_service.search_tvshow(title, year)
-            mapped = []
-            for r in results:
-                mapped.append({
-                    'tmdb_id': r.get('id'),
-                    'title': r.get('name') or r.get('original_name'),
-                    'year': (r.get('first_air_date') or '')[:4] if r.get('first_air_date') else None,
-                    'overview': r.get('overview'),
-                    'poster_path': r.get('poster_path'),
-                })
-            logger.info(f"TMDB search returned {len(mapped)} candidates for show_id={show_id}")
-            return {'provider': 'tmdb', 'results': mapped, 'tried': getattr(tmdb_service, 'last_search_tried', None)}
-
-    # Fallback to OMDb if configured or forced
-    if provider in (None, 'omdb'):
-        from app.services.omdb import get_omdb_api_key_from_db, OMDbService
-
-        api_key = await get_omdb_api_key_from_db(db)
-        logger.info(f"Search candidates requested for show_id={show_id} title='{title}' provider=omdb")
         if api_key:
             omdb_svc = OMDbService(api_key)
             try:
@@ -779,9 +727,7 @@ async def rename_show_episodes(
             logger.debug(
                 f"[{show.title}] Renamed: '{old_name}' -> '{episode.file_name}'")
         else:
-            error_msg = f"Failed to rename {
-                episode.file_name}: {
-                rename_result.error}"
+            error_msg = f"Failed to rename {episode.file_name}: {rename_result.error}"
             logger.error(f"[{show.title}] {error_msg}")
             errors.append(error_msg)
 
@@ -841,8 +787,7 @@ async def generate_tvshow_nfo(
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate NFO: {
-                str(e)}")
+            detail=f"Failed to generate NFO: {str(e)}")
 
 
 @router.delete("/{show_id}")
@@ -942,8 +887,7 @@ async def analyze_all_episodes(
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Database error: {
-                str(e)}")
+            detail=f"Database error: {str(e)}")
 
     if not show:
         raise HTTPException(status_code=404, detail="TV show not found")
@@ -961,60 +905,6 @@ async def analyze_all_episodes(
         )
         episodes = episodes_result.scalars().all()
     except Exception as e:
-<<<<<<< HEAD
-<<<<<<< HEAD
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch episodes: {
-                str(e)}")
-
-    analyzed = 0
-    errors = []
-
-    for episode in episodes:
-        if not episode.file_path:
-            continue
-
-        try:
-            info = mediainfo.analyze_file(episode.file_path)
-
-            if info.success:
-                episode.duration = info.duration
-                episode.video_codec = info.video_codec
-                episode.video_resolution = info.video_resolution
-                episode.video_width = info.video_width
-                episode.video_height = info.video_height
-                episode.audio_codec = info.audio_codec
-                episode.audio_channels = info.audio_channels
-                episode.audio_language = info.audio_language
-                episode.subtitle_languages = mediainfo.get_subtitle_languages_json(
-                    info)
-                episode.container = info.container
-                episode.file_size = info.file_size
-                episode.media_info_scanned = True
-                analyzed += 1
-            else:
-                errors.append(
-                    f"S{episode.season_number}E{episode.episode_number}: {info.error}")
-        except Exception as e:
-            errors.append(
-                f"S{episode.season_number}E{episode.episode_number}: {str(e)}")
-
-    try:
-        await db.commit()
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to save analysis results: {
-                str(e)}")
-
-    return {
-        "message": f"Analyzed {analyzed} of {len(episodes)} episodes",
-        "analyzed": analyzed,
-        "total": len(episodes),
-        "errors": errors[:10] if errors else []  # Limit errors to 10
-    }
-=======
         raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
     
     # Enqueue analyze tasks for all episodes
@@ -1024,7 +914,13 @@ async def analyze_all_episodes(
     for episode in episodes:
         if not episode.file_path:
             continue
-=======
+        items.append({"episode_id": episode.id})
+
+    if not items:
+        raise HTTPException(status_code=400, detail="No episodes with files to analyze")
+
+    task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
+    return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}=======
         raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
     
     # Enqueue analyze tasks for all episodes
@@ -1328,8 +1224,7 @@ async def mux_episode_subtitle(
     if not mux_result.success:
         raise HTTPException(
             status_code=500,
-            detail=f"Muxing failed: {
-                mux_result.error}")
+            detail=f"Muxing failed: {mux_result.error}")
 
     # Update episode record
     episode.file_path = mux_result.output_path

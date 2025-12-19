@@ -187,9 +187,7 @@ class TautulliService:
                                 matches.append(entry)
 
                         if matches:
-                            logger.debug(
-                                f"Tautulli: found {
-                                    len(matches)} history entries by scanning recent history for imdb_id")
+                            logger.debug(f"Tautulli: found {len(matches)} history entries by scanning recent history for imdb_id")
                             # Try to extract rating_key from matched history
                             # entries
                             rk = None
@@ -232,9 +230,7 @@ class TautulliService:
                 continue
 
             results = search_results.get("results", [])
-            logger.debug(
-                f"Tautulli: search returned {
-                    len(results)} results for query='{query}'")
+            logger.debug(f"Tautulli: search returned {len(results)} results for query='{query}'")
 
             # Narrow to movies only
             movies = [r for r in results if r.get("media_type") == "movie"]
@@ -416,9 +412,7 @@ class TautulliService:
                             matches.append(entry)
 
                     if matches:
-                        logger.debug(
-                            f"Tautulli: found {
-                                len(matches)} history entries by scanning recent history for imdb_id/title match")
+                        logger.debug(f"Tautulli: found {len(matches)} history entries by scanning recent history for imdb_id/title match")
                         rk = None
                         for e in matches:
                             if e.get('rating_key'):
