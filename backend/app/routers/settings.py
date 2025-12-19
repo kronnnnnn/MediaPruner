@@ -2,7 +2,6 @@
 Settings API Router - Manages application settings stored in the database
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
-from starlette.status import HTTP_200_OK, HTTP_400_BAD_REQUEST
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, delete, func
 from pydantic import BaseModel
