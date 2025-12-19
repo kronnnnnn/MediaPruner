@@ -36,13 +36,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
     // Also persist notification for later review (via central notification store)
     try {
-<<<<<<< HEAD
       import('../services/notifications').then(mod => mod.addNotificationToStore({ title, message, type })).catch(() => null)
-=======
-      import('../services/notifications').then(mod => {
-        mod.addNotificationToStore({ title, message, type })
-      })
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
     } catch (e) {
       // ignore if notifications registration not ready
     }

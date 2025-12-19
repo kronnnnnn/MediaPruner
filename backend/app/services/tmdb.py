@@ -401,8 +401,6 @@ class TMDBService:
             ))
 
         return episodes
-<<<<<<< HEAD
-<<<<<<< HEAD
 
     async def search_tvshow_and_get_details(
             self,

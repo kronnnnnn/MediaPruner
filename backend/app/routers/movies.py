@@ -44,8 +44,6 @@ async def get_movies(
     db: AsyncSession = Depends(get_db)
 ):
     """Get paginated list of movies with filtering and sorting"""
-<<<<<<< HEAD
-<<<<<<< HEAD
     # Validate sort_by against actual Movie columns
     allowed_sort_columns = [
         'title', 'year', 'rating', 'created_at', 'file_size', 'runtime', 'file_name',
@@ -288,11 +286,7 @@ async def update_movie(
 
     return MovieResponse.model_validate(movie)
 
-<<<<<<< HEAD
-=======
 
-
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
 # Patterns to extract IDs from filenames
 IMDB_ID_PATTERN = re.compile(
     r'(?:^|[_\.\s\-])tt(\d{7,8})(?:[_\.\s\-]|$)',
@@ -352,21 +346,18 @@ def parse_title_from_string(text: str) -> tuple[str, int | None]:
 
 
 @router.post("/{movie_id}/scrape")
-async def scrape_movie_metadata(
-        movie_id: int,
-        db: AsyncSession = Depends(get_db)):
+async def scrape_movie_metadata(movie_id: int, include_ratings: bool = False, db: AsyncSession = Depends(get_db)):
     """
-    Scrape metadata for a movie from TMDB using multiple strategies:
-    1. If IMDB ID is found in filename/folder, use that for exact lookup
-    2. If TMDB ID is found in filename/folder, use that for exact lookup
-    3. Try searching by folder name (often more reliable than filename)
-    4. Try searching by parsed title from filename
-    5. Try progressively simplified searches
+    Scrape metadata for a movie from TMDB using multiple strategies. If `include_ratings` is true, the worker will also fetch OMDb ratings and persist them.
     """
     # Enqueue a refresh_metadata task so metadata refresh runs in the queue worker
     from app.services.queue import create_task
 
-    task = await create_task('refresh_metadata', items=[{"movie_id": movie_id}], meta={"trigger": "manual"})
+    meta = {"trigger": "manual"}
+    if include_ratings:
+        meta['include_ratings'] = True
+
+    task = await create_task('refresh_metadata', items=[{"movie_id": movie_id}], meta=meta)
     return {"task_id": task.id, "status": task.status.value}
 
 
@@ -380,17 +371,9 @@ async def scrape_movie_metadata_now(movie_id: int, request: ScrapeNowRequest | N
     """Immediately scrape metadata for a single movie (runs inline and returns result). Accepts optional `title` and `year` overrides to customize the search."""
     tmdb_service = await TMDBService.create_with_db_key(db)
 
-<<<<<<< HEAD
-<<<<<<< HEAD
     if not tmdb_service.is_configured:
-        raise HTTPException(
-            status_code=400,
-            detail="TMDB API key not configured. Please set it in Settings.")
+        raise HTTPException(status_code=400, detail="TMDB API key not configured. Please set it in Settings.")
 
-=======
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
-=======
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
     result = await db.execute(select(Movie).where(Movie.id == movie_id))
     movie = result.scalar_one_or_none()
 
@@ -398,49 +381,17 @@ async def scrape_movie_metadata_now(movie_id: int, request: ScrapeNowRequest | N
         raise HTTPException(status_code=404, detail="Movie not found")
 
     tmdb_result = None
-<<<<<<< HEAD
-<<<<<<< HEAD
     search_method = None
 
-    # Strategy 1: Check for IMDB/TMDB ID in filename
-    ids_from_filename = extract_ids_from_string(movie.file_name)
-
-    if ids_from_filename["imdb_id"]:
-        tmdb_result = await tmdb_service.find_movie_by_imdb(ids_from_filename["imdb_id"])
-        if tmdb_result:
-            search_method = f"IMDB ID from filename ({
-                ids_from_filename['imdb_id']})"
-
-    if not tmdb_result and ids_from_filename["tmdb_id"]:
-        tmdb_result = await tmdb_service.find_movie_by_tmdb_id(ids_from_filename["tmdb_id"])
-        if tmdb_result:
-            search_method = f"TMDB ID from filename ({
-                ids_from_filename['tmdb_id']})"
-
-    # Strategy 2: Check for IMDB/TMDB ID in folder name
-    if not tmdb_result and movie.folder_name:
-        ids_from_folder = extract_ids_from_string(movie.folder_name)
-
-        if ids_from_folder["imdb_id"]:
-            tmdb_result = await tmdb_service.find_movie_by_imdb(ids_from_folder["imdb_id"])
-            if tmdb_result:
-                search_method = f"IMDB ID from folder ({
-                    ids_from_folder['imdb_id']})"
-
-        if not tmdb_result and ids_from_folder["tmdb_id"]:
-            tmdb_result = await tmdb_service.find_movie_by_tmdb_id(ids_from_folder["tmdb_id"])
-            if tmdb_result:
-                search_method = f"TMDB ID from folder ({
-                    ids_from_folder['tmdb_id']})"
-
-    # Strategy 3: Search by folder name (usually more reliable)
-=======
+    # Record attempted strategies for diagnostics
     tried_searches: list[dict] = []
 
     # If user provided an override title/year, try that first
     if request and request.title:
         tried_searches.append({'method': 'override', 'title': request.title, 'year': request.year})
         tmdb_result = await tmdb_service.search_movie_and_get_details(request.title, request.year)
+        if tmdb_result:
+            search_method = f"Override search: '{request.title}' ({request.year or 'no year'})"
 
     # Strategy 1: Check for IMDB/TMDB ID in filename
     if not tmdb_result:
@@ -448,119 +399,59 @@ async def scrape_movie_metadata_now(movie_id: int, request: ScrapeNowRequest | N
         if ids_from_filename.get('imdb_id'):
             tried_searches.append({'method': 'imdb_from_filename', 'imdb_id': ids_from_filename['imdb_id']})
             tmdb_result = await tmdb_service.find_movie_by_imdb(ids_from_filename['imdb_id'])
+            if tmdb_result:
+                search_method = f"IMDB ID from filename ({ids_from_filename['imdb_id']})"
         if not tmdb_result and ids_from_filename.get('tmdb_id'):
             tried_searches.append({'method': 'tmdb_from_filename', 'tmdb_id': ids_from_filename['tmdb_id']})
             tmdb_result = await tmdb_service.find_movie_by_tmdb_id(ids_from_filename['tmdb_id'])
+            if tmdb_result:
+                search_method = f"TMDB ID from filename ({ids_from_filename['tmdb_id']})"
 
-    # Strategy 2: Check folder name
+    # Strategy 2: Check folder name for IDs
     if not tmdb_result and movie.folder_name:
         ids_from_folder = extract_ids_from_string(movie.folder_name)
-=======
-    tried_searches: list[dict] = []
-
-    # If user provided an override title/year, try that first
-    if request and request.title:
-        tried_searches.append({'method': 'override', 'title': request.title, 'year': request.year})
-        tmdb_result = await tmdb_service.search_movie_and_get_details(request.title, request.year)
-
-    # Strategy 1: Check for IMDB/TMDB ID in filename
-    if not tmdb_result:
-        ids_from_filename = extract_ids_from_string(movie.file_name or '')
-        if ids_from_filename.get('imdb_id'):
-            tried_searches.append({'method': 'imdb_from_filename', 'imdb_id': ids_from_filename['imdb_id']})
-            tmdb_result = await tmdb_service.find_movie_by_imdb(ids_from_filename['imdb_id'])
-        if not tmdb_result and ids_from_filename.get('tmdb_id'):
-            tried_searches.append({'method': 'tmdb_from_filename', 'tmdb_id': ids_from_filename['tmdb_id']})
-            tmdb_result = await tmdb_service.find_movie_by_tmdb_id(ids_from_filename['tmdb_id'])
-
-    # Strategy 2: Check folder name
-    if not tmdb_result and movie.folder_name:
-        ids_from_folder = extract_ids_from_string(movie.folder_name)
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
         if ids_from_folder.get('imdb_id'):
             tried_searches.append({'method': 'imdb_from_folder', 'imdb_id': ids_from_folder['imdb_id']})
             tmdb_result = await tmdb_service.find_movie_by_imdb(ids_from_folder['imdb_id'])
+            if tmdb_result:
+                search_method = f"IMDB ID from folder ({ids_from_folder['imdb_id']})"
         if not tmdb_result and ids_from_folder.get('tmdb_id'):
             tried_searches.append({'method': 'tmdb_from_folder', 'tmdb_id': ids_from_folder['tmdb_id']})
             tmdb_result = await tmdb_service.find_movie_by_tmdb_id(ids_from_folder['tmdb_id'])
+            if tmdb_result:
+                search_method = f"TMDB ID from folder ({ids_from_folder['tmdb_id']})"
 
-    # Strategy 3: Search by folder title
-<<<<<<< HEAD
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
-=======
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
+    # Strategy 3: Folder title search
     if not tmdb_result and movie.folder_name:
         folder_title, folder_year = parse_title_from_string(movie.folder_name)
         if folder_title and len(folder_title) > 2:
             tried_searches.append({'method': 'folder_title', 'title': folder_title, 'year': folder_year})
             tmdb_result = await tmdb_service.search_movie_and_get_details(folder_title, folder_year)
-<<<<<<< HEAD
-<<<<<<< HEAD
             if tmdb_result:
-                search_method = f"Folder name search: '{folder_title}' ({
-                    folder_year or 'no year'})"
+                search_method = f"Folder name search: '{folder_title}' ({folder_year or 'no year'})"
 
-    # Strategy 4: Search by stored title (parsed from filename)
+    # Strategy 4: Stored title search
     if not tmdb_result:
-        tmdb_result = await tmdb_service.search_movie_and_get_details(movie.title, movie.year)
+        tried_searches.append({'method': 'stored_title', 'title': movie.title, 'year': movie.year})
+        tmdb_result = await tmdb_service.search_movie_and_get_details(movie.title or '', movie.year)
         if tmdb_result:
-            search_method = f"Title search: '{
-                movie.title}' ({
-                movie.year or 'no year'})"
-
-    # Strategy 5: Try filename with fresh parsing
-=======
-
-    # Strategy 4: Search by stored title
-    if not tmdb_result:
-        tried_searches.append({'method': 'stored_title', 'title': movie.title, 'year': movie.year})
-        tmdb_result = await tmdb_service.search_movie_and_get_details(movie.title or '', movie.year)
-
-    # Strategy 5: Filename parsing fallback
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
-    if not tmdb_result:
-=======
-
-    # Strategy 4: Search by stored title
-    if not tmdb_result:
-        tried_searches.append({'method': 'stored_title', 'title': movie.title, 'year': movie.year})
-        tmdb_result = await tmdb_service.search_movie_and_get_details(movie.title or '', movie.year)
+            search_method = f"Title search: '{movie.title}' ({movie.year or 'no year'})"
 
     # Strategy 5: Filename parsing fallback
     if not tmdb_result:
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
         file_title, file_year = parse_title_from_string(movie.file_name or '')
         if file_title and file_title != movie.title and len(file_title) > 2:
             tried_searches.append({'method': 'parsed_filename', 'title': file_title, 'year': file_year})
             tmdb_result = await tmdb_service.search_movie_and_get_details(file_title, file_year)
-<<<<<<< HEAD
-<<<<<<< HEAD
             if tmdb_result:
-                search_method = f"Filename re-parse: '{file_title}' ({
-                    file_year or 'no year'})"
+                search_method = f"Filename re-parse: '{file_title}' ({file_year or 'no year'})"
 
-    # Strategy 6: Try title without year (broader search)
-=======
-
-    # Strategy 6: Try title without year
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
+    # Strategy 6: Try stored title without year (broader search)
     if not tmdb_result and movie.title:
         tried_searches.append({'method': 'stored_title_no_year', 'title': movie.title})
         tmdb_result = await tmdb_service.search_movie_and_get_details(movie.title, None)
-<<<<<<< HEAD
         if tmdb_result:
             search_method = f"Title without year: '{movie.title}'"
-
-    if not tmdb_result:
-        # Attempt OMDb fallback if an API key is configured
-=======
-=======
-
-    # Strategy 6: Try title without year
-    if not tmdb_result and movie.title:
-        tried_searches.append({'method': 'stored_title_no_year', 'title': movie.title})
-        tmdb_result = await tmdb_service.search_movie_and_get_details(movie.title, None)
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
 
     omdb_ratings = None
     already_has_omdb = movie.imdb_rating is not None or movie.rotten_tomatoes_score is not None or movie.metacritic_score is not None
@@ -584,139 +475,59 @@ async def scrape_movie_metadata_now(movie_id: int, request: ScrapeNowRequest | N
         if tmdb_result.release_date:
             movie.year = tmdb_result.release_date.year
 
-    else:
-        # Try OMDb fallback for ratings only if TMDB failed
-<<<<<<< HEAD
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
-=======
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
-        from app.services.omdb import fetch_omdb_ratings, get_omdb_api_key_from_db
-        api_key = await get_omdb_api_key_from_db(db)
-        if api_key:
-            omdb_ratings = await fetch_omdb_ratings(db, title=movie.title, year=movie.year)
+        # Fetch additional ratings from OMDb (IMDB, Rotten Tomatoes, Metacritic)
+        if tmdb_result.imdb_id and not already_has_omdb:
+            from app.services.omdb import fetch_omdb_ratings
+            omdb_ratings = await fetch_omdb_ratings(db, imdb_id=tmdb_result.imdb_id)
+
             if omdb_ratings:
-<<<<<<< HEAD
-<<<<<<< HEAD
-                # Persist OMDb ratings and mark as scraped (best-effort
-                # fallback)
-=======
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
-=======
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
                 movie.imdb_rating = omdb_ratings.imdb_rating or movie.imdb_rating
                 movie.imdb_votes = omdb_ratings.imdb_votes or movie.imdb_votes
                 movie.rotten_tomatoes_score = omdb_ratings.rotten_tomatoes_score or movie.rotten_tomatoes_score
                 movie.rotten_tomatoes_audience = omdb_ratings.rotten_tomatoes_audience or movie.rotten_tomatoes_audience
                 movie.metacritic_score = omdb_ratings.metacritic_score or movie.metacritic_score
-                movie.scraped = True
-<<<<<<< HEAD
-<<<<<<< HEAD
-                await db.commit()
-                logger.info(
-                    f"OMDb fallback succeeded for movie_id={
-                        movie.id}: applied OMDb ratings")
-                return {
-                    "message": "Metadata updated from OMDb (fallback)",
-                    "omdb_ratings_fetched": True
-                }
 
-        # Provide helpful error message and log it for analysis
-        details = [f"Filename: {movie.file_name}"]
-        if movie.folder_name:
-            details.append(f"Folder: {movie.folder_name}")
-        details.append(f"Parsed title: {movie.title}")
-        if movie.year:
-            details.append(f"Year: {movie.year}")
-        msg = f"Movie not found on TMDB for movie_id={
-            movie.id}. Tried: {
-            '; '.join(details)}"
-        logger.warning(f"Scrape failed for movie_id={movie.id}: {msg}")
-        raise HTTPException(
-            status_code=404,
-            detail=msg
-        )
+        await db.commit()
 
-    # Update movie with TMDB data
-    movie.tmdb_id = tmdb_result.tmdb_id
-    movie.title = tmdb_result.title
-    movie.original_title = tmdb_result.original_title
-    movie.overview = tmdb_result.overview
-    movie.tagline = tmdb_result.tagline
-    movie.release_date = tmdb_result.release_date
-    movie.runtime = tmdb_result.runtime
-    movie.genres = ",".join(tmdb_result.genres) if tmdb_result.genres else None
-    movie.poster_path = tmdb_result.poster_path
-    movie.backdrop_path = tmdb_result.backdrop_path
-    movie.imdb_id = tmdb_result.imdb_id
-    movie.rating = tmdb_result.rating
-    movie.votes = tmdb_result.votes
-    movie.scraped = True
-
-    # If TMDB provides no detected video codec but media file exists, log for
-    # diagnosis
-    if not movie.video_codec:
-        logger.debug(
-            f"After TMDB update, movie_id={
-                movie.id} has no video_codec stored; file_path={
-                movie.file_path}")
-
-    if tmdb_result.release_date:
-        movie.year = tmdb_result.release_date.year
-
-    # Fetch additional ratings from OMDb (IMDB, Rotten Tomatoes, Metacritic)
-    # Skip if movie already has OMDb ratings (to save API calls)
-    omdb_ratings = None
-    already_has_omdb = movie.imdb_rating is not None or movie.rotten_tomatoes_score is not None or movie.metacritic_score is not None
-
-    if tmdb_result.imdb_id and not already_has_omdb:
-        from app.services.omdb import fetch_omdb_ratings
-        omdb_ratings = await fetch_omdb_ratings(db, imdb_id=tmdb_result.imdb_id)
-
-        if omdb_ratings:
-            movie.imdb_rating = omdb_ratings.imdb_rating
-            movie.imdb_votes = omdb_ratings.imdb_votes
-            movie.rotten_tomatoes_score = omdb_ratings.rotten_tomatoes_score
-            movie.rotten_tomatoes_audience = omdb_ratings.rotten_tomatoes_audience
-            movie.metacritic_score = omdb_ratings.metacritic_score
-
-    await db.commit()
-
-    return {
-        "message": "Movie metadata updated",
-        "tmdb_id": tmdb_result.tmdb_id,
-        "title": tmdb_result.title,
-        "search_method": search_method,
-        "omdb_ratings_fetched": omdb_ratings is not None,
-        "omdb_skipped": already_has_omdb
-    }
-=======
-
-    await db.commit()
-
-=======
-
-    await db.commit()
-
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
-    if tmdb_result:
         return {
             "message": "Movie metadata updated",
             "tmdb_id": tmdb_result.tmdb_id,
             "title": tmdb_result.title,
+            "search_method": search_method,
             "omdb_ratings_fetched": omdb_ratings is not None,
             "omdb_skipped": already_has_omdb
         }
 
-    if omdb_ratings:
-        return {"message": "Metadata updated from OMDb (fallback)", "omdb_ratings_fetched": True}
+    # Try OMDb fallback for ratings/metadata if TMDB failed
+    from app.services.omdb import fetch_omdb_ratings, get_omdb_api_key_from_db
+    api_key = await get_omdb_api_key_from_db(db)
+    if api_key:
+        omdb_ratings = await fetch_omdb_ratings(db, title=movie.title, year=movie.year)
+        if omdb_ratings:
+            # Persist OMDb ratings and mark as scraped (best-effort fallback)
+            movie.imdb_rating = omdb_ratings.imdb_rating or movie.imdb_rating
+            movie.imdb_votes = omdb_ratings.imdb_votes or movie.imdb_votes
+            movie.rotten_tomatoes_score = omdb_ratings.rotten_tomatoes_score or movie.rotten_tomatoes_score
+            movie.rotten_tomatoes_audience = omdb_ratings.rotten_tomatoes_audience or movie.rotten_tomatoes_audience
+            movie.metacritic_score = omdb_ratings.metacritic_score or movie.metacritic_score
+            movie.scraped = True
+            await db.commit()
+            logger.info(f"OMDb fallback succeeded for movie_id={movie.id}: applied OMDb ratings")
+            return {
+                "message": "Metadata updated from OMDb (fallback)",
+                "omdb_ratings_fetched": True
+            }
 
-    # Not found anywhere
+    # Not found anywhere — log and return helpful error with attempted searches
+    details = [f"Filename: {movie.file_name}"]
+    if movie.folder_name:
+        details.append(f"Folder: {movie.folder_name}")
+    details.append(f"Parsed title: {movie.title}")
+    if movie.year:
+        details.append(f"Year: {movie.year}")
+
+    logger.warning(f"Scrape failed for movie_id={movie.id}: Tried: {'; '.join(details)}")
     raise HTTPException(status_code=404, detail={"message": "Movie not found on TMDB and OMDb fallback unavailable", "tried": tried_searches})
-<<<<<<< HEAD
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
-=======
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
-
 
 @router.get("/{movie_id}/rename-preview")
 async def preview_rename(
@@ -1583,8 +1394,8 @@ async def analyze_movies_batch(
 
 
 @router.post("/refresh-batch")
-async def refresh_movies_batch(request: MovieIdsRequest, db: AsyncSession = Depends(get_db)):
-    """Enqueue refresh metadata for a batch of movies"""
+async def refresh_movies_batch(request: MovieIdsRequest, include_ratings: bool = False, db: AsyncSession = Depends(get_db)):
+    """Enqueue refresh metadata for a batch of movies. If `include_ratings` is true, the worker will also fetch OMDb ratings for each movie."""
     if not request.movie_ids:
         raise HTTPException(status_code=400, detail="movie_ids required")
 
@@ -1594,7 +1405,11 @@ async def refresh_movies_batch(request: MovieIdsRequest, db: AsyncSession = Depe
     for mid in request.movie_ids:
         items.append({"movie_id": mid})
 
-    task = await create_task('refresh_metadata', items=items, meta={"batch": True})
+    meta = {"batch": True}
+    if include_ratings:
+        meta['include_ratings'] = True
+
+    task = await create_task('refresh_metadata', items=items, meta=meta)
     return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
 <<<<<<< HEAD
 >>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))

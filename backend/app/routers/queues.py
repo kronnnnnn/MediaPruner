@@ -71,10 +71,6 @@ async def api_ongoing():
     # Return short summary - implemented by listing tasks and filtering here
     tasks = await list_tasks(limit=10)
     return tasks
-<<<<<<< HEAD
-<<<<<<< HEAD
-
-
 @router.get("/worker")
 async def api_worker_status(request: Request):
     """Return worker running status."""
@@ -110,11 +106,7 @@ async def api_worker_run_once(request: Request):
 
 
 @router.get('/stream')
-<<<<<<< HEAD
 async def api_queues_stream(request: Request):
-=======
-async def api_queues_stream():
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
     """Server-sent events stream of queue changes (init + task_update events)."""
     # subscribe
     q = subscribe_events()
@@ -150,7 +142,7 @@ async def api_queues_stream():
                     else:
                         now = asyncio.get_event_loop().time()
                         if now - last_send >= ping_interval:
-                            # send a ping event
+                            # send a ping comment (some clients ignore comments, so we send a ping event)
                             yield f"event: ping\ndata: {{}}\n\n"
                             last_send = now
                         # small sleep to avoid tight loop
@@ -160,6 +152,7 @@ async def api_queues_stream():
         except asyncio.CancelledError:
             # Client disconnected
             logger.info(f"SSE client disconnected: {client_info}")
+            pass
         finally:
             unsubscribe_events(q)
 

@@ -720,6 +720,10 @@ async def scan_all_libraries(db: AsyncSession = Depends(get_db)):
             analyze_task = await create_task('analyze', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
             refresh_task = await create_task('refresh_metadata', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
             sync_task = await create_task('sync_watch_history', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
+<<<<<<< HEAD
+=======
+
+>>>>>>> cc0c772 (chore(implement-queue): finalize queue feature & related fixes; add tests and build changes)
             logger.info(f"Enqueued post-scan tasks for {len(new_movie_ids)} movies: analyze={analyze_task.id}, refresh={refresh_task.id}, sync={sync_task.id}")
     except Exception:
         pass

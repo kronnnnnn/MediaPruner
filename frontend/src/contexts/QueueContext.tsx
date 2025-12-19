@@ -37,7 +37,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const [tasks, setTasks] = useState<QueueTask[]>([])
   const [connected, setConnected] = useState(false)
 
-<<<<<<< HEAD
   // Try an initial HTTP fetch as a fallback in case the SSE 'init' event is missed/delivered before listeners are attached
   const fetchInitial = async (limit = 500) => {
     try {
@@ -45,23 +44,18 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       const res = await fetch(`/api/queues/tasks?limit=${limit}`)
       if (res.ok) {
         const data = await res.json()
-=======
-  useEffect(() => {
-    const es = new EventSource('/api/queues/stream')
-
-    es.addEventListener('open', () => {
-      setConnected(true)
-    })
-
-    es.addEventListener('error', () => {
-      // If connection closed or error, update connection state
-      setConnected(false)
-    })
-
-    es.addEventListener('init', (ev: MessageEvent) => {
-      try {
-        const data = JSON.parse((ev as any).data)
+        setTasks(data as QueueTask[])
+        console.debug('[queues] Loaded initial snapshot via HTTP', data.length)
 >>>>>>> d2f6649 (fix(frontend): resolve TS unused-import errors and remove unused handler param)
+=======
+  // Try an initial HTTP fetch as a fallback in case the SSE 'init' event is missed/delivered before listeners are attached
+  const fetchInitial = async (limit = 500) => {
+    try {
+      console.debug('[queues] Fetching initial snapshot via HTTP /api/queues/tasks', { limit })
+      const res = await fetch(`/api/queues/tasks?limit=${limit}`)
+      if (res.ok) {
+        const data = await res.json()
+>>>>>>> cc0c772 (chore(implement-queue): finalize queue feature & related fixes; add tests and build changes)
         setTasks(data as QueueTask[])
         console.debug('[queues] Loaded initial snapshot via HTTP', data.length)
       } else {
@@ -191,7 +185,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       // Remove global listeners in case component unmounts
       if (onFocus) window.removeEventListener('focus', onFocus)
       if (onVisibility) window.removeEventListener('visibilitychange', onVisibility)
-
+    }
+  }, [])
 
   return (
     <QueueContext.Provider value={{ tasks, connected, refresh }}>

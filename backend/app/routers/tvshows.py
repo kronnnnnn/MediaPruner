@@ -337,17 +337,7 @@ async def scrape_tvshow_metadata(
     provider: Optional[str] = Query(None, pattern="^(tmdb|omdb)$", description="Force a specific provider (tmdb or omdb)"),
     request_body: Any = Body(None),
     db: AsyncSession = Depends(get_db)
-<<<<<<< HEAD
 ):
-=======
-):=======
-    show_id: int,
-    provider: Optional[str] = Query(None, pattern="^(tmdb|omdb)$", description="Force a specific provider (tmdb or omdb)"),
-    request_body: Any = Body(None),
-    db: AsyncSession = Depends(get_db)
-):
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
     """Scrape metadata for a TV show and its episodes from TMDB or OMDb
 
     Args:

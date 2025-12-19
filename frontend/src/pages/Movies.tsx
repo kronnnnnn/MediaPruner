@@ -53,11 +53,7 @@ export default function Movies() {
   }, [])
 
   const queryClient = useQueryClient()
-<<<<<<< HEAD
-  const { messageState, hideMessage } = useMessageModal()
-=======
   const { messageState, showMessage, hideMessage } = useMessageModal()
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
   const { showToast } = useToast()
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(() => {
@@ -688,23 +684,15 @@ export default function Movies() {
           // Keep the dialog open while running so users can see progress and cancel
           onConfirmAll: async () => {
             const allIds = await getAllMatchingMovieIds()
-<<<<<<< HEAD
-            if (actionName === 'Refresh Metadata' || actionName === 'Analyze' || actionName === 'Sync Watch History' || actionName === 'Fetch Ratings') {
-=======
-            if (actionName === 'Refresh Metadata' || actionName === 'Analyze' || actionName === 'Sync Watch History') {
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
+            if (['Refresh Metadata', 'Analyze', 'Sync Watch History', 'Fetch Ratings'].includes(actionName)) {
               // Enqueue a single batch task
               const resp = actionName === 'Refresh Metadata'
                 ? await moviesApi.refreshMoviesBatch(allIds)
                 : actionName === 'Analyze'
                   ? await moviesApi.analyzeMoviesBatch(allIds)
-<<<<<<< HEAD
                   : actionName === 'Fetch Ratings'
                     ? await moviesApi.refreshMoviesBatch(allIds, true)
                     : await moviesApi.syncWatchHistoryBatch(allIds)
-=======
-                  : await moviesApi.syncWatchHistoryBatch(allIds)
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
               // Use a toast not modal for confirmations
               showToast(`${actionName} Enqueued`, `Task ${resp.data.task_id} enqueued for ${allIds.length} movies.`, 'info')
               setScopeModal(s => ({ ...s, isOpen: false }))
@@ -714,22 +702,14 @@ export default function Movies() {
             processIdsWithProgress(allIds, actionName)
           },
           onConfirmPage: () => {
-<<<<<<< HEAD
-            if (actionName === 'Refresh Metadata' || actionName === 'Analyze' || actionName === 'Sync Watch History' || actionName === 'Fetch Ratings') {
-=======
-            if (actionName === 'Refresh Metadata' || actionName === 'Analyze' || actionName === 'Sync Watch History') {
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
+            if (['Refresh Metadata', 'Analyze', 'Sync Watch History', 'Fetch Ratings'].includes(actionName)) {
               const resp = actionName === 'Refresh Metadata'
                 ? moviesApi.refreshMoviesBatch(ids)
                 : actionName === 'Analyze'
                   ? moviesApi.analyzeMoviesBatch(ids)
-<<<<<<< HEAD
                   : actionName === 'Fetch Ratings'
                     ? moviesApi.refreshMoviesBatch(ids, true)
                     : moviesApi.syncWatchHistoryBatch(ids)
-=======
-                  : moviesApi.syncWatchHistoryBatch(ids)
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
               resp.then(r => showToast(`${actionName} Enqueued`, `Task ${r.data.task_id} enqueued for ${ids.length} movies.`, 'info'))
               setScopeModal(s => ({ ...s, isOpen: false }))
               return

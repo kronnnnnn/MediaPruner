@@ -120,12 +120,11 @@ async def init_db():
     # Run migrations for any new columns
     await migrate_db()
 
-    # Ensure queue tables exist (migration added this)
+    # Ensure queue tables exist and normalize existing values
     async with engine.begin() as conn:
         await _ensure_queue_tables(conn)
 
-    # Normalize any existing media_type values to lowercase to match Enum values (e.g., 'TV' -> 'tv')
-    async with engine.begin() as conn:
+        # Normalize any existing media_type values to lowercase to match Enum values (e.g., 'TV' -> 'tv')
         try:
             await conn.execute(text("UPDATE library_paths SET media_type = LOWER(media_type) WHERE media_type IS NOT NULL AND media_type != LOWER(media_type)"))
         except Exception:

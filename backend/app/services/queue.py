@@ -358,54 +358,62 @@ async def cancel_task(task_id: int):
         return {"id": task_id, "status": QueueStatus.CANCELED.value if hasattr(QueueStatus.CANCELED, 'value') else str(QueueStatus.CANCELED)}
 
 
-async def clear_queued_tasks(older_than_seconds: int | None = None):
-    """Clear queued or running tasks and cancel their items.
+async def clear_queued_tasks(scope: str = 'current', older_than_seconds: int | None = None):
+    """Permanently delete tasks and their items by scope.
 
-    If older_than_seconds is provided, only tasks with started_at older than that (or tasks created_at older than that when not started) are affected.
-    Returns a dict with counts.
+    scope: 'current' deletes queued/running tasks; 'history' deletes completed/failed/canceled/deleted; 'all' deletes both.
+    If older_than_seconds is provided, only tasks older than the cutoff are affected.
+    This performs irreversible DELETE operations and returns counts of deleted rows.
     """
-    from sqlalchemy import update, select, and_, or_
+    from sqlalchemy import text
     from datetime import datetime, timedelta
 
+    # Normalize scope
+    s = (scope or 'current').lower()
+    if s not in ('current', 'history', 'all'):
+        raise ValueError('Invalid scope')
+
     async with database.async_session() as session:
-        # Build where clause
-        where_clause = QueueTask.status.in_([QueueStatus.QUEUED, QueueStatus.RUNNING])
+        # Build a raw SQL where clause depending on scope
+        if s == 'current':
+            status_clause = "LOWER(status) IN ('queued','running')"
+        elif s == 'history':
+            status_clause = "LOWER(status) IN ('completed','failed','canceled','deleted')"
+        else:
+            status_clause = "LOWER(status) IN ('queued','running','completed','failed','canceled','deleted')"
+
+        where_parts = [status_clause]
+        params = {}
         if older_than_seconds is not None:
             cutoff = datetime.utcnow() - timedelta(seconds=older_than_seconds)
-            # If task started_at exists, compare started_at, else created_at
-            where_clause = and_(
-                where_clause,
-                or_(
-                    and_(QueueTask.started_at != None, QueueTask.started_at < cutoff),
-                    QueueTask.created_at < cutoff,
-                ),
-            )
+            # Compare started_at if present else created_at
+            where_parts.append("(started_at IS NOT NULL AND started_at < :cutoff OR created_at < :cutoff)")
+            params['cutoff'] = cutoff
 
-        q = await session.execute(select(QueueTask).where(where_clause))
-        tasks = q.scalars().all()
-        if not tasks:
+        where_sql = ' AND '.join([f'({p})' for p in where_parts])
+        sel_sql = text(f"SELECT id FROM queue_tasks WHERE {where_sql}")
+        res = await session.execute(sel_sql, params)
+        ids = [r[0] for r in res.fetchall()]
+        if not ids:
             return {"tasks_cleared": 0, "items_affected": 0}
 
-        ids = [t.id for t in tasks]
+        ids_list = ','.join([str(i) for i in ids])
 
-        await session.execute(
-            update(QueueTask).where(QueueTask.id.in_(ids)).values(status=QueueStatus.DELETED)
-        )
-        res = await session.execute(
-            update(QueueItem)
-            .where(QueueItem.task_id.in_(ids))
-            .where(QueueItem.status.in_([QueueStatus.QUEUED, QueueStatus.RUNNING]))
-            .values(status=QueueStatus.CANCELED)
-        )
+        # Delete items first, then tasks (hard purge)
+        del_items_res = await session.execute(text(f"DELETE FROM queue_items WHERE task_id IN ({ids_list})"))
+        items_deleted = getattr(del_items_res, 'rowcount', None)
+        del_tasks_res = await session.execute(text(f"DELETE FROM queue_tasks WHERE id IN ({ids_list})"))
+        tasks_deleted = getattr(del_tasks_res, 'rowcount', None) or len(ids)
+
         await session.commit()
-        rowcount = getattr(res, 'rowcount', None)
-        # Publish update for affected tasks so clients refresh
+
+        # Broadcast a fresh task list so SSE clients refresh their snapshot
         try:
-            for tid in ids:
-                await publish_task_update(tid)
+            await publish_task_list()
         except Exception:
-            logger.exception("Failed to publish updates after clearing tasks")
-        return {"tasks_cleared": len(ids), "items_affected": rowcount}
+            logger.exception("Failed to publish task list after purge")
+
+        return {"tasks_cleared": tasks_deleted, "items_affected": items_deleted}
 
 
 class QueueWorker:
@@ -1076,6 +1084,8 @@ class QueueWorker:
                                     m.imdb_id = tmdb_result.imdb_id
                                     m.scraped = True
                                     item.result = json.dumps({'updated_from': 'tmdb'})
+=======
+>>>>>>> cc0c772 (chore(implement-queue): finalize queue feature & related fixes; add tests and build changes)
                                     item.status = QueueStatus.COMPLETED
                                     task.completed_items = (task.completed_items or 0) + 1
                                 else:
@@ -1141,7 +1151,42 @@ class QueueWorker:
                                             item.status = QueueStatus.COMPLETED
                                             task.completed_items = (task.completed_items or 0) + 1
                                     else:
-                                        # No OMDb provider configured - treat as no-op
+                                        # No OMDb provider configured - if include_ratings requested, try fetch_omdb_ratings directly (e.g., mocked or fallback)
+                                        try:
+                                            include_ratings = False
+                                            if task.meta and isinstance(task.meta, str):
+                                                try:
+                                                    meta_parsed = json.loads(task.meta)
+                                                except Exception:
+                                                    meta_parsed = None
+                                            elif task.meta:
+                                                meta_parsed = task.meta
+                                            else:
+                                                meta_parsed = None
+
+                                            if meta_parsed and isinstance(meta_parsed, dict) and meta_parsed.get('include_ratings'):
+                                                include_ratings = True
+                                        except Exception:
+                                            include_ratings = False
+
+                                        if include_ratings:
+                                            try:
+                                                omdb = await fetch_omdb_ratings(session, imdb_id=m.imdb_id, title=m.title, year=m.year)
+                                                if omdb:
+                                                    m.imdb_rating = omdb.imdb_rating or m.imdb_rating
+                                                    m.imdb_votes = omdb.imdb_votes or m.imdb_votes
+                                                    m.rotten_tomatoes_score = omdb.rotten_tomatoes_score or m.rotten_tomatoes_score
+                                                    m.rotten_tomatoes_audience = omdb.rotten_tomatoes_audience or m.rotten_tomatoes_audience
+                                                    m.metacritic_score = omdb.metacritic_score or m.metacritic_score
+                                                    m.scraped = True
+                                                    item.result = json.dumps({'updated_from': 'omdb'})
+                                                    item.status = QueueStatus.COMPLETED
+                                                    task.completed_items = (task.completed_items or 0) + 1
+                                                    # ratings applied, continue
+                                            except Exception:
+                                                logger.exception(f"Failed to fetch OMDb ratings for movie_id={m.id} (no provider)")
+
+                                        # No provider or no include_ratings - treat as no-op
                                         item.result = json.dumps({'note': 'no provider available'})
                                         item.status = QueueStatus.COMPLETED
                                         task.completed_items = (task.completed_items or 0) + 1

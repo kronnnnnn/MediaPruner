@@ -37,11 +37,7 @@ export default function TVShowDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-<<<<<<< HEAD
-  const { messageState, hideMessage } = useMessageModal()
-=======
   const { messageState, showMessage, hideMessage } = useMessageModal()
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
   const { showToast } = useToast()
   const showId = parseInt(id || '0')
 
@@ -289,11 +285,7 @@ export default function TVShowDetailPage() {
 
       setShowSearchModal(false)
     } catch (err: any) {
-<<<<<<< HEAD
-      showToast('Scrape Failed', err?.response?.data?.detail || 'Failed to enqueue scrape', 'error')
-=======
       showMessage('Scrape Failed', err?.response?.data?.detail || 'Failed to enqueue scrape', 'error')
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
     }
   }
 

@@ -113,11 +113,7 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
       } else {
         setShowSearchEditModal(false)
         setModalError(null)
-<<<<<<< HEAD
         showToast('Metadata refresh failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
-=======
-        showMessage('Metadata refresh failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
       }
     }
   })
@@ -156,11 +152,7 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
         return
       }
 
-<<<<<<< HEAD
       showToast('Metadata refresh failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
-=======
-      showMessage('Metadata refresh failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
     }
   })
 
