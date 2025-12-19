@@ -136,17 +136,19 @@ async def verify_tmdb_api_key(
     """Verify if the provided TMDB API key is valid by making a test request to TMDB."""
     # Use the provided key for verification
     tmdb_service = TMDBService(api_key=data.api_key)
+    results = None
     try:
         # Try searching for a well-known movie (Star Wars)
         results = await tmdb_service.search_movie("Star Wars", year=1977)
-        if results and len(results) > 0:
-            return {"valid": True}
-        else:
-            return {"valid": False}
     except Exception:
-        return {"valid": False}
+        pass
     finally:
         await tmdb_service.close()
+    
+    if results and len(results) > 0:
+        return {"valid": True}
+    else:
+        return {"valid": False}
 
 
 # OMDb API Key Endpoints
@@ -226,7 +228,7 @@ async def verify_omdb_api_key(
         # Try fetching ratings for a well-known movie (Star Wars - tt0076759)
         result = await omdb_service.get_ratings_by_imdb_id("tt0076759")
     except Exception:
-        return {"valid": False}
+        pass
     finally:
         await omdb_service.close()
     
