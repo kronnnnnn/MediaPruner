@@ -1,11 +1,28 @@
 import { Search, RefreshCw, Bell, Sun, Moon } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useTheme } from '../contexts/ThemeContext'
 import logger from '../services/logger'
+import { useNotifications } from '../contexts/NotificationContext'
+import { useNavigate } from 'react-router-dom'
 
 export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('')
   const { theme, toggleTheme } = useTheme()
+  const { notifications, markRead, clearAll } = useNotifications()
+  const [showNotifications, setShowNotifications] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement | null>(null)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!dropdownRef.current) return
+      if (!dropdownRef.current.contains(e.target as Node)) setShowNotifications(false)
+    }
+    document.addEventListener('click', onDoc)
+    return () => document.removeEventListener('click', onDoc)
+  }, [])
+
+  const unreadCount = notifications.filter(n => !n.read).length
 
   const handleThemeToggle = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark'
@@ -43,12 +60,51 @@ export default function Navbar() {
           >
             <RefreshCw className="w-5 h-5" />
           </button>
-          <button 
-            className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-            title="Notifications"
-          >
-            <Bell className="w-5 h-5" />
-          </button>
+          <div className="relative">
+            <button 
+              className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center gap-1"
+              title="Notifications"
+              onClick={() => setShowNotifications(s => !s)}
+            >
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && <span className="ml-1 text-xs bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center">{unreadCount}</span>}
+            </button>
+
+            {showNotifications && (
+              <div ref={dropdownRef} className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 overflow-hidden">
+                <div className="p-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                  <div className="text-sm font-semibold">Notifications</div>
+                  <div className="text-xs text-gray-500">
+                    <button onClick={() => clearAll()} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded">Clear</button>
+                  </div>
+                </div>
+                <div className="max-h-64 overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <div className="p-4 text-sm text-gray-500">No notifications</div>
+                  ) : notifications.map(n => (
+                    <div key={n.id} onClick={() => {
+                      markRead(n.id)
+                      // If the notification has a task meta, navigate to queues and open it via hash
+                      try {
+                        if (n.meta && n.meta.task_id) {
+                          setShowNotifications(false)
+                          navigate(`/queues#task-${n.meta.task_id}`)
+                        }
+                      } catch (e) {
+                        // ignore
+                      }
+                    }} className={`p-3 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${n.read ? 'opacity-60' : ''}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium text-gray-900 dark:text-white">{n.title}</div>
+                        <div className="text-xs text-gray-400">{new Date(n.timestamp).toLocaleString()}</div>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">{n.message}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>

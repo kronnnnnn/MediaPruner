@@ -17,7 +17,7 @@ class LibraryPath(Base):
     id = Column(Integer, primary_key=True, index=True)
     path = Column(String(1024), nullable=False, unique=True)
     name = Column(String(255), nullable=False)
-    media_type = Column(SQLEnum(MediaType), nullable=False)
+    media_type = Column(SQLEnum(MediaType, native_enum=False, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(
         DateTime,
@@ -318,3 +318,46 @@ class LogEntry(Base):
     function = Column(String(255))
     line_number = Column(Integer)
     exception = Column(Text)  # Stack trace if an exception occurred
+
+
+class QueueStatus(enum.Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    CANCELED = "canceled"
+    DELETED = "deleted"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class QueueTask(Base):
+    __tablename__ = "queue_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    type = Column(String(64), nullable=False, index=True)
+    status = Column(SQLEnum(QueueStatus, native_enum=False, values_callable=lambda obj: [e.value for e in obj]), default=QueueStatus.QUEUED, index=True)
+    created_by = Column(String(128), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    canceled_at = Column(DateTime, nullable=True)
+    total_items = Column(Integer, default=0)
+    completed_items = Column(Integer, default=0)
+    meta = Column(Text, nullable=True)
+
+    # Relationships
+    items = relationship("QueueItem", back_populates="task", cascade="all, delete-orphan")
+
+
+class QueueItem(Base):
+    __tablename__ = "queue_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("queue_tasks.id"), nullable=False, index=True)
+    index = Column(Integer, nullable=False, default=0)
+    status = Column(SQLEnum(QueueStatus, native_enum=False, values_callable=lambda obj: [e.value for e in obj]), default=QueueStatus.QUEUED, index=True)
+    payload = Column(Text, nullable=True)  # JSON payload
+    result = Column(Text, nullable=True)   # JSON result or error
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+
+    task = relationship("QueueTask", back_populates="items")

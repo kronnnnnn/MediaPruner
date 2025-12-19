@@ -10,10 +10,13 @@ from app.config import settings
 from app.database import init_db
 from app.routers import movies, tvshows, library, health, settings as settings_router, tautulli
 from app.routers import plex
+from app.routers import queues as queues_router
 from app.services.logging_service import setup_database_logging
+from app.services.queue import QueueWorker
 # Import models to ensure all tables are registered with SQLAlchemy
 from app import models  # noqa: F401
 
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -23,8 +26,24 @@ async def lifespan(app: FastAPI):
     # Initialize database logging
     log_level = logging.DEBUG if settings.debug else logging.INFO
     setup_database_logging(level=log_level)
+
+    # Recover any stale RUNNING tasks left from a previous crash
+    from app.services.queue import clear_queued_tasks
+    try:
+        recovered = await clear_queued_tasks(older_than_seconds=60 * 30)  # clear tasks older than 30m
+        if recovered and recovered.get('tasks_cleared'):
+            logger.warning(f"Recovered and cleared {recovered['tasks_cleared']} stale queue task(s) on startup")
+    except Exception as e:
+        logger.exception(f"Failed to recover stale tasks on startup: {e}")
+
+    # Start queue worker
+    app.state.queue_worker = QueueWorker()
+    await app.state.queue_worker.start()
+
     yield
-    # Shutdown: cleanup if needed
+
+    # Shutdown: stop worker
+    await app.state.queue_worker.stop()
 
 
 app = FastAPI(
@@ -59,6 +78,7 @@ app.include_router(
     prefix="/api/integrations/tautulli",
     tags=["Tautulli"])
 app.include_router(plex.router, prefix="/api/integrations/plex", tags=["Plex"])
+app.include_router(queues_router.router, prefix="/api/queues", tags=["Queues"])
 
 # Serve static files in production (when frontend is built)
 static_dir = Path(__file__).parent.parent / "static"

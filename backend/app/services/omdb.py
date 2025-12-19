@@ -70,7 +70,8 @@ class OMDbService:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.client = httpx.AsyncClient(timeout=30.0)
-
+        # Diagnostics: remember last request params
+        self.last_request_params = None
     async def close(self):
         await self.client.aclose()
 
@@ -97,15 +98,15 @@ class OMDbService:
             }
             if year:
                 params['y'] = str(year)
-
+            
+            self.last_request_params = params
             response = await self.client.get(OMDB_BASE_URL, params=params)
+            logger.debug(f"OMDb request params: {params}")
             response.raise_for_status()
             data = response.json()
 
             if data.get('Response') == 'False':
-                logger.warning(
-                    f"OMDb: TV show not found for '{title}' ({year}): {
-                        data.get('Error')}")
+                logger.warning(f"OMDb: TV show not found for '{title}' ({year}): {data.get('Error')} (params: {params})")
                 return None
 
             return self._parse_tvshow(data)
@@ -135,22 +136,19 @@ class OMDbService:
             imdb_id = f'tt{imdb_id}'
 
         try:
-            response = await self.client.get(
-                OMDB_BASE_URL,
-                params={
-                    'apikey': self.api_key,
-                    'i': imdb_id,
-                    'type': 'series',
-                    'plot': 'full'
-                }
-            )
+            params = {
+                'apikey': self.api_key,
+                'i': imdb_id,
+                'type': 'series',
+                'plot': 'full'
+            }
+            self.last_request_params = params
+            response = await self.client.get(OMDB_BASE_URL, params=params)
             response.raise_for_status()
             data = response.json()
 
             if data.get('Response') == 'False':
-                logger.warning(
-                    f"OMDb: TV show not found for {imdb_id}: {
-                        data.get('Error')}")
+                logger.warning(f"OMDb: TV show not found for '{title}' ({year}): {data.get('Error')} (params: {params})")
                 return None
 
             return self._parse_tvshow(data)
@@ -183,21 +181,18 @@ class OMDbService:
             imdb_id = f'tt{imdb_id}'
 
         try:
-            response = await self.client.get(
-                OMDB_BASE_URL,
-                params={
-                    'apikey': self.api_key,
-                    'i': imdb_id,
-                    'Season': str(season_number)
-                }
-            )
+            params = {
+                'apikey': self.api_key,
+                'i': imdb_id,
+                'Season': str(season_number)
+            }
+            self.last_request_params = params
+            response = await self.client.get(OMDB_BASE_URL, params=params)
             response.raise_for_status()
             data = response.json()
 
             if data.get('Response') == 'False':
-                logger.warning(
-                    f"OMDb: Season {season_number} not found for {imdb_id}: {
-                        data.get('Error')}")
+                logger.warning(f"OMDb: Season {season_number} not found for {imdb_id}: {data.get('Error')}")
                 return []
 
             episodes = []
@@ -282,21 +277,18 @@ class OMDbService:
             imdb_id = f'tt{imdb_id}'
 
         try:
-            response = await self.client.get(
-                OMDB_BASE_URL,
-                params={
-                    'apikey': self.api_key,
-                    'i': imdb_id,
-                    'plot': 'short'
-                }
-            )
+            params = {
+                'apikey': self.api_key,
+                'i': imdb_id,
+                'plot': 'short'
+            }
+            self.last_request_params = params
+            response = await self.client.get(OMDB_BASE_URL, params=params)
             response.raise_for_status()
             data = response.json()
 
             if data.get('Response') == 'False':
-                logger.warning(
-                    f"OMDb: Movie not found for {imdb_id}: {
-                        data.get('Error')}")
+                logger.warning(f"OMDb: TV show not found for {imdb_id}: {data.get('Error')} (params: {params})")
                 return None
 
             return self._parse_ratings(data)
@@ -332,14 +324,15 @@ class OMDbService:
             if year:
                 params['y'] = str(year)
 
+            # Record params for diagnostics
+            self.last_request_params = params
             response = await self.client.get(OMDB_BASE_URL, params=params)
             response.raise_for_status()
             data = response.json()
 
             if data.get('Response') == 'False':
-                logger.warning(
-                    f"OMDb: Movie not found for '{title}' ({year}): {
-                        data.get('Error')}")
+                logger.warning(f"OMDb: Movie not found for '{title}' ({year}): {data.get('Error')} (params: {params})")
+                logger.debug(f"OMDb request params: {params}")
                 return None
 
             return self._parse_ratings(data)

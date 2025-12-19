@@ -7,8 +7,10 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
+      // Use explicit 127.0.0.1 to avoid IPv6/localhost resolution issues that can
+      // cause proxy connection refusals when the backend binds to IPv4 only.
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
     },
@@ -20,5 +22,19 @@ export default defineConfig({
   // Optimize dependency pre-bundling
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'],
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('lucide-react') || id.includes('@tanstack') || id.includes('react') || id.includes('react-dom') || id.includes('axios')) {
+              return 'vendor'
+            }
+            return 'vendor'
+          }
+        }
+      }
+    }
   },
 })

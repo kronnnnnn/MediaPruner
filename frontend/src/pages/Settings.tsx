@@ -5,13 +5,15 @@ import { libraryApi, settingsApi, MediaPath } from '../services/api'
 import ConfirmDialog from '../components/ConfirmDialog'
 import FolderBrowser from '../components/FolderBrowser'
 import MessageModal, { useMessageModal } from '../components/MessageModal'
+import { useToast } from '../contexts/ToastContext'
 import logger from '../services/logger'
 
 type SettingsTab = 'library' | 'api' | 'logs'
 
 export default function Settings() {
   const queryClient = useQueryClient()
-  const { messageState, showMessage, hideMessage } = useMessageModal()
+  const { messageState, hideMessage } = useMessageModal()
+  const { showToast } = useToast()
 
   // Log page view on mount
   useEffect(() => {
@@ -92,7 +94,7 @@ export default function Settings() {
       await queryClient.invalidateQueries({ queryKey: ['library-stats'] })
       // Show success message
       const result = data.data
-      showMessage(
+      showToast(
         'Scan Complete',
         `Found ${result.movies_found} movies, ${result.tvshows_found} TV shows, ${result.episodes_found} episodes.`,
         'success'
@@ -126,7 +128,7 @@ export default function Settings() {
     },
     onError: (error: any) => {
       console.error('Remove path error:', error)
-      showMessage('Error', error?.response?.data?.detail || 'Failed to remove path', 'error')
+      showToast('Error', error?.response?.data?.detail || 'Failed to remove path', 'error')
     },
   })
 
@@ -299,7 +301,7 @@ export default function Settings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['logs'] })
       queryClient.invalidateQueries({ queryKey: ['log-stats'] })
-      showMessage('Logs Cleared', 'Application logs have been cleared.', 'success')
+      showToast('Logs Cleared', 'Application logs have been cleared.', 'success')
     },
   })
 

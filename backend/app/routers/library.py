@@ -4,11 +4,15 @@ from sqlalchemy import select, func
 from pathlib import Path
 import os
 import string
+import logging
 
 from app.database import get_db
 from app.models import LibraryPath, Movie, TVShow, Episode, Season, MediaType
 from app.schemas import LibraryPathCreate, LibraryPathResponse, ScanResult
 from app.services.scanner import scan_movie_directory, scan_tvshow_directory, is_video_file, find_associated_subtitle
+from app.services.queue import create_task
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -152,9 +156,61 @@ async def browse_directory(path: str = Query(default="")):
 
 @router.get("/paths", response_model=list[LibraryPathResponse])
 async def get_library_paths(db: AsyncSession = Depends(get_db)):
-    """Get all configured library paths"""
-    result = await db.execute(select(LibraryPath))
-    paths = result.scalars().all()
+
+    """Get all configured library paths
+
+    NOTE: Some older rows may store the media_type as lowercase strings ('movie' / 'tv') which
+    can raise a LookupError when SQLAlchemy attempts to convert to the `MediaType` Enum. To
+    be robust we attempt the ORM query first and fall back to a raw table select and manual
+    normalization when that fails.
+    """
+    try:
+        result = await db.execute(select(LibraryPath))
+        paths = result.scalars().all()
+    except LookupError:
+        # Fallback to raw SQL select so we don't trigger SQLAlchemy Enum processing on corrupt
+        # rows that use lowercase values like 'tv'. We execute a plain text query and work with
+        # raw tuples/strings.
+        from sqlalchemy import text as _text
+
+        result = await db.execute(_text('SELECT id, path, media_type, name, created_at FROM library_paths'))
+        rows = result.fetchall()
+
+        responses = []
+        for r in rows:
+            _id, _path, _media_type, _name, _created_at = r
+
+            mt_norm = (_media_type.upper() if isinstance(_media_type, str) else 'MOVIE')
+            try:
+                media_type_value = MediaType[mt_norm]
+            except Exception:
+                media_type_value = MediaType.MOVIE
+
+            path_obj = Path(_path)
+            exists = path_obj.exists()
+
+            if media_type_value == MediaType.MOVIE:
+                count_result = await db.execute(
+                    select(func.count(Movie.id)).where(Movie.library_path_id == _id)
+                )
+                file_count = count_result.scalar() or 0
+            else:
+                count_result = await db.execute(
+                    select(func.count(Episode.id)).join(TVShow).where(TVShow.library_path_id == _id)
+                )
+                file_count = count_result.scalar() or 0
+
+            responses.append(LibraryPathResponse(
+                id=_id,
+                path=_path,
+                media_type=media_type_value.value,
+                name=_name,
+                exists=exists,
+                file_count=file_count,
+                created_at=_created_at
+            ))
+
+        return responses
 
     responses = []
     for path in paths:
@@ -198,14 +254,12 @@ async def add_library_path(
     if not path_obj.exists():
         raise HTTPException(
             status_code=400,
-            detail=f"Path does not exist: {
-                library_path.path}")
+            detail=f"Path does not exist: {library_path.path}")
 
     if not path_obj.is_dir():
         raise HTTPException(
             status_code=400,
-            detail=f"Path is not a directory: {
-                library_path.path}")
+            detail=f"Path is not a directory: {library_path.path}")
 
     # Check for duplicates
     existing = await db.execute(
@@ -230,6 +284,13 @@ async def add_library_path(
     await db.commit()
     await db.refresh(db_path)
 
+    # Enqueue a scan task for this path so the new folder is processed by the central queue
+    try:
+        task = await create_task('scan', items=[{"path": db_path.path, "media_type": db_path.media_type.value}], meta={"trigger": "folder_add"})
+        logger.info(f"Enqueued scan task {task.id} for new library path {db_path.id}")
+    except Exception as e:
+        logger.exception("Failed to enqueue scan task for new library path %s: %s", db_path.id, e)
+
     return LibraryPathResponse(
         id=db_path.id,
         path=db_path.path,
@@ -237,17 +298,57 @@ async def add_library_path(
         name=db_path.name,
         exists=True,
         file_count=file_count,
-        created_at=db_path.created_at
+        created_at=db_path.created_at,
+        enqueued_task_id=task.id if task else None
     )
 
 
 @router.delete("/paths/{path_id}")
-async def remove_library_path(
-        path_id: int,
-        db: AsyncSession = Depends(get_db)):
-    """Remove a library path and all associated media"""
-    result = await db.execute(select(LibraryPath).where(LibraryPath.id == path_id))
-    path = result.scalar_one_or_none()
+
+async def remove_library_path(path_id: int, db: AsyncSession = Depends(get_db)):
+    """Remove a library path and all associated media
+
+    This endpoint is resilient to legacy rows that store lowercase media_type
+    values (e.g., 'tv' or 'movie') which can cause SQLAlchemy Enum conversion
+    to fail when loading ORM objects. If the ORM query raises LookupError, we
+    fall back to raw SQL to determine the media_type and perform deletes using
+    table-level operations.
+    """
+    try:
+        result = await db.execute(select(LibraryPath).where(LibraryPath.id == path_id))
+        path = result.scalar_one_or_none()
+    except LookupError:
+        # Corrupt or legacy enum value (e.g., 'tv' lowercase) prevented ORM mapping.
+        # Fallback to raw select to detect existence and media_type without triggering
+        # SQLAlchemy Enum processing.
+        from sqlalchemy import text as _text
+        r = await db.execute(_text('SELECT id, path, media_type FROM library_paths WHERE id = :id'), {'id': path_id})
+        row = r.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Path not found")
+
+        _id, _path, _media_type = row
+        # Normalize media_type and map to MediaType enum
+        mt_norm = (_media_type.upper() if isinstance(_media_type, str) else 'MOVIE')
+        try:
+            media_type_value = MediaType[mt_norm]
+        except Exception:
+            media_type_value = MediaType.MOVIE
+
+        # Perform deletes using table-level operations to avoid ORM loading
+        if media_type_value == MediaType.MOVIE:
+            await db.execute(Movie.__table__.delete().where(Movie.library_path_id == path_id))
+        else:
+            shows_result = await db.execute(select(TVShow.id).where(TVShow.library_path_id == path_id))
+            show_ids = [row[0] for row in shows_result.fetchall()]
+            if show_ids:
+                await db.execute(Episode.__table__.delete().where(Episode.tvshow_id.in_(show_ids)))
+                await db.execute(Season.__table__.delete().where(Season.tvshow_id.in_(show_ids)))
+                await db.execute(TVShow.__table__.delete().where(TVShow.library_path_id == path_id))
+
+        await db.execute(LibraryPath.__table__.delete().where(LibraryPath.id == path_id))
+        await db.commit()
+        return {"message": "Path removed successfully"}
 
     if not path:
         raise HTTPException(status_code=404, detail="Path not found")
@@ -409,7 +510,7 @@ async def scan_single_path(
     tvshows_found = 0
     episodes_found = 0
     errors = []
-
+    new_movie_ids = []
     try:
         if lib_path.media_type == MediaType.MOVIE:
             movies = scan_movie_directory(path)
@@ -434,6 +535,8 @@ async def scan_single_path(
                     edition=parsed.edition
                 )
                 db.add(movie)
+                await db.flush()
+                new_movie_ids.append(movie.id)
                 movies_found += 1
 
         else:
@@ -504,6 +607,18 @@ async def scan_single_path(
 
         await db.commit()
 
+        # If new movies were added during this scan, enqueue post-scan processing tasks
+        try:
+            if new_movie_ids:
+                analyze_task = await create_task('analyze', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
+                refresh_task = await create_task('refresh_metadata', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
+                sync_task = await create_task('sync_watch_history', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
+
+                logger.info(f"Enqueued post-scan tasks for {len(new_movie_ids)} movies: analyze={analyze_task.id}, refresh={refresh_task.id}, sync={sync_task.id}")
+        except Exception:
+            # Don't block the scan result on task enqueueing
+            pass
+
     except Exception as e:
         errors.append(str(e))
 
@@ -530,6 +645,7 @@ async def scan_all_libraries(db: AsyncSession = Depends(get_db)):
     total_shows = 0
     total_episodes = 0
     all_errors = []
+    new_movie_ids = []
 
     for lib_path in paths:
         path = Path(lib_path.path)
@@ -559,6 +675,8 @@ async def scan_all_libraries(db: AsyncSession = Depends(get_db)):
                         edition=parsed.edition
                     )
                     db.add(movie)
+                    await db.flush()
+                    new_movie_ids.append(movie.id)
                     total_movies += 1
             else:
                 shows = scan_tvshow_directory(path)
@@ -598,6 +716,17 @@ async def scan_all_libraries(db: AsyncSession = Depends(get_db)):
             all_errors.append(f"Error scanning {lib_path.path}: {str(e)}")
 
     await db.commit()
+
+    # If new movies were added during this scan, enqueue post-scan processing tasks
+    try:
+        if new_movie_ids:
+            analyze_task = await create_task('analyze', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
+            refresh_task = await create_task('refresh_metadata', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
+            sync_task = await create_task('sync_watch_history', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
+
+            logger.info(f"Enqueued post-scan tasks for {len(new_movie_ids)} movies: analyze={analyze_task.id}, refresh={refresh_task.id}, sync={sync_task.id}")
+    except Exception:
+        pass
 
     return {
         "message": "Library scan completed",
@@ -642,7 +771,7 @@ async def refresh_library(db: AsyncSession = Depends(get_db)):
     added_shows = 0
     added_episodes = 0
     errors = []
-
+    new_movie_ids = []
     for lib_path in paths:
         path = Path(lib_path.path)
         if not path.exists():
@@ -718,6 +847,8 @@ async def refresh_library(db: AsyncSession = Depends(get_db)):
                             edition=parsed.edition
                         )
                         db.add(movie)
+                        await db.flush()
+                        new_movie_ids.append(movie.id)
                         added_movies += 1
 
             else:
@@ -788,6 +919,17 @@ async def refresh_library(db: AsyncSession = Depends(get_db)):
             errors.append(f"Error refreshing {lib_path.path}: {str(e)}")
 
     await db.commit()
+
+    # Enqueue post-scan tasks if new movies were added
+    try:
+        if new_movie_ids:
+            analyze_task = await create_task('analyze', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
+            refresh_task = await create_task('refresh_metadata', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
+            sync_task = await create_task('sync_watch_history', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
+
+            logger.info(f"Enqueued post-refresh tasks for {len(new_movie_ids)} movies: analyze={analyze_task.id}, refresh={refresh_task.id}, sync={sync_task.id}")
+    except Exception:
+        pass
 
     return {
         "message": "Library refreshed",

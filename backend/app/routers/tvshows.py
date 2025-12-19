@@ -1,11 +1,12 @@
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 import logging
 import re
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.models import TVShow, Episode, Season
@@ -20,6 +21,12 @@ from app.services.renamer import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class ScrapeNowRequest(BaseModel):
+    tmdb_id: Optional[int] = None
+    title: Optional[str] = None
+    year: Optional[int] = None
 
 
 def clean_search_title(title: str) -> str:
@@ -326,21 +333,55 @@ async def update_tvshow(
 
 @router.post("/{show_id}/scrape")
 async def scrape_tvshow_metadata(
-        show_id: int,
-        provider: Optional[str] = Query(
-            None,
-            pattern="^(tmdb|omdb)$",
-            description="Force a specific provider (tmdb or omdb)"),
-        db: AsyncSession = Depends(get_db)):
+    show_id: int,
+    provider: Optional[str] = Query(None, pattern="^(tmdb|omdb)$", description="Force a specific provider (tmdb or omdb)"),
+    request_body: Any = Body(None),
+    db: AsyncSession = Depends(get_db)
+):
     """Scrape metadata for a TV show and its episodes from TMDB or OMDb
 
     Args:
         show_id: ID of the TV show
         provider: Optional provider to force ('tmdb' or 'omdb'). If not specified, tries TMDB first then OMDb.
+        request: Optional overrides for search (tmdb_id, title, year)
+    """
+    # Enqueue a refresh_metadata task for this show so worker will update metadata
+    from app.services.queue import create_task
+
+    # Allow optional overrides (tmdb_id, title, year) to be included in the item payload
+    item = {"show_id": show_id}
+
+    # Defensive validation: do not accept a plain string body (common mistake sending provider as body)
+    if request_body is not None:
+        if isinstance(request_body, str):
+            raise HTTPException(status_code=400, detail="Request body must be a JSON object (e.g., {\"tmdb_id\": 123} or {\"title\": \"Title\", \"year\": 1999}). If you intended to set provider, pass it as a query parameter (e.g., ?provider=omdb).")
+        # Attempt to coerce/validate into ScrapeNowRequest and merge
+        try:
+            req_obj = ScrapeNowRequest.model_validate(request_body)
+            item.update(req_obj.model_dump(exclude_none=True))
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid request body. Expected fields: tmdb_id (int), title (str), year (int).")
+
+    task = await create_task('refresh_metadata', items=[item], meta={"trigger": "manual", "provider": provider})
+
+    # Log enqueue action for operator visibility
+    logger.info(f"Enqueued refresh_metadata task {task.id} for show_id={show_id} provider={provider} item={item}")
+
+    return {"task_id": task.id, "status": task.status.value}
+
+
+@router.get("/{show_id}/search")
+async def search_tvshow_candidates(
+    show_id: int,
+    provider: Optional[str] = Query(None, pattern="^(tmdb|omdb)$", description="Force a specific provider (tmdb or omdb)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Search for candidate TV show matches at TMDB or OMDb for operator preflight.
+
+    Returns a JSON payload with provider and results list (may be empty).
     """
     result = await db.execute(select(TVShow).where(TVShow.id == show_id))
     show = result.scalar_one_or_none()
-
     if not show:
         raise HTTPException(status_code=404, detail="TV show not found")
 
@@ -407,12 +448,12 @@ async def scrape_tvshow_metadata(
         logger.info(
             f"[{show.title}] Metadata refresh complete: show from TMDB, {episode_result['updated']} episodes updated")
         return {
-            "message": f"TV show and {
-                episode_result['updated']} episodes updated from TMDB",
+            "message": f"TV show and {episode_result['updated']} episodes updated from TMDB",
             "tmdb_id": tmdb_result.tmdb_id,
             "source": source,
             "episodes_updated": episode_result['updated'],
-            "episode_source": episode_result.get('source')}
+            "episode_source": episode_result.get('source')
+        }
 
     # Try OMDb (if not forcing TMDB or TMDB didn't find it)
     if provider != "tmdb":
@@ -450,38 +491,51 @@ async def scrape_tvshow_metadata(
         logger.info(
             f"[{show.title}] Metadata refresh complete: show from OMDb, {episode_result['updated']} episodes updated")
         return {
-            "message": f"TV show and {
-                episode_result['updated']} episodes updated from OMDb",
+            "message": f"TV show and {episode_result['updated']} episodes updated from OMDb",
             "imdb_id": omdb_result.imdb_id,
             "source": source,
             "episodes_updated": episode_result['updated'],
-            "episode_source": episode_result.get('source')}
+            "episode_source": episode_result.get('source')
+        }
 
     # Neither found the show
-    provider_msg = f" using {
-        provider.upper()}" if provider else " on TMDB or OMDb"
+    provider_msg = f" using {provider.upper()}" if provider else " on TMDB or OMDb"
     logger.warning(
         f"[{original_title}] Not found{provider_msg} (search term: '{search_title}')")
     raise HTTPException(
         status_code=404,
         detail=f"TV show not found{provider_msg}. Searched for: '{search_title}'. Please check the show title or try a different provider."
     )
+        if api_key:
+            omdb_svc = OMDbService(api_key)
+            try:
+                omdb_res = await omdb_svc.search_tvshow(title, year)
+                if omdb_res:
+                    logger.info(f"OMDb search returned candidate for show_id={show_id} imdb_id={omdb_res.imdb_id}")
+                    return {'provider': 'omdb', 'results': [{
+                        'imdb_id': omdb_res.imdb_id,
+                        'title': omdb_res.title,
+                        'year': omdb_res.year,
+                        'plot': omdb_res.plot,
+                        'poster': omdb_res.poster,
+                    }], 'tried': getattr(omdb_svc, 'last_request_params', None)}
+            finally:
+                await omdb_svc.close()
+
+    return {'provider': provider or 'tmdb', 'results': []}
+<<<<<<< HEAD
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
+=======
+>>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
 
 
 @router.post("/{show_id}/scrape-episodes")
 async def scrape_episode_metadata(
-        show_id: int,
-        provider: Optional[str] = Query(
-            None,
-            pattern="^(tmdb|omdb)$",
-            description="Force a specific provider (tmdb or omdb)"),
-        db: AsyncSession = Depends(get_db)):
-    """Scrape episode metadata from TMDB or OMDb (standalone endpoint)
-
-    Args:
-        show_id: ID of the TV show
-        provider: Optional provider to force ('tmdb' or 'omdb'). If not specified, auto-selects based on available IDs.
-    """
+    show_id: int,
+    provider: Optional[str] = Query(None, pattern="^(tmdb|omdb)$", description="Force a specific provider (tmdb or omdb)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Enqueue episode metadata scrape for a TV show"""
     result = await db.execute(select(TVShow).where(TVShow.id == show_id))
     show = result.scalar_one_or_none()
 
@@ -489,30 +543,27 @@ async def scrape_episode_metadata(
         raise HTTPException(status_code=404, detail="TV show not found")
 
     if not show.scraped:
-        raise HTTPException(
-            status_code=400,
-            detail="Show must be scraped first to get metadata source")
+        raise HTTPException(status_code=400, detail="Show must be scraped first to get metadata source")
 
-    logger.info(
-        f"[{show.title}] Standalone episode metadata refresh requested (provider: {provider or 'auto'})")
+    # Enqueue a refresh_metadata task for episodes (one item per episode)
+    episodes_result = await db.execute(select(Episode).where(Episode.tvshow_id == show_id))
+    episodes = episodes_result.scalars().all()
 
-    # Use the shared helper function with provider
-    episode_result = await _scrape_episodes_internal(show, db, provider)
-    await db.commit()
+    if not episodes:
+        raise HTTPException(status_code=400, detail="No episodes found to enqueue")
 
-    if episode_result['updated'] == 0 and episode_result['source'] is None:
-        error_msg = episode_result.get(
-            'error',
-            "No TMDB ID or IMDB ID available. Please scrape the show metadata first.")
-        raise HTTPException(status_code=400, detail=error_msg)
+    from app.services.queue import create_task
 
-    return {
-        "message": f"Updated {
-            episode_result['updated']} episodes from {
-            episode_result['source'].upper()}",
-        "source": episode_result['source'],
-        "updated": episode_result['updated']}
+    items = []
+    for ep in episodes:
+        if ep.file_path:
+            items.append({"episode_id": ep.id})
 
+    if not items:
+        raise HTTPException(status_code=400, detail="No episodes with files to enqueue")
+
+    task = await create_task('refresh_metadata', items=items, meta={"show_id": show_id, "provider": provider})
+    return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
 
 @router.get("/rename-presets")
 async def get_episode_rename_presets():
@@ -676,9 +727,7 @@ async def rename_show_episodes(
             logger.debug(
                 f"[{show.title}] Renamed: '{old_name}' -> '{episode.file_name}'")
         else:
-            error_msg = f"Failed to rename {
-                episode.file_name}: {
-                rename_result.error}"
+            error_msg = f"Failed to rename {episode.file_name}: {rename_result.error}"
             logger.error(f"[{show.title}] {error_msg}")
             errors.append(error_msg)
 
@@ -738,8 +787,7 @@ async def generate_tvshow_nfo(
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate NFO: {
-                str(e)}")
+            detail=f"Failed to generate NFO: {str(e)}")
 
 
 @router.delete("/{show_id}")
@@ -818,6 +866,12 @@ async def analyze_episode_file(
             "subtitle_languages": info.subtitle_languages,
         }
     }
+    # Enqueue analyze task
+    from app.services.queue import create_task
+
+    task = await create_task('analyze', items=[{"episode_id": episode.id}], meta={"show_id": show_id})
+
+    return {"task_id": task.id, "status": task.status.value}
 
 
 @router.post("/{show_id}/analyze-all")
@@ -833,8 +887,7 @@ async def analyze_all_episodes(
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Database error: {
-                str(e)}")
+            detail=f"Database error: {str(e)}")
 
     if not show:
         raise HTTPException(status_code=404, detail="TV show not found")
@@ -852,57 +905,44 @@ async def analyze_all_episodes(
         )
         episodes = episodes_result.scalars().all()
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch episodes: {
-                str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
+    
+    # Enqueue analyze tasks for all episodes
+    from app.services.queue import create_task
 
-    analyzed = 0
-    errors = []
-
+    items = []
     for episode in episodes:
         if not episode.file_path:
             continue
+        items.append({"episode_id": episode.id})
 
-        try:
-            info = mediainfo.analyze_file(episode.file_path)
+    if not items:
+        raise HTTPException(status_code=400, detail="No episodes with files to analyze")
 
-            if info.success:
-                episode.duration = info.duration
-                episode.video_codec = info.video_codec
-                episode.video_resolution = info.video_resolution
-                episode.video_width = info.video_width
-                episode.video_height = info.video_height
-                episode.audio_codec = info.audio_codec
-                episode.audio_channels = info.audio_channels
-                episode.audio_language = info.audio_language
-                episode.subtitle_languages = mediainfo.get_subtitle_languages_json(
-                    info)
-                episode.container = info.container
-                episode.file_size = info.file_size
-                episode.media_info_scanned = True
-                analyzed += 1
-            else:
-                errors.append(
-                    f"S{episode.season_number}E{episode.episode_number}: {info.error}")
-        except Exception as e:
-            errors.append(
-                f"S{episode.season_number}E{episode.episode_number}: {str(e)}")
+    task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
+    return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}=======
+        raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
+    
+    # Enqueue analyze tasks for all episodes
+    from app.services.queue import create_task
 
-    try:
-        await db.commit()
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to save analysis results: {
-                str(e)}")
+    items = []
+    for episode in episodes:
+        if not episode.file_path:
+            continue
+>>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
+        items.append({"episode_id": episode.id})
 
-    return {
-        "message": f"Analyzed {analyzed} of {len(episodes)} episodes",
-        "analyzed": analyzed,
-        "total": len(episodes),
-        "errors": errors[:10] if errors else []  # Limit errors to 10
-    }
+    if not items:
+        raise HTTPException(status_code=400, detail="No episodes with files to analyze")
+
+    task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
+
+    return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
+<<<<<<< HEAD
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
+=======
+>>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
 
 
 @router.get("/{show_id}/mux-subtitles-preview")
@@ -923,8 +963,13 @@ async def get_mux_subtitles_preview(
     episodes_result = await db.execute(
         select(Episode).where(
             Episode.tvshow_id == show_id,
+<<<<<<< HEAD
             Episode.subtitle_path.isnot(None),
             Episode.has_subtitle
+=======
+                Episode.subtitle_path.isnot(None),
+                Episode.has_subtitle
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
         )
     )
     episodes = episodes_result.scalars().all()
@@ -1007,8 +1052,13 @@ async def mux_all_subtitles(
     episodes_result = await db.execute(
         select(Episode).where(
             Episode.tvshow_id == show_id,
+<<<<<<< HEAD
             Episode.subtitle_path.isnot(None),
             Episode.has_subtitle
+=======
+                Episode.subtitle_path.isnot(None),
+                Episode.has_subtitle
+>>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
         )
     )
     episodes = episodes_result.scalars().all()
@@ -1174,8 +1224,7 @@ async def mux_episode_subtitle(
     if not mux_result.success:
         raise HTTPException(
             status_code=500,
-            detail=f"Muxing failed: {
-                mux_result.error}")
+            detail=f"Muxing failed: {mux_result.error}")
 
     # Update episode record
     episode.file_path = mux_result.output_path

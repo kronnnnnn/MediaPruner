@@ -18,6 +18,7 @@ class LibraryPathResponse(BaseModel):
     exists: bool = True
     file_count: int = 0
     created_at: datetime
+    enqueued_task_id: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -118,6 +119,37 @@ class MovieResponse(MovieBase):
     last_watched_date: Optional[datetime] = None
     last_watched_user: Optional[str] = None
     rating_key: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+
+# Queue schemas
+class QueueItemResponse(BaseModel):
+    id: int
+    index: int
+    status: str
+    payload: Optional[str]
+    result: Optional[str]
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+class QueueTaskResponse(BaseModel):
+    id: int
+    type: str
+    status: str
+    created_by: Optional[str]
+    created_at: datetime
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+    total_items: int
+    completed_items: int
+    meta: Optional[str]
+    items: Optional[list[QueueItemResponse]] = None
 
     class Config:
         from_attributes = True

@@ -5,7 +5,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { SidebarProvider } from './contexts/SidebarContext'
+import { NotificationProvider } from './contexts/NotificationContext'
 import { ToastProvider } from './contexts/ToastContext'
+import { QueueProvider } from './contexts/QueueContext'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -25,11 +27,15 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <SidebarProvider>
-          <ToastProvider>
-            <BrowserRouter>
-              <App />
-            </BrowserRouter>
-          </ToastProvider>
+          <NotificationProvider>
+            <ToastProvider>
+              <QueueProvider>
+                <BrowserRouter>
+                  <App />
+                </BrowserRouter>
+              </QueueProvider>
+            </ToastProvider>
+          </NotificationProvider>
         </SidebarProvider>
       </ThemeProvider>
     </QueryClientProvider>

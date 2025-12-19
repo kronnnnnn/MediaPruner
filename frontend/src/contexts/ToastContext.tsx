@@ -33,6 +33,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const showToast = useCallback((title: string, message: string, type: ToastType = 'info', duration = 4000) => {
     setToastState({ isOpen: true, title, message, type })
+
+    // Also persist notification for later review (via central notification store)
+    try {
+      import('../services/notifications').then(mod => mod.addNotificationToStore({ title, message, type })).catch(() => null)
+    } catch (e) {
+      // ignore if notifications registration not ready
+    }
+
     if (timerRef.current) {
       window.clearTimeout(timerRef.current)
     }

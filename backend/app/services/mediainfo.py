@@ -259,9 +259,7 @@ def analyze_file(file_path: str) -> MediaInfoResult:
             result.video_height = getattr(video, 'height', None)
 
             if result.video_width and result.video_height:
-                result.video_resolution = f"{
-                    result.video_width}x{
-                    result.video_height}"
+                result.video_resolution = f"{result.video_width}x{result.video_height}"
 
             # Aspect ratio
             dar = getattr(video, 'display_aspect_ratio', None)
