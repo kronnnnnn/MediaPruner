@@ -93,7 +93,6 @@ async def migrate_db():
             pass
 
         # Apply SQL migration files from backend/migrations in lexicographical order
-        import os
         migrations_dir = Path(__file__).parent.parent / 'migrations'
         if migrations_dir.exists():
             for sql_file in sorted([p for p in migrations_dir.iterdir() if p.suffix == '.sql']):

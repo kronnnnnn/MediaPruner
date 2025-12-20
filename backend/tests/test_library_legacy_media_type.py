@@ -1,11 +1,8 @@
-import asyncio
 import pytest
 import sys
 sys.path.insert(0, '.')
-from app.database import async_session
 from sqlalchemy import text
 from httpx import AsyncClient, ASGITransport
-from fastapi import FastAPI
 from app.main import app as fastapi_app
 
 @pytest.mark.asyncio
