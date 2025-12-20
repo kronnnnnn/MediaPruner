@@ -5,8 +5,8 @@ export interface QueueItem {
   id: number
   index: number
   status: string
-  payload: any
-  result: any
+  payload: unknown
+  result: unknown
   started_at?: string | null
   finished_at?: string | null
 }
@@ -20,7 +20,7 @@ export interface QueueTask {
   finished_at?: string | null
   total_items: number
   completed_items: number
-  meta?: any
+  meta?: Record<string, unknown>
   items: QueueItem[]
 }
 
@@ -113,10 +113,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       es.addEventListener('init', (ev: MessageEvent) => {
         try {
           console.debug('[queues] Received init event')
-          const data = JSON.parse((ev as any).data)
+          const payload = (ev as MessageEvent).data as string
+          const data = JSON.parse(payload)
           setTasks(data as QueueTask[])
         } catch (e) {
-          // ignore parse errors
           console.debug('[queues] Failed to parse init payload', e)
         }
       })
@@ -124,7 +124,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       es.addEventListener('task_update', (ev: MessageEvent) => {
         try {
           console.debug('[queues] Received task_update event')
-          const data = JSON.parse((ev as any).data) as QueueTask
+          const payload = (ev as MessageEvent).data as string
+          const data = JSON.parse(payload) as QueueTask
           setTasks((prev) => {
             const prevTask = prev.find(t => t.id === data.id)
             const other = prev.filter(t => t.id !== data.id)
@@ -138,12 +139,12 @@ export function QueueProvider({ children }: { children: ReactNode }) {
                 import('../services/notifications').then(mod => {
                   const title = `Task #${data.id} ${data.type} ${newStatus}`
                   const meta = { task_id: data.id }
-                  const msg = data.meta && data.meta.path ? `${data.meta.path}` : `${data.total_items} items`;
+                  const msg = data.meta && (data.meta as any).path ? `${(data.meta as any).path}` : `${data.total_items} items`;
                   mod.addNotificationToStore({ title, message: msg, type: newStatus === 'failed' ? 'error' : 'success', meta })
-                }).catch(()=>null)
+                }).catch(e => console.debug('[queues] Notification import failed', e))
               }
             } catch (e) {
-              // ignore notification errors
+              console.debug('[queues] Notification handler error', e)
             }
 
             return newList
