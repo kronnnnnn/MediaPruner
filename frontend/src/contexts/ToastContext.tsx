@@ -50,16 +50,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }, duration)
   }, [])
 
+  const borderClass = { success: 'border-green-500', error: 'border-red-500', warning: 'border-yellow-500', info: 'border-blue-500' }[toastState.type]
+  const IconComponent = { success: CheckCircle, error: AlertCircle, warning: AlertTriangle, info: Info }[toastState.type]
+
   return (
     <ToastContext.Provider value={{ toastState, showToast, hideToast }}>
       {children}
       {/* Global toast UI (top-right) rendered into document.body so it is above any modal stacking context */}
       {toastState.isOpen && createPortal(
         <div className="fixed top-4 right-4 z-[9999]">
-          <div className={`max-w-xs w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg border-l-4 animate-mp-pop ${toastState.type === 'success' ? 'border-green-500' : toastState.type === 'error' ? 'border-red-500' : toastState.type === 'warning' ? 'border-yellow-500' : 'border-blue-500'}`}>
+          <div className={`max-w-xs w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg border-l-4 animate-mp-pop ${borderClass}`}>
             <div className="p-4 flex gap-3 items-start">
               <div className="flex-shrink-0 mt-0.5 text-blue-500">
-                {toastState.type === 'success' ? <CheckCircle className="w-6 h-6 text-green-500" /> : toastState.type === 'error' ? <AlertCircle className="w-6 h-6 text-red-500" /> : toastState.type === 'warning' ? <AlertTriangle className="w-6 h-6 text-yellow-500" /> : <Info className="w-6 h-6 text-blue-500" />}
+                <IconComponent className={`w-6 h-6 ${toastState.type === 'success' ? 'text-green-500' : toastState.type === 'error' ? 'text-red-500' : toastState.type === 'warning' ? 'text-yellow-500' : 'text-blue-500'}`} />
               </div>
               <div className="flex-1">
                 <div className="text-sm font-semibold text-gray-900 dark:text-white">{toastState.title}</div>
