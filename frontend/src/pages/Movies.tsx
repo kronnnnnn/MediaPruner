@@ -13,6 +13,18 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import { moviesApi, libraryApi, Movie } from '../services/api'
 import logger from '../services/logger'
 
+function errorDetail(e: unknown): string {
+  if (typeof e === 'string') return e
+  if (e && typeof e === 'object') {
+    const resp = (e as { response?: { data?: { detail?: unknown } } }).response
+    if (resp && typeof resp.data?.detail === 'string') return resp.data.detail
+    const msg = (e as { message?: unknown }).message
+    if (typeof msg === 'string') return msg
+    try { return JSON.stringify(e) } catch { return String(e) }
+  }
+  return String(e)
+}
+
 // localStorage keys for persistence
 const STORAGE_KEY_VIEW_MODE = 'mediapruner_movies_view_mode'
 const STORAGE_KEY_COLUMNS = 'mediapruner_movies_columns'
@@ -202,12 +214,10 @@ export default function Movies() {
         showToast('Library Up to Date', 'No changes detected in your library.', 'info')
       }
     },
-    onError: (error: any) => {
-      logger.error('Refresh library failed', 'Movies', { 
-        error,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('Refresh Failed', error?.response?.data?.detail || 'Failed to refresh library', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Refresh library failed', 'Movies', { error: err })
+      showToast('Refresh Failed', err || 'Failed to refresh library', 'error')
     }
   })
 
