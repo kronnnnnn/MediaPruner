@@ -506,47 +506,7 @@ async def search_tvshow_candidates(
         status_code=404,
         detail=f"TV show not found{provider_msg}. Searched for: '{search_title}'. Please check the show title or try a different provider."
     )
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-=======
-    if not show:
-        raise HTTPException(status_code=404, detail="TV show not found")
 
-    title = show.title or ''
-    year = None
-    if show.first_air_date:
-        try:
-            year = int(str(show.first_air_date).split('-')[0])
-        except Exception:
-            year = None
-
-    # Try TMDB first unless provider forced to OMDb
-    if provider in (None, 'tmdb'):
-        tmdb_service = await TMDBService.create_with_db_key(db)
-        logger.info(f"Search candidates requested for show_id={show_id} title='{title}' provider=tmdb")
-        if tmdb_service.is_configured:
-            results = await tmdb_service.search_tvshow(title, year)
-            mapped = []
-            for r in results:
-                mapped.append({
-                    'tmdb_id': r.get('id'),
-                    'title': r.get('name') or r.get('original_name'),
-                    'year': (r.get('first_air_date') or '')[:4] if r.get('first_air_date') else None,
-                    'overview': r.get('overview'),
-                    'poster_path': r.get('poster_path'),
-                })
-            logger.info(f"TMDB search returned {len(mapped)} candidates for show_id={show_id}")
-            return {'provider': 'tmdb', 'results': mapped, 'tried': getattr(tmdb_service, 'last_search_tried', None)}
-
-    # Fallback to OMDb if configured or forced
-    if provider in (None, 'omdb'):
-        from app.services.omdb import get_omdb_api_key_from_db, OMDbService
-
-        api_key = await get_omdb_api_key_from_db(db)
-        logger.info(f"Search candidates requested for show_id={show_id} title='{title}' provider=omdb")
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
 =======
 >>>>>>> 032dd35 (chore(rebase): fix leftover merge artifacts and syntax issues after rebase)
         if api_key:
@@ -564,17 +524,7 @@ async def search_tvshow_candidates(
                     }], 'tried': getattr(omdb_svc, 'last_request_params', None)}
             finally:
                 await omdb_svc.close()
-<<<<<<< HEAD
     return {'provider': provider or 'tmdb', 'results': []}
-=======
-
-    return {'provider': provider or 'tmdb', 'results': []}
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
-=======
-
-    return {'provider': provider or 'tmdb', 'results': []}
->>>>>>> cfc8c4a (chore(rebase): remove leftover git conflict markers)
 
 
 @router.post("/{show_id}/scrape-episodes")
@@ -919,58 +869,19 @@ async def analyze_all_episodes(
         )
         episodes = episodes_result.scalars().all()
     except Exception as e:
-<<<<<<< HEAD
-<<<<<<< HEAD
         raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
-    
+
     # Enqueue analyze tasks for all episodes
     from app.services.queue import create_task
-=======
-<<<<<<< HEAD
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch episodes: {
-                str(e)}")
 
-    analyzed = 0
-    errors = []
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
-
-    items = []
-    for episode in episodes:
-        if not episode.file_path:
-            continue
-        items.append({"episode_id": episode.id})
+    items = [ {"episode_id": episode.id} for episode in episodes if episode.file_path ]
 
     if not items:
         raise HTTPException(status_code=400, detail="No episodes with files to analyze")
 
     task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
     return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
-        raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
-    
-    # Enqueue analyze tasks for all episodes
-    from app.services.queue import create_task
-
-    items = []
-    for episode in episodes:
-        if not episode.file_path:
-            continue
-        items.append({"episode_id": episode.id})
-
-<<<<<<< HEAD
-    if not items:
-        raise HTTPException(status_code=400, detail="No episodes with files to analyze")
-=======
-    return {
-        "message": f"Analyzed {analyzed} of {len(episodes)} episodes",
-        "analyzed": analyzed,
-        "total": len(episodes),
-        "errors": errors[:10] if errors else []  # Limit errors to 10
     }
-=======
-=======
->>>>>>> 032dd35 (chore(rebase): fix leftover merge artifacts and syntax issues after rebase)
         raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
     
     # Enqueue analyze tasks for all episodes
@@ -980,45 +891,12 @@ async def analyze_all_episodes(
     for episode in episodes:
         if not episode.file_path:
             continue
-<<<<<<< HEAD
-=======
         items.append({"episode_id": episode.id})
 
     if not items:
         raise HTTPException(status_code=400, detail="No episodes with files to analyze")
 
     task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
-    return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
-        raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
-    
-    # Enqueue analyze tasks for all episodes
-    from app.services.queue import create_task
-
-    items = []
-    for episode in episodes:
-        if not episode.file_path:
-            continue
-<<<<<<< HEAD
->>>>>>> 8139644 (recover(queue): apply stashed queue & UI changes)
->>>>>>> 032dd35 (chore(rebase): fix leftover merge artifacts and syntax issues after rebase)
-=======
->>>>>>> cfc8c4a (chore(rebase): remove leftover git conflict markers)
-        items.append({"episode_id": episode.id})
-
-    if not items:
-        raise HTTPException(status_code=400, detail="No episodes with files to analyze")
-
-    task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
-
-    return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
-<<<<<<< HEAD
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
-=======
->>>>>>> cfc8c4a (chore(rebase): remove leftover git conflict markers)
-
-    task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
-
     return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
 
 @router.get("/{show_id}/mux-subtitles-preview")
@@ -1043,6 +921,7 @@ async def get_mux_subtitles_preview(
             Episode.has_subtitle
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
                 Episode.subtitle_path.isnot(None),
                 Episode.has_subtitle
 =======
@@ -1055,6 +934,8 @@ async def get_mux_subtitles_preview(
                 Episode.subtitle_path.isnot(None),
                 Episode.has_subtitle
 >>>>>>> cfc8c4a (chore(rebase): remove leftover git conflict markers)
+=======
+>>>>>>> e9b7170 (chore(rebase): resolve leftover router cleanup)
         )
     )
     episodes = episodes_result.scalars().all()
@@ -1141,6 +1022,7 @@ async def mux_all_subtitles(
             Episode.has_subtitle
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
                 Episode.subtitle_path.isnot(None),
                 Episode.has_subtitle
 =======
@@ -1153,6 +1035,8 @@ async def mux_all_subtitles(
                 Episode.subtitle_path.isnot(None),
                 Episode.has_subtitle
 >>>>>>> cfc8c4a (chore(rebase): remove leftover git conflict markers)
+=======
+>>>>>>> e9b7170 (chore(rebase): resolve leftover router cleanup)
         )
     )
     episodes = episodes_result.scalars().all()

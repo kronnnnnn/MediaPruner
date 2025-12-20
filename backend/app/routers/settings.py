@@ -214,26 +214,15 @@ async def verify_omdb_api_key(
 ):
     """Verify if the provided OMDb API key is valid by making a test request to OMDb."""
     from app.services.omdb import OMDbService
-<<<<<<< HEAD
-=======
 
-    
->>>>>>> cfc8c4a (chore(rebase): remove leftover git conflict markers)
     # Use the provided key for verification
     omdb_service = OMDbService(api_key=data.api_key)
     try:
         # Try fetching ratings for a well-known movie (Star Wars - tt0076759)
         result = await omdb_service.get_ratings_by_imdb_id("tt0076759")
         await omdb_service.close()
-        if result:
-            return {"valid": True}
-        else:
-            return {"valid": False}
-    except Exception:
-<<<<<<< HEAD
-=======
+        return {"valid": bool(result)}
     except Exception as e:
->>>>>>> cfc8c4a (chore(rebase): remove leftover git conflict markers)
         await omdb_service.close()
         return {"valid": False}
 
