@@ -53,7 +53,7 @@ export default function Movies() {
   }, [])
 
   const queryClient = useQueryClient()
-  const { messageState, showMessage, hideMessage } = useMessageModal()
+  const { messageState, hideMessage } = useMessageModal()
   const { showToast } = useToast()
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(() => {

@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
 import asyncio
 import logging
 import json
@@ -17,7 +16,6 @@ from app.services.queue import (
     unsubscribe_events,
     QueueWorker,
 )
-from app.schemas import QueueTaskResponse, QueueItemResponse
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -143,7 +141,7 @@ async def api_queues_stream(request: Request):
                         now = asyncio.get_event_loop().time()
                         if now - last_send >= ping_interval:
                             # send a ping comment (some clients ignore comments, so we send a ping event)
-                            yield f"event: ping\ndata: {{}}\n\n"
+                            yield "event: ping\ndata: {}\n\n"
                             last_send = now
                         # small sleep to avoid tight loop
                         await asyncio.sleep(1)

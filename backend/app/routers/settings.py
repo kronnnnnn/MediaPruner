@@ -2,11 +2,10 @@
 Settings API Router - Manages application settings stored in the database
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
-from starlette.status import HTTP_200_OK, HTTP_400_BAD_REQUEST
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, delete, func
 from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import Optional, List
 from datetime import datetime
 
 from app.database import get_db
@@ -142,7 +141,7 @@ async def verify_tmdb_api_key(
             return {"valid": True}
         else:
             return {"valid": False}
-    except Exception as e:
+    except Exception:
         await tmdb_service.close()
         return {"valid": False}
 
@@ -222,7 +221,7 @@ async def verify_omdb_api_key(
         result = await omdb_service.get_ratings_by_imdb_id("tt0076759")
         await omdb_service.close()
         return {"valid": bool(result)}
-    except Exception as e:
+    except Exception:
         await omdb_service.close()
         return {"valid": False}
 
@@ -337,7 +336,7 @@ async def verify_tautulli_settings(
             return {"valid": True}
         else:
             return {"valid": False}
-    except Exception as e:
+    except Exception:
         return {"valid": False}
     finally:
         if hasattr(tautulli_service, 'close'):

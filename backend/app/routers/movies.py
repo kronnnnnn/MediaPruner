@@ -5,7 +5,6 @@ import re
 from pathlib import Path
 from typing import Optional
 
-import re
 import logging
 from pydantic import BaseModel
 
@@ -1339,27 +1338,6 @@ async def analyze_all_movies(db: AsyncSession = Depends(get_db)):
 
     return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
 
-    return {
-        "message": f"Analyzed {analyzed} of {len(movies)} movies",
-        "analyzed": analyzed,
-        "total": len(movies),
-        "errors": errors[:10] if errors else []
-    }
-    items = []
-    for movie in movies:
-        if not movie.file_path:
-            logger.warning(f"Skipping analyze enqueue for movie_id={movie.id} because file_path is empty")
-            continue
-    items = []
-    for movie in movies:
-        if not movie.file_path:
-            logger.warning(f"Skipping analyze enqueue for movie_id={movie.id} because file_path is empty")
-            continue
-        items.append({"movie_id": movie.id})
-
-    if not items:
-        raise HTTPException(status_code=400, detail="No movies with files to analyze")
-
     from app.services.queue import create_task
     task = await create_task('analyze', items=items, meta={"batch": True})
 
@@ -2036,8 +2014,6 @@ async def sync_movies_watch_history_batch(
     db: AsyncSession = Depends(get_db)
 ):
     """Sync watch history for a set of movies (by id list) from Tautulli"""
-    from app.services.tautulli import get_tautulli_service
-    from datetime import datetime
 
     # Enqueue a queued task to sync watch history for the requested movies
     movie_ids = request.movie_ids if request.movie_ids else None

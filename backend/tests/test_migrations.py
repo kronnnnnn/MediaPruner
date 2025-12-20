@@ -1,4 +1,3 @@
-import asyncio
 import sys
 sys.path.insert(0, '.')
 from app.database import migrate_db, engine
