@@ -245,12 +245,10 @@ export default function Movies() {
         data.skipped_count && data.skipped_count > 0 ? 'info' : 'success'
       )
     },
-    onError: (error: any) => {
-      logger.error('Sync watch history failed', 'Movies', { 
-        error,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('Sync Failed', error?.response?.data?.detail || 'Failed to sync watch history. Is Tautulli configured?', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Sync watch history failed', 'Movies', { error: err })
+      showToast('Sync Failed', err || 'Failed to sync watch history. Is Tautulli configured?', 'error')
     }
   })
 
