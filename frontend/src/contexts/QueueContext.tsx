@@ -87,8 +87,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       })
 
       // Refresh snapshot when the window gains focus or becomes visible (handles navigating away/back)
-      onFocus = () => fetchInitial().catch(()=>{})
-      onVisibility = () => { if (document.visibilityState === 'visible') fetchInitial().catch(()=>{}) }
+      onFocus = () => fetchInitial().catch(e => console.debug('[queues] fetchInitial failed', e))
+      onVisibility = () => { if (document.visibilityState === 'visible') fetchInitial().catch(e => console.debug('[queues] fetchInitial failed', e)) }
       window.addEventListener('focus', onFocus)
       window.addEventListener('visibilitychange', onVisibility)
 
@@ -106,7 +106,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       es.addEventListener('error', (ev) => {
         setConnected(false)
         console.debug('[queues] EventSource error', ev)
-        try { es?.close() } catch (e) { }
+        try { es?.close() } catch (e) { console.debug('[queues] EventSource close failed', e) }
         scheduleReconnect()
       })
 
@@ -139,7 +139,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
                 import('../services/notifications').then(mod => {
                   const title = `Task #${data.id} ${data.type} ${newStatus}`
                   const meta = { task_id: data.id }
-                  const msg = data.meta && (data.meta as any).path ? `${(data.meta as any).path}` : `${data.total_items} items`;
+                  const metaRec = data.meta as Record<string, unknown> | undefined
+                  const msg = metaRec && typeof (metaRec as any)['path'] === 'string' ? String((metaRec as any)['path']) : `${data.total_items} items`;
                   mod.addNotificationToStore({ title, message: msg, type: newStatus === 'failed' ? 'error' : 'success', meta })
                 }).catch(e => console.debug('[queues] Notification import failed', e))
               }
@@ -169,7 +170,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
     return () => {
       if (reconnectTimer) window.clearTimeout(reconnectTimer)
-      try { es?.close() } catch (e) { }
+      try { es?.close() } catch (e) { console.debug('[queues] EventSource close failed', e) }
       setConnected(false)
       // Remove global listeners in case component unmounts
       if (onFocus) window.removeEventListener('focus', onFocus)
