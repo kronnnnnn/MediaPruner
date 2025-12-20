@@ -36,17 +36,21 @@ jobs:
                 continue;
               }
 
-              // Check for an existing approval by GPT-5-mini or any approval
+              // Check for an existing approval by this bot (to avoid duplicate approvals)
               const reviews = await github.rest.pulls.listReviews({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: prNumber,
               });
 
-              const hasApproval = reviews.data.some(r => r.state === 'APPROVED' || (r.user && (r.user.login === 'gpt-5-mini' || r.user.login === 'GPT-5-mini' || r.user.login === 'github-actions[bot]')));
+              const hasApproval = reviews.data.some(r =>
+                r.state === 'APPROVED' &&
+                r.user &&
+                (r.user.login === 'gpt-5-mini' || r.user.login === 'GPT-5-mini' || r.user.login === 'github-actions[bot]')
+              );
 
               if (hasApproval) {
-                core.info(`PR #${prNumber} already has an approval; skipping.`);
+                core.info(`PR #${prNumber} already has an approval from this bot; skipping.`);
                 continue;
               }
 
