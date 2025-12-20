@@ -5,10 +5,7 @@ from httpx import AsyncClient, ASGITransport
 from app.main import app as fastapi_app
 from app.database import async_session
 import uuid
-import uuid
-import random
 from app.models import Movie, LibraryPath, MediaType
-from sqlalchemy import text
 
 @pytest.mark.asyncio
 async def test_get_task_includes_movie_title():

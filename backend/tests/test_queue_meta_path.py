@@ -1,4 +1,3 @@
-import asyncio
 import pytest
 
 from app.services.queue import create_task, get_task

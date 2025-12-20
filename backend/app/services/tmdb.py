@@ -451,7 +451,6 @@ class TMDBService:
 
         """Search for a TV show and get its details using multiple heuristics."""
         tried = []
-        import difflib
 
         def pick_best_result_tv(results_list, target_title, target_year=None):
             best = None

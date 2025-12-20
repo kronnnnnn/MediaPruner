@@ -1,7 +1,6 @@
 import pytest
-import asyncio
 
-from app.services.queue import create_task, QueueWorker, get_task
+from app.services.queue import QueueWorker
 from app.models import LibraryPath, TVShow
 from app.services.tmdb import TMDBService
 from sqlalchemy import select
@@ -10,7 +9,6 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_search_endpoint_returns_candidates(temp_db, monkeypatch):
-    from sqlalchemy.ext.asyncio import AsyncSession
     from app.database import async_session
 
     async with async_session() as s:
@@ -49,10 +47,8 @@ async def test_search_endpoint_returns_candidates(temp_db, monkeypatch):
 
 
 async def test_scrape_with_tmdb_override_applies_details(temp_db, monkeypatch):
-    from sqlalchemy.ext.asyncio import AsyncSession
     from app.database import async_session
     from app.models import TVShow
-    from app.services.queue import QueueWorker
 
     # Create a show
     async with async_session() as s:
@@ -93,7 +89,6 @@ async def test_scrape_with_tmdb_override_applies_details(temp_db, monkeypatch):
         assert r.status_code == 200
         data = r.json()
         assert 'task_id' in data
-        task_id = data['task_id']
 
     # Run worker to process the task
     worker = QueueWorker(poll_interval=0.01)
