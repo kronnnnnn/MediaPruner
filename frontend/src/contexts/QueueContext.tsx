@@ -140,7 +140,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
                   const title = `Task #${data.id} ${data.type} ${newStatus}`
                   const meta = { task_id: data.id }
                   const metaRec = data.meta as Record<string, unknown> | undefined
-                  const msg = metaRec && typeof (metaRec as any)['path'] === 'string' ? String((metaRec as any)['path']) : `${data.total_items} items`;
+                  const pathVal = metaRec ? metaRec['path'] as unknown : undefined
+                  const msg = pathVal && typeof pathVal === 'string' ? String(pathVal) : `${data.total_items} items`;
                   mod.addNotificationToStore({ title, message: msg, type: newStatus === 'failed' ? 'error' : 'success', meta })
                 }).catch(e => console.debug('[queues] Notification import failed', e))
               }
