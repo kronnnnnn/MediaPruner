@@ -105,6 +105,9 @@ export default function MediaList({
 
   const isColumnVisible = (columnId: string) => visibleColumns.includes(columnId)
 
+  // mark _onColumnsChange as intentionally unused (may be wired by parent in some views)
+  if (typeof _onColumnsChange !== 'undefined') void _onColumnsChange
+
   const SortHeader = ({ column, children, className = '' }: { column: string; children: React.ReactNode; className?: string }) => {
     const colDef = AVAILABLE_COLUMNS.find(c => c.id === column)
     const minWidthClass = colDef?.minWidth || ''
