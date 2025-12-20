@@ -83,6 +83,9 @@ export default function MuxConfirmDialog({
     return 'show_id' in p
   }
 
+  // mark _type as intentionally unused (keeps prop visible for future use)
+  if (typeof _type !== 'undefined') void _type
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
