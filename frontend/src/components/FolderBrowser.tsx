@@ -191,7 +191,7 @@ export default function FolderBrowser({ isOpen, initialPath, onSelect, onCancel 
                 </button>
               ))}
             </div>
-          )}
+            })()}
         </div>
 
         {/* Footer */}
