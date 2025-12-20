@@ -400,15 +400,29 @@ async def search_tvshow_candidates(
         tmdb_service = await TMDBService.create_with_db_key(db)
 
         if tmdb_service.is_configured:
-            logger.debug(
-                f"[{original_title}] Searching TMDB with term: '{search_title}'")
-            tmdb_result = await tmdb_service.search_tvshow_and_get_details(search_title)
-
-            # If cleaned title didn't work, try original title
-            if not tmdb_result and search_title != original_title:
-                logger.debug(
-                    f"[{original_title}] TMDB search failed with cleaned title, trying original")
-                tmdb_result = await tmdb_service.search_tvshow_and_get_details(original_title)
+            logger.debug(f"[{original_title}] Searching TMDB with term: '{search_title}'")
+            if hasattr(tmdb_service, 'search_tvshow_and_get_details'):
+                tmdb_result = await tmdb_service.search_tvshow_and_get_details(search_title)
+                # If cleaned title didn't work, try original title
+                if not tmdb_result and search_title != original_title:
+                    logger.debug(f"[{original_title}] TMDB search failed with cleaned title, trying original")
+                    tmdb_result = await tmdb_service.search_tvshow_and_get_details(original_title)
+            elif hasattr(tmdb_service, 'search_tvshow'):
+                # Older TMDB service implementations may only provide search_tvshow
+                candidates = await tmdb_service.search_tvshow(search_title)
+                if not candidates and search_title != original_title:
+                    candidates = await tmdb_service.search_tvshow(original_title)
+                tmdb_result = [
+                    {
+                        'id': c.get('id'),
+                        'name': c.get('name') or c.get('title'),
+                        'first_air_date': c.get('first_air_date'),
+                        'overview': c.get('overview')
+                    }
+                    for c in candidates
+                ] if candidates else None
+            else:
+                tmdb_result = None
         else:
             if provider == "tmdb":
                 raise HTTPException(
@@ -417,42 +431,28 @@ async def search_tvshow_candidates(
             logger.warning(f"[{original_title}] TMDB API key not configured")
 
     if tmdb_result:
-        logger.info(
-            f"[{original_title}] Found on TMDB: '{tmdb_result.title}' (TMDB ID: {tmdb_result.tmdb_id}, IMDB: {tmdb_result.imdb_id})")
-        # Update show with TMDB data
-        show.tmdb_id = tmdb_result.tmdb_id
-        show.title = tmdb_result.title
-        show.original_title = tmdb_result.original_title
-        show.overview = tmdb_result.overview
-        show.first_air_date = tmdb_result.first_air_date
-        show.last_air_date = tmdb_result.last_air_date
-        show.status = tmdb_result.status
-        show.genres = ",".join(
-            tmdb_result.genres) if tmdb_result.genres else None
-        show.poster_path = tmdb_result.poster_path
-        show.backdrop_path = tmdb_result.backdrop_path
-        show.imdb_id = tmdb_result.imdb_id
-        show.rating = tmdb_result.rating
-        show.votes = tmdb_result.votes
-        show.season_count = tmdb_result.season_count
-        show.scraped = True
-        source = "tmdb"
+        # If tmdb_result is a list of candidates (dicts), return them as search results
+        results = []
+        if isinstance(tmdb_result, (list, tuple)):
+            for c in tmdb_result:
+                results.append({
+                    'tmdb_id': c.get('id') or c.get('tmdb_id'),
+                    'title': c.get('name') or c.get('title'),
+                    'first_air_date': c.get('first_air_date'),
+                    'overview': c.get('overview')
+                })
+        else:
+            # Single detailed object
+            results.append({
+                'tmdb_id': getattr(tmdb_result, 'tmdb_id', None) or getattr(tmdb_result, 'id', None),
+                'title': getattr(tmdb_result, 'title', None) or getattr(tmdb_result, 'name', None),
+                'first_air_date': getattr(tmdb_result, 'first_air_date', None),
+                'overview': getattr(tmdb_result, 'overview', None)
+            })
 
-        await db.commit()
-
-        # Also scrape episode metadata using the specified provider (or the
-        # show's source)
-        episode_result = await _scrape_episodes_internal(show, db, provider)
-        await db.commit()
-
-        logger.info(
-            f"[{show.title}] Metadata refresh complete: show from TMDB, {episode_result['updated']} episodes updated")
         return {
-            "message": f"TV show and {episode_result['updated']} episodes updated from TMDB",
-            "tmdb_id": tmdb_result.tmdb_id,
-            "source": source,
-            "episodes_updated": episode_result['updated'],
-            "episode_source": episode_result.get('source')
+            'provider': 'tmdb',
+            'results': results
         }
 
     # Try OMDb (if not forcing TMDB or TMDB didn't find it)
@@ -507,8 +507,13 @@ async def search_tvshow_candidates(
         detail=f"TV show not found{provider_msg}. Searched for: '{search_title}'. Please check the show title or try a different provider."
     )
 
-=======
->>>>>>> 032dd35 (chore(rebase): fix leftover merge artifacts and syntax issues after rebase)
+    # Fallback to OMDb if configured or forced
+    if provider in (None, 'omdb'):
+        from app.services.omdb import get_omdb_api_key_from_db, OMDbService
+
+        api_key = await get_omdb_api_key_from_db(db)
+        logger.info(f"Search candidates requested for show_id={show_id} title='{title}' provider=omdb")
+
         if api_key:
             omdb_svc = OMDbService(api_key)
             try:
@@ -881,17 +886,6 @@ async def analyze_all_episodes(
 
     task = await create_task('analyze', items=items, meta={"show_id": show_id, "batch": True})
     return {"task_id": task.id, "status": task.status.value, "total_enqueued": len(items)}
-    }
-        raise HTTPException(status_code=500, detail=f"Failed to fetch episodes: {str(e)}")
-    
-    # Enqueue analyze tasks for all episodes
-    from app.services.queue import create_task
-
-    items = []
-    for episode in episodes:
-        if not episode.file_path:
-            continue
-        items.append({"episode_id": episode.id})
 
     if not items:
         raise HTTPException(status_code=400, detail="No episodes with files to analyze")
@@ -919,23 +913,6 @@ async def get_mux_subtitles_preview(
             Episode.tvshow_id == show_id,
             Episode.subtitle_path.isnot(None),
             Episode.has_subtitle
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-                Episode.subtitle_path.isnot(None),
-                Episode.has_subtitle
-=======
-=======
-                Episode.subtitle_path.isnot(None),
-                Episode.has_subtitle
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
-=======
-                Episode.subtitle_path.isnot(None),
-                Episode.has_subtitle
->>>>>>> cfc8c4a (chore(rebase): remove leftover git conflict markers)
-=======
->>>>>>> e9b7170 (chore(rebase): resolve leftover router cleanup)
         )
     )
     episodes = episodes_result.scalars().all()
@@ -973,14 +950,14 @@ async def get_mux_subtitles_preview(
             'season_number': ep.season_number,
             'episode_number': ep.episode_number,
             'episode_title': ep.title,
-            'video_file': video_path.name,
+            'video_file': video_path.name if video_path else None,
             'video_size': video_size,
             'video_exists': video_exists,
-            'subtitle_file': subtitle_path.name,
+            'subtitle_file': subtitle_path.name if subtitle_path else None,
             'subtitle_size': subtitle_size,
             'subtitle_exists': subtitle_exists,
             'can_mux': video_exists and subtitle_exists,
-            'output_file': video_path.with_suffix('.mkv').name,
+            'output_file': (video_path.with_suffix('.mkv').name if video_path else None),
             'detected_language': ffmpeg.detect_subtitle_language(subtitle_path) if subtitle_exists else None,
         })
 
@@ -1011,40 +988,20 @@ async def mux_all_subtitles(
         raise HTTPException(status_code=404, detail="TV show not found")
 
     if not ffmpeg.is_available():
-        raise HTTPException(status_code=500,
-                            detail="FFmpeg is not installed on the server")
+        raise HTTPException(status_code=500, detail="FFmpeg is not installed on the server")
 
     # Get episodes with external subtitles
     episodes_result = await db.execute(
         select(Episode).where(
             Episode.tvshow_id == show_id,
             Episode.subtitle_path.isnot(None),
-            Episode.has_subtitle
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-                Episode.subtitle_path.isnot(None),
-                Episode.has_subtitle
-=======
-=======
-                Episode.subtitle_path.isnot(None),
-                Episode.has_subtitle
->>>>>>> 5c065f0 (chore(security): add detect-secrets baseline & CI checks (#5))
->>>>>>> 79f6ee5 (chore(security): add detect-secrets baseline & CI checks (#5))
-=======
-                Episode.subtitle_path.isnot(None),
-                Episode.has_subtitle
->>>>>>> cfc8c4a (chore(rebase): remove leftover git conflict markers)
-=======
->>>>>>> e9b7170 (chore(rebase): resolve leftover router cleanup)
+            Episode.has_subtitle,
         )
     )
     episodes = episodes_result.scalars().all()
 
     if not episodes:
-        raise HTTPException(
-            status_code=400,
-            detail="No episodes with external subtitles found")
+        raise HTTPException(status_code=400, detail="No episodes with external subtitles found")
 
     muxed = 0
     errors = []
@@ -1057,13 +1014,11 @@ async def mux_all_subtitles(
         subtitle_path = Path(ep.subtitle_path)
 
         if not video_path.exists():
-            errors.append(
-                f"S{ep.season_number}E{ep.episode_number}: Video file not found")
+            errors.append(f"S{ep.season_number}E{ep.episode_number}: Video file not found")
             continue
 
         if not subtitle_path.exists():
-            errors.append(
-                f"S{ep.season_number}E{ep.episode_number}: Subtitle file not found")
+            errors.append(f"S{ep.season_number}E{ep.episode_number}: Subtitle file not found")
             continue
 
         # Perform the mux

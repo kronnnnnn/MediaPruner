@@ -86,9 +86,9 @@ async def test_scrape_with_tmdb_override_applies_details(temp_db, monkeypatch):
 
     # Enqueue a scrape with override tmdb_id
     from app.main import app
-    from httpx import AsyncClient
+    from httpx import AsyncClient, ASGITransport
 
-    async with AsyncClient(app=app, base_url='http://test') as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
         r = await client.post(f'/api/tvshows/{show_id}/scrape', json={'tmdb_id': 42})
         assert r.status_code == 200
         data = r.json()

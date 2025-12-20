@@ -528,10 +528,6 @@ async def scrape_movie_metadata_now(movie_id: int, request: ScrapeNowRequest | N
 
     logger.warning(f"Scrape failed for movie_id={movie.id}: Tried: {'; '.join(details)}")
     raise HTTPException(status_code=404, detail={"message": "Movie not found on TMDB and OMDb fallback unavailable", "tried": tried_searches})
-<<<<<<< HEAD
-=======
-
->>>>>>> 032dd35 (chore(rebase): fix leftover merge artifacts and syntax issues after rebase)
 
 @router.get("/{movie_id}/rename-preview")
 async def preview_rename(

@@ -46,18 +46,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         const data = await res.json()
         setTasks(data as QueueTask[])
         console.debug('[queues] Loaded initial snapshot via HTTP', data.length)
->>>>>>> d2f6649 (fix(frontend): resolve TS unused-import errors and remove unused handler param)
-=======
-  // Try an initial HTTP fetch as a fallback in case the SSE 'init' event is missed/delivered before listeners are attached
-  const fetchInitial = async (limit = 500) => {
-    try {
-      console.debug('[queues] Fetching initial snapshot via HTTP /api/queues/tasks', { limit })
-      const res = await fetch(`/api/queues/tasks?limit=${limit}`)
-      if (res.ok) {
-        const data = await res.json()
->>>>>>> cc0c772 (chore(implement-queue): finalize queue feature & related fixes; add tests and build changes)
-        setTasks(data as QueueTask[])
-        console.debug('[queues] Loaded initial snapshot via HTTP', data.length)
       } else {
         console.debug('[queues] Failed to fetch initial snapshot', res.status)
       }

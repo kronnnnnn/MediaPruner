@@ -1084,8 +1084,6 @@ class QueueWorker:
                                     m.imdb_id = tmdb_result.imdb_id
                                     m.scraped = True
                                     item.result = json.dumps({'updated_from': 'tmdb'})
-=======
->>>>>>> cc0c772 (chore(implement-queue): finalize queue feature & related fixes; add tests and build changes)
                                     item.status = QueueStatus.COMPLETED
                                     task.completed_items = (task.completed_items or 0) + 1
                                 else:
