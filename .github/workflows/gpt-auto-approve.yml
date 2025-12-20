@@ -60,8 +60,8 @@ jobs:
                 repo: context.repo.repo,
                 pull_number: prNumber,
                 event: 'APPROVE',
-                body: 'Approved by GPT-5-mini (automated) after CI checks passed.'
+                body: 'Approved automatically after CI checks passed (via github-actions[bot]/GITHUB_TOKEN).'
               });
 
-              core.info(`Approved PR #${prNumber} as GPT-5-mini.`);
+              core.info(`Approved PR #${prNumber} via github-actions[bot] (GITHUB_TOKEN).`);
             }
