@@ -83,9 +83,6 @@ export default function MuxConfirmDialog({
     return typeof p === 'object' && p !== null && 'show_id' in (p as Record<string, unknown>)
   }
 
-  // mark _type as intentionally unused (keeps prop visible for future use)
-  if (typeof _type !== 'undefined') void _type
-
   // Some safety helpers to avoid casting to any in JSX
   const isTvWithMissingFfmpeg = !!preview && isTVShowPreview(preview) && !((preview as TVShowMuxPreview).ffmpeg_available)
 

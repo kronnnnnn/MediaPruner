@@ -564,13 +564,7 @@ export default function Movies() {
           // leave successCount unchanged
         }
       } catch (err: unknown) {
-        let message = 'Unknown error'
-        if (err && typeof err === 'object') {
-          const e = err as Record<string, unknown>
-          const resp = e.response as Record<string, unknown> | undefined
-          const data = resp?.data as Record<string, unknown> | undefined
-          message = (data?.detail as string) || (e.message as string) || JSON.stringify(e) || 'Unknown error'
-        }
+        const message = errorDetail(err)
         errors.push(`${id}: ${message}`)
       }
     }
@@ -656,7 +650,7 @@ export default function Movies() {
     return resp.data.ids
   }
 
-  const confirmScopeAndRun = async (actionName: string, mutateFn: (...args: unknown[]) => unknown) => {
+  const confirmScopeAndRun = async (actionName: string, mutateFn: (ids: number[]) => void) => {
     try {
       // If the user has explicit selections in edit mode, apply only to those selected IDs
       let ids: number[] = []
@@ -1146,7 +1140,7 @@ export default function Movies() {
           <button
             onClick={() => {
               logger.buttonClick('Analyze', 'Movies', { count: movies.length })
-              confirmScopeAndRun('Analyze', analyzeMutation.mutate as unknown as (...args: unknown[]) => unknown)
+              confirmScopeAndRun('Analyze', analyzeMutation.mutate)
             }}
             disabled={isAnyProcessRunning || movies.length === 0}
             className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 rounded text-white text-sm transition-colors"
@@ -1160,7 +1154,7 @@ export default function Movies() {
           <button
             onClick={() => {
               logger.buttonClick('Refresh Metadata', 'Movies', { count: movies.length })
-              confirmScopeAndRun('Refresh Metadata', scrapeMutation.mutate as unknown as (...args: unknown[]) => unknown)
+              confirmScopeAndRun('Refresh Metadata', scrapeMutation.mutate)
             }}
             disabled={isAnyProcessRunning || movies.length === 0}
             className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded text-white text-sm transition-colors"
@@ -1191,7 +1185,7 @@ export default function Movies() {
             onClick={() => {
               logger.buttonClick('Sync Watch History', 'Movies')
               // Use confirm scope run to optionally run on all matching movies
-              confirmScopeAndRun('Sync Watch History', syncWatchBatchMutation.mutate as unknown as (...args: unknown[]) => unknown)
+              confirmScopeAndRun('Sync Watch History', syncWatchBatchMutation.mutate)
             }}
             disabled={syncWatchHistoryMutation.isPending}
             className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 rounded text-white text-sm transition-colors"

@@ -9,6 +9,14 @@ import { tvShowsApi, libraryApi, TVShow } from '../services/api'
 import logger from '../services/logger'
 import { errorDetail } from '../services/errorUtils'
 
+// Helper function to get status badge class
+const getStatusClass = (status: string | undefined | null): string => {
+  if (!status) return 'bg-gray-500/20 text-gray-400'
+  if (status === 'Ended') return 'bg-red-500/20 text-red-400'
+  if (status === 'Returning Series') return 'bg-green-500/20 text-green-400'
+  return 'bg-gray-500/20 text-gray-400'
+}
+
 // localStorage keys for persistence
 const STORAGE_KEY_VIEW_MODE = 'mediapruner_tvshows_view_mode'
 
@@ -354,16 +362,11 @@ export default function TVShows() {
                         {show.season_count} seasons, {show.episode_count} eps
                       </td>
                       <td className="px-3 py-2">
-                        {show.status && (() => {
-                          let statusClass = 'bg-gray-500/20 text-gray-400'
-                          if (show.status === 'Ended') statusClass = 'bg-red-500/20 text-red-400'
-                          else if (show.status === 'Returning Series') statusClass = 'bg-green-500/20 text-green-400'
-                          return (
-                            <span className={`px-2 py-1 rounded text-xs ${statusClass}`}>
-                              {show.status}
-                            </span>
-                          )
-                        })()}
+                        {show.status && (
+                          <span className={`px-2 py-1 rounded text-xs ${getStatusClass(show.status)}`}>
+                            {show.status}
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         {show.scraped ? (

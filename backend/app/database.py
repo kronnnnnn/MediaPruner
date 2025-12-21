@@ -2,6 +2,9 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import text
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Database path - use data directory for persistence
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -41,8 +44,8 @@ async def migrate_db():
         # Ensure base tables exist (so SQL migrations that reference tables can run)
         try:
             await conn.run_sync(Base.metadata.create_all)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Base table creation failed (may already exist): {e}")
 
         # Check and add new columns to movies table
         movies_columns = [
