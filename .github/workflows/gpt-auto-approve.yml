@@ -113,13 +113,38 @@ jobs:
               }
 
               // Post an approval review using the chosen octokit instance
-              await oct.rest.pulls.createReview({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: prNumber,
-                event: 'APPROVE',
-                body: `Approved automatically after CI checks passed and Copilot label detected (${approverName}).`
-              });
+              try {
+                await oct.rest.pulls.createReview({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                  event: 'APPROVE',
+                  body: `Approved automatically after CI checks passed and Copilot label detected (${approverName}).`
+                });
 
-              core.info(`Approved PR #${prNumber} via ${approverName}.`);
+                core.info(`Approved PR #${prNumber} via ${approverName}.`);
+              } catch (err) {
+                // Provide a helpful message on the PR and fail the job with details
+                const message = err && err.message ? err.message : String(err);
+                core.error(`Approval failed for PR #${prNumber}: ${message}`);
+
+                const helpBody = `Automated approval failed when attempting to approve PR #${prNumber} as **${approverName}**.\n\n` +
+                  `Error: \`${message}\`.\n\n` +
+                  `Common causes and remediation:\n` +
+                  `1. If using the default **GITHUB_TOKEN (github-actions[bot])**, make sure repository Actions settings allow Actions to approve pull requests: go to **Settings → Actions → General → Workflow permissions** and enable the option **Allow GitHub Actions to create and approve pull requests** (or use a PAT/GitHub App).\n` +
+                  `2. If you prefer using a machine user PAT, add it as the secret **AUTO_APPROVE_PAT** (the PAT must have repo write access).\n` +
+                  `3. If using a GitHub App, ensure it is installed on this repo and has **Pull requests: Read & Write** permission; ensure **AUTO_APPROVE_APP_ID** and **AUTO_APPROVE_APP_PRIVATE_KEY** secrets are set.\n\n` +
+                  `After addressing the issue, re-run the auto-approve workflow or trigger the Copilot review.`;
+
+                // Post the message to the PR so maintainers can act
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  body: helpBody
+                });
+
+                // Re-throw to mark job as failed
+                throw err;
+              }
             }
