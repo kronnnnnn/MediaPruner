@@ -43,7 +43,7 @@ export default function Queues() {
         }
       } catch (e) {
         // Only notify if not an abort
-        if ((e as any)?.name !== 'AbortError') {
+        if ((e as Record<string, unknown>)?.name !== 'AbortError') {
           import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Failed to load task', message: String(e), type: 'error' })).catch(() => null)
         }
       } finally {
@@ -102,19 +102,21 @@ export default function Queues() {
     return statusOrder.map(k => ({ key: k, items: map[k] ?? [] })).filter(g => g.items.length > 0)
   }
 
-  const taskSourceLabel = (t: any) => {
+  const taskSourceLabel = (t: Record<string, unknown>) => {
     try {
-      if (t.meta && t.meta.media_type) return t.meta.media_type.toUpperCase()
-      if (t.meta && t.meta.path) return t.meta.path
+      const meta = t.meta as Record<string, unknown> | undefined
+      if (meta && meta.media_type) return String(meta.media_type).toUpperCase()
+      if (meta && meta.path) return String(meta.path)
       // fall back to first item payload path if present
-      if (t.items && t.items.length > 0 && t.items[0].payload_parsed && t.items[0].payload_parsed.path) return t.items[0].payload_parsed.path
+      const items = t.items as unknown[] | undefined
+      if (items && items.length > 0 && (items[0] as Record<string, unknown>).payload_parsed && ((items[0] as Record<string, unknown>).payload_parsed as Record<string, unknown>).path) return String(((items[0] as Record<string, unknown>).payload_parsed as Record<string, unknown>).path)
       return ''
     } catch (e) {
       return ''
     }
   }
 
-  const taskTitle = (t: any) => {
+  const taskTitle = (t: Record<string, unknown>) => {
     const typeLabel = String(t.type).replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
     const path = taskSourceLabel(t)
     return path ? `${typeLabel} (${path})` : typeLabel
