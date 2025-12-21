@@ -9,30 +9,6 @@ import { useToast } from '../contexts/ToastContext'
 import logger from '../services/logger'
 import { errorDetail } from '../services/errorUtils'
 
-// Helper function to render TMDB API status indicator
-const getTmdbStatusIndicator = (
-  tmdbStatusLoading: boolean,
-  tmdbConfigured: boolean | undefined
-): JSX.Element => {
-  if (tmdbStatusLoading) {
-    return <Loader2 className="w-4 h-4 animate-spin text-gray-500 dark:text-gray-400" />
-  }
-  if (tmdbConfigured) {
-    return (
-      <span className="flex items-center gap-1 text-green-400 text-sm">
-        <Check className="w-4 h-4" />
-        Configured
-      </span>
-    )
-  }
-  return (
-    <span className="flex items-center gap-1 text-yellow-400 text-sm">
-      <X className="w-4 h-4" />
-      Not configured
-    </span>
-  )
-}
-
 // Generic helper function to render API status indicator
 const getStatusIndicator = (
   isLoading: boolean,
@@ -56,6 +32,14 @@ const getStatusIndicator = (
       {notConfiguredText}
     </span>
   )
+}
+
+// Helper function to render TMDB API status indicator
+const getTmdbStatusIndicator = (
+  tmdbStatusLoading: boolean,
+  tmdbConfigured: boolean | undefined
+): JSX.Element => {
+  return getStatusIndicator(tmdbStatusLoading, tmdbConfigured, 'Not configured')
 }
 
 type SettingsTab = 'library' | 'api' | 'logs'
