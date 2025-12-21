@@ -26,7 +26,7 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteOptions, setDeleteOptions] = useState<{ deleteFile: boolean; deleteFolder: boolean }>({ deleteFile: false, deleteFolder: false })
   const [showMuxConfirm, setShowMuxConfirm] = useState(false)
-  const [muxPreview, setMuxPreview] = useState<Record<string, unknown> | null>(null)
+  const [muxPreview, setMuxPreview] = useState<unknown | null>(null)
   const [muxPreviewError, setMuxPreviewError] = useState<string | null>(null)
 
   // Log modal open on mount
@@ -661,7 +661,7 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
                     <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-600">
                       <span className="text-gray-500 dark:text-gray-400 text-xs">All tracks:</span>
                       <div className="mt-1 space-y-1">
-                        {audioTracks.map((rawTrack, idx: number) => {
+                        {audioTracks.map((rawTrack: unknown, idx: number) => {
                           const track = rawTrack as Record<string, unknown>
                           const codec = track.codec as string | undefined
                           const channels = track.channels as string | number | undefined

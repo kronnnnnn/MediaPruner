@@ -58,7 +58,7 @@ export default function TVShowDetailPage() {
   const [isMuxing, setIsMuxing] = useState(false)
   const [metadataProvider, setMetadataProvider] = useState<'auto' | 'tmdb' | 'omdb'>('auto')
   const [searching, setSearching] = useState(false)
-  const [searchResults, setSearchResults] = useState<unknown[] | null>(null)
+  const [searchResults, setSearchResults] = useState<Record<string, unknown>[] | null>(null)
   const [searchProvider, setSearchProvider] = useState<'tmdb' | 'omdb' | null>(null)
   const [showSearchModal, setShowSearchModal] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<Record<string, unknown> | null>(null)
@@ -84,7 +84,7 @@ export default function TVShowDetailPage() {
   const scrapeMutation = useMutation({
     mutationFn: (provider?: 'tmdb' | 'omdb') => tvShowsApi.scrapeTVShow(showId, undefined, provider),
     onSuccess: async (result: unknown) => {
-      const data = (result as Record<string, unknown>)?.data as Record<string, unknown> | undefined
+      const data = (result as unknown as { data?: unknown })?.data as Record<string, unknown> | undefined
       if (data?.task_id) {
         // Enqueued
         showToast('Refresh Enqueued', `Task ${(data.task_id as string)} enqueued to refresh show metadata`, 'info')
@@ -100,9 +100,9 @@ export default function TVShowDetailPage() {
         source: data?.source,
         episodesUpdated: data?.episodes_updated 
       })
-      const episodeSource = data?.episode_source ? ` (episodes from ${data.episode_source.toUpperCase()})` : ''
+      const episodeSource = data?.episode_source ? ` (episodes from ${String(data.episode_source).toUpperCase()})` : ''
       const episodeMsg = data?.episodes_updated ? ` and ${data.episodes_updated} episodes` : ''
-      showToast('Metadata Updated', `Show${episodeMsg} metadata has been refreshed from ${data?.source?.toUpperCase() || 'external source'}${episodeSource}.`, 'success')
+      showToast('Metadata Updated', `Show${episodeMsg} metadata has been refreshed from ${String(data?.source)?.toUpperCase() || 'external source'}${episodeSource}.`, 'success')
     },
     onError: (error: unknown) => {
       const err = error as Record<string, unknown>
@@ -152,11 +152,11 @@ export default function TVShowDetailPage() {
         showId, 
         analyzed: data?.analyzed, 
         total: data?.total, 
-        errors: data?.errors?.length || 0 
+        errors: Array.isArray(data?.errors) ? (data?.errors as unknown[]).length : 0
       })
       showToast(
         'Analysis Complete',
-        `Analyzed ${data?.analyzed} of ${data?.total} episodes.${data?.errors?.length ? `\n${data?.errors.length} errors occurred.` : ''}`,
+        `Analyzed ${data?.analyzed} of ${data?.total} episodes.${Array.isArray(data?.errors) && (data?.errors as unknown[]).length ? `\n${(data?.errors as unknown[]).length} errors occurred.` : ''}`,
         data?.analyzed === data?.total ? 'success' : 'warning'
       )
     },
@@ -188,9 +188,9 @@ export default function TVShowDetailPage() {
   }
 
   const confirmMuxSubtitles = async () => {
-    if (!muxPreview?.episodes) return
-    
-    const episodesToMux = (muxPreview.episodes as unknown[]).filter((ep) => Boolean((ep as Record<string, unknown>).can_mux))
+    if (!muxPreview || !(muxPreview as Record<string, unknown>).episodes) return
+
+    const episodesToMux = ((muxPreview as Record<string, unknown>).episodes as unknown[]).filter((ep) => Boolean((ep as Record<string, unknown>).can_mux))
     const total = episodesToMux.length
     
     setIsMuxing(true)
@@ -204,7 +204,7 @@ export default function TVShowDetailPage() {
       setMuxProgress({ current: i + 1, total })
       
       try {
-        await tvShowsApi.muxEpisodeSubtitle(showId, ep.episode_id)
+        await tvShowsApi.muxEpisodeSubtitle(showId, (ep as Record<string, unknown>).episode_id as number)
         muxed++
       } catch (error: unknown) {
         errors.push(`S${(ep as Record<string, unknown>).season_number}E${(ep as Record<string, unknown>).episode_number}: ${errorDetail(error) || 'Failed'}`)
@@ -249,8 +249,9 @@ export default function TVShowDetailPage() {
     setSearchResults(null)
     setSearchProvider((provider as 'tmdb' | 'omdb') || 'tmdb')
     tvShowsApi.searchTVShow(showId, provider as 'tmdb' | 'omdb' | undefined).then(res => {
-      const data = (res as Record<string, unknown>)?.data as Record<string, unknown> | undefined
-      setSearchResults((data?.results as unknown[]) || [])
+      const data = (res as unknown as Record<string, unknown>)?.data as Record<string, unknown> | undefined
+      const results = (data?.results as unknown[] | undefined) ?? []
+      setSearchResults(results as Record<string, unknown>[])
       setShowSearchModal(true)
     }).catch((err: unknown) => {
       const e = err as Record<string, unknown>
@@ -377,15 +378,16 @@ export default function TVShowDetailPage() {
           <span>Back</span>
         </button>
         <h1 className="text-2xl font-bold text-white truncate">{show.title}</h1>
-        {show.status && (
-          <span className={`px-2 py-1 rounded text-xs ${
-            show.status === 'Ended' ? 'bg-red-500/20 text-red-400' :
-            show.status === 'Returning Series' ? 'bg-green-500/20 text-green-400' :
-            'bg-gray-500/20 text-gray-400'
-          }`}>
-            {show.status}
-          </span>
-        )}
+        {show.status && (() => {
+          let statusClass = 'bg-gray-500/20 text-gray-400'
+          if (show.status === 'Ended') statusClass = 'bg-red-500/20 text-red-400'
+          else if (show.status === 'Returning Series') statusClass = 'bg-green-500/20 text-green-400'
+          return (
+            <span className={`px-2 py-1 rounded text-xs ${statusClass}`}>
+              {show.status}
+            </span>
+          )
+        })()} 
       </div>
 
       {/* Main content */}
@@ -595,13 +597,11 @@ export default function TVShowDetailPage() {
                           {totalWithSubs}
                         </span>
                       )}
-                      <span className={`text-xs px-2 py-0.5 rounded ${
-                        analyzedCount === seasonEpisodes.length 
-                          ? 'bg-green-500/20 text-green-400'
-                          : analyzedCount > 0
-                            ? 'bg-yellow-500/20 text-yellow-400'
-                            : 'bg-gray-500/20 text-gray-400'
-                      }`}>
+                      <span className={`text-xs px-2 py-0.5 rounded ${(() => {
+                        if (analyzedCount === seasonEpisodes.length) return 'bg-green-500/20 text-green-400'
+                        if (analyzedCount > 0) return 'bg-yellow-500/20 text-yellow-400'
+                        return 'bg-gray-500/20 text-gray-400'
+                      })()}`}> 
                         {analyzedCount}/{seasonEpisodes.length} analyzed
                       </span>
                     </div>
@@ -756,10 +756,20 @@ export default function TVShowDetailPage() {
                   <div className="mt-3 space-y-2">
                     {searchResults.map((r, idx) => (
                       <label key={idx} className={`flex items-center gap-3 p-2 rounded ${selectedCandidate === r ? 'bg-gray-700 border border-gray-600' : 'hover:bg-gray-700/20'}`}>
-                        <input type="radio" name="candidate" checked={selectedCandidate === r} onChange={() => setSelectedCandidate(r)} />
+                        <input type="radio" name="candidate" checked={selectedCandidate === r} onChange={() => setSelectedCandidate(r as Record<string, unknown>)} />
                         <div className="flex-1">
-                          <div className="text-white font-medium">{r.title} {r.year ? `(${r.year})` : ''}</div>
-                          {r.overview && <div className="text-sm text-gray-400 truncate">{r.overview}</div>}
+                          {(() => {
+                            const rr = r as Record<string, unknown>
+                            const title = String(rr.title)
+                            const year = rr.year
+                            const overview = rr.overview as unknown
+                            return (
+                              <>
+                                <div className="text-white font-medium">{title} {year ? `(${String(year)})` : ''}</div>
+                                {typeof overview === 'string' && <div className="text-sm text-gray-400 truncate">{overview}</div>}
+                              </>
+                            )
+                          })()}
                         </div>
                       </label>
                     ))}

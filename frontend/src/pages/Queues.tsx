@@ -9,7 +9,7 @@ export default function Queues() {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({})
   const [groupCollapsed, setGroupCollapsed] = useState<Record<number, Record<string, boolean>>>({})
   const [loadingItems, setLoadingItems] = useState<Record<number, boolean>>({})
-  const [taskDetails, setTaskDetails] = useState<Record<number, unknown>>({})
+  const [taskDetails, setTaskDetails] = useState<Record<number, Record<string, unknown>>>({})
   const [modalMovieId, setModalMovieId] = useState<number | null>(null)
 
   const [isClearing, setIsClearing] = useState(false)
@@ -57,7 +57,7 @@ export default function Queues() {
 
   const currentTasks = tasks.filter(t => {
     const s = String(t.status).toLowerCase()
-    const hasFailed = Array.isArray(t.items) && t.items.some((i: Record<string, unknown>) => String(i.status).toLowerCase() === 'failed')
+    const hasFailed = Array.isArray(t.items) && t.items.some((i) => String((i as unknown as Record<string, unknown>).status).toLowerCase() === 'failed')
     // Treat a completed task with any failed items as history
     if (s === 'completed' && hasFailed) return false
     return !['completed', 'deleted'].includes(s)
@@ -65,7 +65,7 @@ export default function Queues() {
 
   const historyTasks = tasks.filter(t => {
     const s = String(t.status).toLowerCase()
-    const hasFailed = Array.isArray(t.items) && t.items.some((i: Record<string, unknown>) => String(i.status).toLowerCase() === 'failed')
+    const hasFailed = Array.isArray(t.items) && t.items.some((i) => String((i as unknown as Record<string, unknown>).status).toLowerCase() === 'failed')
     return ['completed', 'deleted', 'failed'].includes(s) || (s === 'completed' && hasFailed)
   })
 
@@ -124,14 +124,14 @@ export default function Queues() {
 
   const renderTask = (t: Record<string, unknown>) => {
     const isOpen = !!expanded[t.id as number]
-    const displayItems = (taskDetails[t.id as number] ? taskDetails[t.id as number].items : (t.items as unknown[] | undefined))
+    const displayItems = ((taskDetails[t.id as number]?.items as unknown[] | undefined) ?? (t.items as unknown[] | undefined))
 
     return (
       <div key={String(t.id)} className="border rounded bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
         <button onClick={() => toggle(Number(t.id))} aria-expanded={isOpen} className="w-full text-left p-4 flex items-center justify-between">
           <div>
             <div className="font-semibold flex items-center gap-2">
-              <span>#{t.id}</span>
+              <span>#{String(t.id)}</span>
               <span className="cursor-pointer text-gray-400">{isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</span>
               <span className="ml-2">— {taskTitle(t)}</span>
             </div>
@@ -151,22 +151,22 @@ export default function Queues() {
           <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
             <div className="mb-2 text-sm text-gray-400">Task details</div>
             <div className="max-h-[60vh] overflow-y-auto space-y-3">
-              {loadingItems[t.id] ? (
+              {loadingItems[t.id as number] ? (
                 <div className="text-sm text-gray-400">Loading items…</div>
               ) : (() => {
                 const items = displayItems ?? []
                 if (!items || items.length === 0) return <div className="text-sm text-gray-500">No items</div>
                 return groupItemsByStatus(items).map(g => {
-                  const collapsed = (groupCollapsed[t.id]?.[g.key] ?? true)
+                  const collapsed = (groupCollapsed[t.id as number]?.[g.key] ?? true)
                   return (
                     <div key={g.key}>
                       <div className="flex items-center justify-between mb-2">
-                        <div onClick={() => toggleGroup(t.id, g.key)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(t.id, g.key) } }} aria-expanded={!collapsed} className="flex items-center gap-2 text-sm font-semibold cursor-pointer select-none">
+                        <div onClick={() => toggleGroup(t.id as number, g.key)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(t.id as number, g.key) } }} aria-expanded={!collapsed} className="flex items-center gap-2 text-sm font-semibold cursor-pointer select-none">
                           {statusIcon(g.key)} <span className="capitalize">{g.key}</span>
                           <span className="text-xs text-gray-400">• {g.items.length}</span>
                         </div>
                         <div>
-                          <button onClick={() => toggleGroup(t.id, g.key)} aria-label={collapsed ? 'Expand' : 'Collapse'} className="p-1 text-xs text-gray-400 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+                          <button onClick={() => toggleGroup(t.id as number, g.key)} aria-label={collapsed ? 'Expand' : 'Collapse'} className="p-1 text-xs text-gray-400 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
                             {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </button>
                         </div>
@@ -194,45 +194,59 @@ export default function Queues() {
                                 <div className="text-xs text-gray-400">{startedAt ? new Date(startedAt).toLocaleString() : ''}{finishedAt ? ` — ${new Date(finishedAt).toLocaleString()}` : ''}</div>
                               </div>
 
-                              { (movieTitle || (payloadParsed && payloadParsed.movie_id)) && (
-                                <div className="mt-2 text-sm text-gray-300 flex items-center gap-2">
-                                  <Film className="w-4 h-4 text-gray-400" />
-                                  <div>
-                                    <div className="text-sm font-semibold">
-                                      {(() => {
-                                        if (payloadParsed && payloadParsed.movie_id) {
-                                          return (
-                                            <button type="button" onClick={() => setModalMovieId(Number(payloadParsed.movie_id))} className="hover:underline text-primary-400 font-semibold text-sm">
-                                              {movieTitle ?? `#${payloadParsed.movie_id}`}
-                                            </button>
-                                          )
-                                        }
-                                        if (movieUrl) {
-                                          return <Link className="hover:underline text-primary-400" to={movieUrl}>{movieTitle ?? `#${payloadParsed?.movie_id}`}</Link>
-                                        }
-                                        return movieTitle ?? `#${payloadParsed?.movie_id}`
-                                      })()} 
+                              {(() => {
+                                if (Boolean(movieTitle) || (payloadParsed && (payloadParsed as Record<string, unknown>).movie_id)) {
+                                  return (
+                                    <div className="mt-2 text-sm text-gray-300 flex items-center gap-2">
+                                      <Film className="w-4 h-4 text-gray-400" />
+                                      <div>
+                                        <div className="text-sm font-semibold">
+                                          {(() => {
+                                            const title = String(movieTitle ?? (payloadParsed && payloadParsed.movie_id ? `#${(payloadParsed as Record<string, unknown>).movie_id}` : ''))
+                                            if (payloadParsed && payloadParsed.movie_id) {
+                                              return (
+                                                <button type="button" onClick={() => setModalMovieId(Number((payloadParsed as Record<string, unknown>).movie_id))} className="hover:underline text-primary-400 font-semibold text-sm">
+                                                  {title}
+                                                </button>
+                                              )
+                                            }
+                                            if (movieUrl) {
+                                              return <Link className="hover:underline text-primary-400" to={movieUrl}>{title}</Link>
+                                            }
+                                            return title
+                                          })()} 
+                                        </div>
+                                        {movieSummary && <div className="text-xs text-gray-400">{movieSummary}</div>}
+                                      </div>
                                     </div>
-                                    {movieSummary && <div className="text-xs text-gray-400">{movieSummary}</div>}
-                                  </div>
-                                </div>
-                              )}
+                                  )
+                                }
+                                return null
+                              })()}
 
-                              {resultSummary ? (
-                                <div className="mt-1 text-xs">
-                                  <span className={`inline-block px-2 py-0.5 rounded text-xs ${resultSummary.startsWith('Error') ? 'text-red-300' : 'text-gray-300 bg-gray-800/50'}`}>{resultSummary}</span>
-                                </div>
-                              ) : result && (
-                                <div className="mt-1 text-xs text-gray-500">Result: <code className="break-words">{typeof result === 'string' ? result : JSON.stringify(result)}</code></div>
-                              )}
+                              {(() => {
+                                if (resultSummary) {
+                                  return (
+                                    <div className="mt-1 text-xs">
+                                      <span className={`inline-block px-2 py-0.5 rounded text-xs ${String(resultSummary).startsWith('Error') ? 'text-red-300' : 'text-gray-300 bg-gray-800/50'}`}>{String(resultSummary)}</span>
+                                    </div>
+                                  )
+                                }
+                                if (result) {
+                                  return (
+                                    <div className="mt-1 text-xs text-gray-500">Result: <code className="break-words">{String(typeof result === 'string' ? result : JSON.stringify(result))}</code></div>
+                                  )
+                                }
+                                return null
+                              })()}
                             </div>
 
                             <div className="flex flex-col items-end gap-2">
-                              {result && (
+                              {result ? (
                                 <button title="Copy result" className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => copyText(typeof result === 'string' ? result : JSON.stringify(result))}>
                                   <Copy className="w-4 h-4 text-gray-400" />
                                 </button>
-                              )}
+                              ) : null}
                             </div>
                           </div>
                         )
@@ -312,7 +326,7 @@ export default function Queues() {
       </div>
 
       <div className="space-y-3">
-        {(activeTab === 'current' ? currentTasks : historyTasks).map(t => renderTask(t))}
+        {(activeTab === 'current' ? currentTasks : historyTasks).map(t => renderTask(t as unknown as Record<string, unknown>))}
         { (activeTab === 'current' ? currentTasks : historyTasks).length === 0 && (
           <div className="text-sm text-gray-500">No tasks</div>
         )}
