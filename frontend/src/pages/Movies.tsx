@@ -899,7 +899,7 @@ export default function Movies() {
                   value={filters.scraped}
                   onChange={(e) => {
                     logger.filterChange('scraped', e.target.value, 'Movies')
-                    setFilters(f => ({ ...f, scraped: e.target.value as any }))
+                    setFilters(f => ({ ...f, scraped: e.target.value as Filters['scraped'] }))
                   }}
                   className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-gray-900 dark:text-white text-sm transition-colors"
                 >
@@ -916,7 +916,7 @@ export default function Movies() {
                   value={filters.analyzed}
                   onChange={(e) => {
                     logger.filterChange('analyzed', e.target.value, 'Movies')
-                    setFilters(f => ({ ...f, analyzed: e.target.value as any }))
+                    setFilters(f => ({ ...f, analyzed: e.target.value as Filters['analyzed'] }))
                   }}
                   className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-gray-900 dark:text-white text-sm transition-colors"
                 >
@@ -932,7 +932,7 @@ export default function Movies() {
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Has NFO</label>
                 <select
                   value={filters.hasNfo}
-                  onChange={(e) => setFilters(f => ({ ...f, hasNfo: e.target.value as any }))}
+                  onChange={(e) => setFilters(f => ({ ...f, hasNfo: e.target.value as Filters['hasNfo'] }))}
                   className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-gray-900 dark:text-white text-sm transition-colors"
                 >
                   <option value="all">All</option>
@@ -946,7 +946,7 @@ export default function Movies() {
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Watched</label>
                 <select
                   value={filters.watched}
-                  onChange={(e) => setFilters(f => ({ ...f, watched: e.target.value as any }))}
+                  onChange={(e) => setFilters(f => ({ ...f, watched: e.target.value as Filters['watched'] }))}
                   className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-gray-900 dark:text-white text-sm transition-colors"
                 >
                   <option value="all">All</option>
@@ -1534,13 +1534,11 @@ export default function Movies() {
       <ConfirmDialog
         isOpen={deleteConfirmOpen}
         title="Delete Movies"
-        message={`Are you sure you want to delete ${selectedIds.size} movie${selectedIds.size !== 1 ? 's' : ''}?\n\n${
-          deleteOptions.deleteFolder 
-            ? '⚠️ This will permanently delete the entire folder containing each movie from your disk!'
-            : deleteOptions.deleteFile 
-              ? '⚠️ This will permanently delete the media files from your disk!'
-              : 'This will only remove them from the library. The files will remain on disk.'
-        }`}
+        message={`Are you sure you want to delete ${selectedIds.size} movie${selectedIds.size !== 1 ? 's' : ''}?\n\n${(() => {
+          if (deleteOptions.deleteFolder) return '⚠️ This will permanently delete the entire folder containing each movie from your disk!'
+          if (deleteOptions.deleteFile) return '⚠️ This will permanently delete the media files from your disk!'
+          return 'This will only remove them from the library. The files will remain on disk.'
+        })()}`}
         confirmLabel={deleteOptions.deleteFolder || deleteOptions.deleteFile ? 'Delete Files' : 'Remove from Library'}
         variant={deleteOptions.deleteFolder || deleteOptions.deleteFile ? 'danger' : 'warning'}
         onConfirm={confirmDelete}

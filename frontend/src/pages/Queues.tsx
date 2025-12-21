@@ -199,15 +199,19 @@ export default function Queues() {
                                   <Film className="w-4 h-4 text-gray-400" />
                                   <div>
                                     <div className="text-sm font-semibold">
-                                      { (payloadParsed && payloadParsed.movie_id) ? (
-                                        <button type="button" onClick={() => setModalMovieId(Number(payloadParsed.movie_id))} className="hover:underline text-primary-400 font-semibold text-sm">
-                                          {movieTitle ?? `#${payloadParsed.movie_id}`}
-                                        </button>
-                                      ) : movieUrl ? (
-                                        <Link className="hover:underline text-primary-400" to={movieUrl}>{movieTitle ?? `#${payloadParsed?.movie_id}`}</Link>
-                                      ) : (
-                                        movieTitle ?? `#${payloadParsed?.movie_id}`
-                                      )}
+                                      {(() => {
+                                        if (payloadParsed && payloadParsed.movie_id) {
+                                          return (
+                                            <button type="button" onClick={() => setModalMovieId(Number(payloadParsed.movie_id))} className="hover:underline text-primary-400 font-semibold text-sm">
+                                              {movieTitle ?? `#${payloadParsed.movie_id}`}
+                                            </button>
+                                          )
+                                        }
+                                        if (movieUrl) {
+                                          return <Link className="hover:underline text-primary-400" to={movieUrl}>{movieTitle ?? `#${payloadParsed?.movie_id}`}</Link>
+                                        }
+                                        return movieTitle ?? `#${payloadParsed?.movie_id}`
+                                      })()} 
                                     </div>
                                     {movieSummary && <div className="text-xs text-gray-400">{movieSummary}</div>}
                                   </div>

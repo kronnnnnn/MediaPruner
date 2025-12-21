@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { X, FileEdit, Eye, Check, RefreshCw, Tv } from 'lucide-react'
 import { tvShowsApi, TVShow } from '../services/api'
 import logger from '../services/logger'
+import { errorDetail } from '../services/errorUtils' 
 
 // Custom hook for debouncing values
 function useDebounce<T>(value: T, delay: number): T {
@@ -348,7 +349,7 @@ export default function TVRenameModal({ show, onClose }: TVRenameModalProps) {
 
           {renameMutation.isError && (
             <div className="p-3 bg-red-500/20 border border-red-500 rounded-lg text-red-300 text-sm">
-              {(renameMutation.error as any)?.response?.data?.detail || 'Failed to rename episodes'}
+              {errorDetail(renameMutation.error) || 'Failed to rename episodes'}
             </div>
           )}
         </div>
