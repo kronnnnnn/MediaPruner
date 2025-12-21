@@ -86,6 +86,9 @@ export default function MuxConfirmDialog({
   // mark _type as intentionally unused (keeps prop visible for future use)
   if (typeof _type !== 'undefined') void _type
 
+  // Some safety helpers to avoid casting to any in JSX
+  const isTvWithMissingFfmpeg = !!preview && isTVShowPreview(preview as MovieMuxPreview | TVShowMuxPreview) && !(preview as TVShowMuxPreview).ffmpeg_available
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
@@ -274,7 +277,7 @@ export default function MuxConfirmDialog({
             </button>
             <button
               onClick={onConfirm}
-              disabled={isLoading || !preview || (isTVShowPreview(preview as any) && !(preview as TVShowMuxPreview).ffmpeg_available)}
+              disabled={isLoading || !preview || isTvWithMissingFfmpeg}
               className="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
             >
               {isLoading ? (
