@@ -7,6 +7,7 @@ import FolderBrowser from '../components/FolderBrowser'
 import MessageModal, { useMessageModal } from '../components/MessageModal'
 import { useToast } from '../contexts/ToastContext'
 import logger from '../services/logger'
+import { errorDetail } from '../services/errorUtils'
 
 type SettingsTab = 'library' | 'api' | 'logs'
 
@@ -126,9 +127,9 @@ export default function Settings() {
       await queryClient.invalidateQueries({ queryKey: ['tvshows'] })
       await queryClient.invalidateQueries({ queryKey: ['library-stats'] })
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       console.error('Remove path error:', error)
-      showToast('Error', error?.response?.data?.detail || 'Failed to remove path', 'error')
+      showToast('Error', errorDetail(error) || 'Failed to remove path', 'error')
     },
   })
 
@@ -368,8 +369,8 @@ export default function Settings() {
     onSuccess: () => {
       setTestPlexMessage({ type: 'success', message: 'Plex token validated successfully' })
     },
-    onError: (err: any) => {
-      setTestPlexMessage({ type: 'error', message: err?.response?.data?.detail || 'Failed to validate Plex token' })
+    onError: (err: unknown) => {
+      setTestPlexMessage({ type: 'error', message: errorDetail(err) || 'Failed to validate Plex token' })
     }
   })
 

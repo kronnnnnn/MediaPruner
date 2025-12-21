@@ -7,6 +7,7 @@ import MessageModal, { useMessageModal } from '../components/MessageModal'
 import { useToast } from '../contexts/ToastContext'
 import { tvShowsApi, libraryApi, TVShow } from '../services/api'
 import logger from '../services/logger'
+import { errorDetail } from '../services/errorUtils'
 
 // localStorage keys for persistence
 const STORAGE_KEY_VIEW_MODE = 'mediapruner_tvshows_view_mode'
@@ -71,12 +72,10 @@ export default function TVShows() {
         showToast('Library Up to Date', 'No changes found in your TV show library.', 'info')
       }
     },
-    onError: (error: any) => {
-      logger.error('Refresh library failed', 'TVShows', { 
-        error,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('Refresh Failed', error?.response?.data?.detail || 'Failed to refresh library', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Refresh library failed', 'TVShows', { error: err })
+      showToast('Refresh Failed', err || 'Failed to refresh library', 'error')
     }
   })
 

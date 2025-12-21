@@ -122,23 +122,28 @@ export default function Queues() {
     return path ? `${typeLabel} (${path})` : typeLabel
   }
 
-  const renderTask = (t: any) => {
-    const isOpen = !!expanded[t.id]
-    const displayItems = (taskDetails[t.id] ? taskDetails[t.id].items : t.items)
+  const renderTask = (t: Record<string, unknown>) => {
+    const isOpen = !!expanded[t.id as number]
+    const displayItems = (taskDetails[t.id as number] ? taskDetails[t.id as number].items : (t.items as unknown[] | undefined))
 
     return (
-      <div key={t.id} className="border rounded bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
-        <button onClick={() => toggle(t.id)} aria-expanded={isOpen} className="w-full text-left p-4 flex items-center justify-between">
+      <div key={String(t.id)} className="border rounded bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
+        <button onClick={() => toggle(Number(t.id))} aria-expanded={isOpen} className="w-full text-left p-4 flex items-center justify-between">
           <div>
             <div className="font-semibold flex items-center gap-2">
               <span>#{t.id}</span>
               <span className="cursor-pointer text-gray-400">{isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</span>
               <span className="ml-2">— {taskTitle(t)}</span>
             </div>
-            <div className="text-xs text-gray-500 mt-1">Items: {t.total_items} • Processed: {t.completed_items}</div>
+            <div className="text-xs text-gray-500 mt-1">Items: {String(t.total_items)} • Processed: {String(t.completed_items)}</div>
           </div>
           <div className="flex items-center gap-4">
-            <div className="text-sm text-gray-500 capitalize">{(String(t.status).toLowerCase() === 'completed' && ((taskDetails[t.id]?.items ?? t.items) && (taskDetails[t.id]?.items ?? t.items).some((i: any) => String(i.status).toLowerCase() === 'failed'))) ? 'Completed (with failures)' : t.status}</div>
+            <div className="text-sm text-gray-500 capitalize">{(() => {
+              const s = String(t.status).toLowerCase()
+              const items = (taskDetails[t.id as number]?.items ?? (t.items as unknown[] | undefined)) ?? []
+              const hasFailed = Array.isArray(items) && items.some((it: unknown) => String((it as Record<string, unknown>).status).toLowerCase() === 'failed')
+              return s === 'completed' && hasFailed ? 'Completed (with failures)' : (t.status as string)
+            })()}</div>
           </div>
         </button>
 

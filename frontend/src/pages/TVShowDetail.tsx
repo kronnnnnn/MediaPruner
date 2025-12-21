@@ -181,15 +181,15 @@ export default function TVShowDetailPage() {
     try {
       const response = await tvShowsApi.getMuxSubtitlesPreview(showId)
       setMuxPreview(response.data)
-    } catch (error: any) {
-      setMuxPreviewError(error?.response?.data?.detail || 'Failed to get preview')
+    } catch (error: unknown) {
+      setMuxPreviewError(errorDetail(error) || 'Failed to get preview')
     }
   }
 
   const confirmMuxSubtitles = async () => {
     if (!muxPreview?.episodes) return
     
-    const episodesToMux = muxPreview.episodes.filter((ep: any) => ep.can_mux)
+    const episodesToMux = (muxPreview.episodes as unknown[]).filter((ep) => Boolean((ep as Record<string, unknown>).can_mux))
     const total = episodesToMux.length
     
     setIsMuxing(true)
@@ -205,8 +205,8 @@ export default function TVShowDetailPage() {
       try {
         await tvShowsApi.muxEpisodeSubtitle(showId, ep.episode_id)
         muxed++
-      } catch (error: any) {
-        errors.push(`S${ep.season_number}E${ep.episode_number}: ${error?.response?.data?.detail || 'Failed'}`)
+      } catch (error: unknown) {
+        errors.push(`S${(ep as Record<string, unknown>).season_number}E${(ep as Record<string, unknown>).episode_number}: ${errorDetail(error) || 'Failed'}`)
       }
     }
     
@@ -288,8 +288,8 @@ export default function TVShowDetailPage() {
       }
 
       setShowSearchModal(false)
-    } catch (err: any) {
-      showMessage('Scrape Failed', err?.response?.data?.detail || 'Failed to enqueue scrape', 'error')
+    } catch (err: unknown) {
+      showMessage('Scrape Failed', errorDetail(err) || 'Failed to enqueue scrape', 'error')
     }
   }
 

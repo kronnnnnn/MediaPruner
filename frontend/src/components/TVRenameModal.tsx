@@ -75,14 +75,14 @@ export default function TVRenameModal({ show, onClose }: TVRenameModalProps) {
   // Rename mutation
   const renameMutation = useMutation({
     mutationFn: () => tvShowsApi.renameTVShow(show.id, currentPattern, organizeInSeasonFolder, replaceSpacesValue),
-    onSuccess: async (result: any) => {
-      const data = result.data
-      logger.dataOperation('rename', `episodes renamed: ${data.renamed}/${data.total}`, 'TVRenameModal', { 
+    onSuccess: async (result: unknown) => {
+      const data = (result as Record<string, unknown>)?.data as Record<string, unknown> | undefined
+      logger.dataOperation('rename', `episodes renamed: ${data?.renamed}/${data?.total}`, 'TVRenameModal', { 
         showId: show.id, 
         pattern: currentPattern,
-        renamed: data.renamed,
-        total: data.total,
-        errors: data.errors?.length || 0
+        renamed: data?.renamed,
+        total: data?.total,
+        errors: (data?.errors as unknown[] | undefined)?.length || 0
       })
       await queryClient.invalidateQueries({ queryKey: ['tvshows'] })
       await queryClient.invalidateQueries({ queryKey: ['tvshow', show.id] })

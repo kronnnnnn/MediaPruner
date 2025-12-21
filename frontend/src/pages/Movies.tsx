@@ -730,9 +730,9 @@ export default function Movies() {
 
       // Fallback: use existing batch mutation
       mutation.mutate(ids)
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error(`${actionName} failed to start`, 'Movies', { error })
-      showToast(`${actionName} Failed`, 'Could not start operation', 'error')
+      showToast(`${actionName} Failed`, errorDetail(error) || 'Could not start operation', 'error')
     }
   }
 
