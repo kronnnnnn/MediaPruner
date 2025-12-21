@@ -57,13 +57,43 @@ jobs:
                 continue;
               }
 
-              // Determine approver identity (bot or machine user if PAT provided)
-              const token = process.env.AUTO_APPROVE_PAT || undefined;
-              const oct = getOctokitForToken(token);
+              // Prefer GitHub App authentication if App credentials are present (more secure & auditable)
+              let oct = github;
               let approverName = 'github-actions[bot]';
-              if (token) {
+
+              const appId = process.env.AUTO_APPROVE_APP_ID;
+              const appPrivateKey = process.env.AUTO_APPROVE_APP_PRIVATE_KEY;
+
+              if (appId && appPrivateKey) {
+                core.info('AUTO_APPROVE_APP_ID and PRIVATE_KEY found: authenticating as GitHub App installation');
+                const { createAppAuth } = require('@octokit/auth-app');
+                const appAuth = createAppAuth({ appId: parseInt(appId, 10), privateKey: appPrivateKey });
+                // Create an app auth token to query installations
+                const appAuthentication = await appAuth({ type: 'app' });
+                const appOctokit = github.getOctokit(appAuthentication.token);
+
+                // Get the installation id for this repo
+                const installationResp = await appOctokit.rest.apps.getRepoInstallation({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                });
+                const installationId = installationResp.data.id;
+
+                // Exchange for an installation token
+                const installationAuthentication = await appAuth({ type: 'installation', installationId });
+                oct = github.getOctokit(installationAuthentication.token);
                 const me = await oct.rest.users.getAuthenticated();
                 approverName = me.data.login;
+
+              } else if (process.env.AUTO_APPROVE_PAT) {
+                core.info('AUTO_APPROVE_PAT found: authenticating with machine PAT');
+                oct = getOctokitForToken(process.env.AUTO_APPROVE_PAT);
+                const me = await oct.rest.users.getAuthenticated();
+                approverName = me.data.login;
+              } else {
+                core.info('No AUTO_APPROVE_APP or AUTO_APPROVE_PAT found: falling back to github-actions[bot] (GITHUB_TOKEN)');
+                oct = github;
+                approverName = 'github-actions[bot]';
               }
 
               // Avoid duplicate approvals by the same actor
