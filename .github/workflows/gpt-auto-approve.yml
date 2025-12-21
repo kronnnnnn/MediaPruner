@@ -16,8 +16,10 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Approve PRs after successful CI
+      - name: Approve PRs after successful CI and Copilot label
         uses: actions/github-script@v7
+        env:
+          AUTO_APPROVE_PAT: ${{ secrets.AUTO_APPROVE_PAT }}
         with:
           script: |
             const run = context.payload.workflow_run;
@@ -25,6 +27,12 @@ jobs:
             if (!prs.length) {
               core.info('No associated pull requests found for workflow run.');
               return;
+            }
+
+            // Helper to create an octokit instance with an optional PAT
+            function getOctokitForToken(token) {
+              if (!token) return github;
+              return github.getOctokit(token);
             }
 
             for (const pr of prs) {
@@ -36,7 +44,29 @@ jobs:
                 continue;
               }
 
-              // Check for an existing approval by this bot (to avoid duplicate approvals)
+              // Only approve if copilot-approved label has been added
+              const labelsResp = await github.rest.issues.listLabelsOnIssue({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+              });
+
+              const labels = labelsResp.data.map(l => l.name);
+              if (!labels.includes('copilot-approved')) {
+                core.info(`PR #${prNumber} missing 'copilot-approved' label; skipping approval.`);
+                continue;
+              }
+
+              // Determine approver identity (bot or machine user if PAT provided)
+              const token = process.env.AUTO_APPROVE_PAT || undefined;
+              const oct = getOctokitForToken(token);
+              let approverName = 'github-actions[bot]';
+              if (token) {
+                const me = await oct.rest.users.getAuthenticated();
+                approverName = me.data.login;
+              }
+
+              // Avoid duplicate approvals by the same actor
               const reviews = await github.rest.pulls.listReviews({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -44,24 +74,22 @@ jobs:
               });
 
               const hasApproval = reviews.data.some(r =>
-                r.state === 'APPROVED' &&
-                r.user &&
-                r.user.login === 'github-actions[bot]'
+                r.state === 'APPROVED' && r.user && r.user.login === approverName
               );
 
               if (hasApproval) {
-                core.info(`PR #${prNumber} already has an approval from this bot; skipping.`);
+                core.info(`PR #${prNumber} already has an approval from ${approverName}; skipping.`);
                 continue;
               }
 
-              // Post an approval review as the GITHUB_TOKEN actor (the action user)
-              await github.rest.pulls.createReview({
+              // Post an approval review using the chosen octokit instance
+              await oct.rest.pulls.createReview({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: prNumber,
                 event: 'APPROVE',
-                body: 'Approved automatically after CI checks passed (via github-actions[bot]/GITHUB_TOKEN).'
+                body: `Approved automatically after CI checks passed and Copilot label detected (${approverName}).`
               });
 
-              core.info(`Approved PR #${prNumber} via github-actions[bot] (GITHUB_TOKEN).`);
+              core.info(`Approved PR #${prNumber} via ${approverName}.`);
             }

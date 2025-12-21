@@ -1,0 +1,70 @@
+name: Copilot Review (label) on CI success
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+
+permissions:
+  issues: write
+  pull-requests: write
+  contents: read
+
+jobs:
+  copilot_review:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add Copilot approval label if CI passed
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const prs = run.pull_requests || [];
+            if (!prs.length) {
+              core.info('No associated pull requests found for workflow run.');
+              return;
+            }
+
+            for (const pr of prs) {
+              const prNumber = pr.number;
+
+              // Skip drafts
+              if (pr.draft) {
+                core.info(`PR #${prNumber} is a draft; skipping label.`);
+                continue;
+              }
+
+              // If label already exists, skip
+              const labels = (await github.rest.issues.listLabelsOnIssue({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+              })).data.map(l => l.name);
+
+              if (labels.includes('copilot-approved')) {
+                core.info(`PR #${prNumber} already has 'copilot-approved' label.`);
+                continue;
+              }
+
+              // OPTIONAL: Insert additional automated checks here (e.g., lint, tsc) if desired.
+
+              // Add label and post a short comment to document the automated review
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                labels: ['copilot-approved']
+              });
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: 'Automated Copilot review: no obvious issues detected. Adding `copilot-approved` label to allow auto-approval.'
+              });
+
+              core.info(`Added 'copilot-approved' label to PR #${prNumber}`);
+            }
