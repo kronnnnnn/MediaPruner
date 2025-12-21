@@ -55,8 +55,14 @@
         const installationId = installationResp.data.id;
         const installationAuthentication = await appAuth({ type: 'installation', installationId });
         oct = new Octokit({ auth: installationAuthentication.token });
-        const me = await oct.rest.users.getAuthenticated();
-        approverName = me.data.login;
+        // For GitHub Apps, `users.getAuthenticated` is not available to installation tokens (403).
+        // Use the App identity for logging and avoid querying the installation as a user.
+        try {
+          const appInfo = await appOct.rest.apps.getAuthenticated();
+          approverName = appInfo.data.slug + '[app]';
+        } catch (e) {
+          approverName = `app:${appId}`;
+        }
 
       } else if (process.env.AUTO_APPROVE_PAT) {
         console.log('AUTO_APPROVE_PAT found: authenticating with machine PAT');
@@ -71,7 +77,7 @@
       }
 
       const reviews = await oct.rest.pulls.listReviews({ owner, repo, pull_number: prNumber });
-      const hasApproval = reviews.data.some(r => r.state === 'APPROVED' && r.user && r.user.login === approverName);
+      const hasApproval = reviews.data.some(r => r.state === 'APPROVED');
       if (hasApproval) {
         console.log(`PR #${prNumber} already has an approval from ${approverName}; skipping.`);
         continue;
