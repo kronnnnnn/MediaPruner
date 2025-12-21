@@ -25,6 +25,16 @@ jobs:
     if: ${{ (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request') || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label && github.event.label.name == 'copilot-approved') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Octokit dependencies
+        run: |
+          npm init -y
+          npm install @octokit/auth-app @octokit/rest
+
       - name: Debug GitHub App auth (check secrets and try token exchange)
         env:
           AUTO_APPROVE_APP_ID: ${{ secrets.AUTO_APPROVE_APP_ID }}
