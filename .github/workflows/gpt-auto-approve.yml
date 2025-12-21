@@ -30,6 +30,9 @@ jobs:
         with:
           node-version: '18'
 
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Install Octokit dependencies
         run: |
           npm init -y
