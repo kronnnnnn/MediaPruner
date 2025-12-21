@@ -124,15 +124,16 @@ export default function TVShowDetail({ show, onClose }: TVShowDetailProps) {
               
               <div className="flex items-center gap-4 mt-2 text-gray-400 text-sm">
                 {show.first_air_date && <span>{new Date(show.first_air_date).getFullYear()}</span>}
-                {show.status && (
-                  <span className={`px-2 py-0.5 rounded text-xs ${
-                    show.status === 'Ended' ? 'bg-red-500/20 text-red-400' :
-                    show.status === 'Returning Series' ? 'bg-green-500/20 text-green-400' :
-                    'bg-gray-500/20 text-gray-400'
-                  }`}>
-                    {show.status}
-                  </span>
-                )}
+                {show.status && (() => {
+                  let statusClass = 'bg-gray-500/20 text-gray-400'
+                  if (show.status === 'Ended') statusClass = 'bg-red-500/20 text-red-400'
+                  else if (show.status === 'Returning Series') statusClass = 'bg-green-500/20 text-green-400'
+                  return (
+                    <span className={`px-2 py-0.5 rounded text-xs ${statusClass}`}>
+                      {show.status}
+                    </span>
+                  )
+                })()}
                 {show.rating && (
                   <span className="flex items-center gap-1 text-yellow-400">
                     <Star className="w-4 h-4 fill-current" />
