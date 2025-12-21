@@ -46,7 +46,7 @@ jobs:
               const hasApproval = reviews.data.some(r =>
                 r.state === 'APPROVED' &&
                 r.user &&
-                (r.user.login === 'gpt-5-mini' || r.user.login === 'GPT-5-mini' || r.user.login === 'github-actions[bot]')
+                r.user.login === 'github-actions[bot]'
               );
 
               if (hasApproval) {

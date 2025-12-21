@@ -650,7 +650,7 @@ export default function Movies() {
     return resp.data.ids
   }
 
-  const confirmScopeAndRun = async (actionName: string, mutateFn: (ids: number[]) => void) => {
+  const confirmScopeAndRun = async (actionName: string, mutateFn: (ids: number[], options?: unknown) => void) => {
     try {
       // If the user has explicit selections in edit mode, apply only to those selected IDs
       let ids: number[] = []

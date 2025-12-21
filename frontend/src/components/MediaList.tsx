@@ -60,6 +60,7 @@ export default function MediaList({
   sortOrder,
   onSort,
   visibleColumns,
+  onColumnsChange: _onColumnsChange,
   selectedIds = new Set(),
   onSelectionChange,
   editMode = false,
