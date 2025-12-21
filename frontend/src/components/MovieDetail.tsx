@@ -267,7 +267,7 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
   }
 
   const handleRetryWithOverrides = () => {
-    const payload: any = {}
+    const payload: Record<string, unknown> = {}
     if (editTitle) payload.title = editTitle
     if (editYear) payload.year = editYear
     logger.buttonClick('Refresh Metadata (override)', 'MovieDetail', { movieId, title: editTitle, year: editYear })
@@ -1023,18 +1023,5 @@ function SearchEditModalComponent({
           <div className="mb-4 text-sm text-gray-400">
             <div className="font-medium mb-1">Tried searches:</div>
             <ul className="list-disc list-inside">
-              {tries.map((t: any, idx: number) => (
-                <li key={idx}>{t.method}: {t.title ?? t.imdb_id ?? t.tmdb_id ?? t.path ?? ''} {t.year ? `(${t.year})` : ''}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="flex items-center justify-end gap-2">
-          <button className="px-4 py-2 rounded-lg border border-gray-600 text-gray-300 bg-transparent hover:bg-gray-700 transition-colors" onClick={onClose}>Cancel</button>
-          <button className={`px-4 py-2 rounded-lg text-white transition-colors ${isRetrying ? 'bg-indigo-500' : 'bg-indigo-600 hover:bg-indigo-700'}`} onClick={onRetry} disabled={isRetrying}>{isRetrying ? 'Retrying...' : 'Retry'}</button>
-        </div>
-      </div>
-    </div>
-  )
-}
+              {tries.map((t: Record<string, unknown>, idx: number) => (
+                <li key={idx}>{String(t['method'] ?? '')}: {String(t['title'] ?? t['imdb_id'] ?? t['tmdb_id'] ?? t['path'] ?? '')} {t['year'] ? `(${t['year']})` : ''}</li>
