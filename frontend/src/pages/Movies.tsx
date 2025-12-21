@@ -563,8 +563,15 @@ export default function Movies() {
           // For other actions fallback to batch mutation (shouldn't happen here)
           // leave successCount unchanged
         }
-      } catch (err: any) {
-        errors.push(`${id}: ${err?.response?.data?.detail || err?.message || 'Unknown error'}`)
+      } catch (err: unknown) {
+        let message = 'Unknown error'
+        if (err && typeof err === 'object') {
+          const e = err as Record<string, unknown>
+          const resp = e.response as Record<string, unknown> | undefined
+          const data = resp?.data as Record<string, unknown> | undefined
+          message = (data?.detail as string) || (e.message as string) || JSON.stringify(e) || 'Unknown error'
+        }
+        errors.push(`${id}: ${message}`)
       }
     }
 
@@ -629,7 +636,7 @@ export default function Movies() {
 
   // Fetch all matching movie IDs from server for full filtered operations
   const getAllMatchingMovieIds = async () => {
-    const params: any = {}
+    const params: Record<string, unknown> = {}
     if (searchQuery) params.search = searchQuery
     if (filters.watched && filters.watched !== 'all') params.watched = filters.watched === 'yes'
     // Pass client-only filters to server so 'all matching' respects UI filters
@@ -649,7 +656,7 @@ export default function Movies() {
     return resp.data.ids
   }
 
-  const confirmScopeAndRun = async (actionName: string, mutation: any) => {
+  const confirmScopeAndRun = async (actionName: string, mutation: unknown) => {
     try {
       // If the user has explicit selections in edit mode, apply only to those selected IDs
       let ids: number[] = []
