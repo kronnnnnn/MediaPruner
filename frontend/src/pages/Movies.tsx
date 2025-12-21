@@ -12,18 +12,7 @@ import { useToast } from '../contexts/ToastContext'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { moviesApi, libraryApi, Movie } from '../services/api'
 import logger from '../services/logger'
-
-function errorDetail(e: unknown): string {
-  if (typeof e === 'string') return e
-  if (e && typeof e === 'object') {
-    const resp = (e as { response?: { data?: { detail?: unknown } } }).response
-    if (resp && typeof resp.data?.detail === 'string') return resp.data.detail
-    const msg = (e as { message?: unknown }).message
-    if (typeof msg === 'string') return msg
-    try { return JSON.stringify(e) } catch { return String(e) }
-  }
-  return String(e)
-}
+import { errorDetail } from '../services/errorUtils'
 
 // localStorage keys for persistence
 const STORAGE_KEY_VIEW_MODE = 'mediapruner_movies_view_mode'
@@ -260,9 +249,10 @@ export default function Movies() {
       await queryClient.refetchQueries({ queryKey: ['movies'] })
       showToast('Sync Complete', `Synced watch history for ${data.synced_count} movies.`, 'success')
     },
-    onError: (error: any) => {
-      logger.error('Sync watch history failed', 'Movies', { error, errorMessage: error?.response?.data?.detail || error?.message })
-      showToast('Sync Failed', error?.response?.data?.detail || 'Failed to sync watch history', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Sync watch history failed', 'Movies', { error: err })
+      showToast('Sync Failed', err || 'Failed to sync watch history', 'error')
     }
   })
 
@@ -278,12 +268,10 @@ export default function Movies() {
         'success'
       )
     },
-    onError: (error: any) => {
-      logger.error('Analyze movies failed', 'Movies', { 
-        error,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('Analysis Failed', error?.response?.data?.detail || 'Failed to analyze movies', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Analyze movies failed', 'Movies', { error: err })
+      showToast('Analysis Failed', err || 'Failed to analyze movies', 'error')
     }
   })
 
@@ -299,12 +287,10 @@ export default function Movies() {
         data.scraped === data.total ? 'success' : 'warning'
       )
     },
-    onError: (error: any) => {
-      logger.error('Metadata refresh failed', 'Movies', { 
-        error,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('Metadata Refresh Failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Metadata refresh failed', 'Movies', { error: err })
+      showToast('Metadata Refresh Failed', err || 'Failed to refresh metadata', 'error')
     }
   })
 
@@ -317,12 +303,10 @@ export default function Movies() {
       await queryClient.refetchQueries({ queryKey: ['movies'] })
       showToast('Fetch Ratings Enqueued', `Task ${data.task_id} enqueued to refresh metadata with ratings.`, 'info')
     },
-    onError: (error: any) => {
-      logger.error('OMDb fetch failed', 'Movies', { 
-        error,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('OMDb Fetch Failed', error?.response?.data?.detail || 'Failed to fetch OMDb ratings', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('OMDb fetch failed', 'Movies', { error: err })
+      showToast('OMDb Fetch Failed', err || 'Failed to fetch OMDb ratings', 'error')
     }
   })
 
@@ -341,12 +325,10 @@ export default function Movies() {
         data.deleted === data.total ? 'success' : 'warning'
       )
     },
-    onError: (error: any) => {
-      logger.error('Delete movies failed', 'Movies', { 
-        error,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('Delete Failed', error?.response?.data?.detail || 'Failed to delete movies', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Delete movies failed', 'Movies', { error: err })
+      showToast('Delete Failed', err || 'Failed to delete movies', 'error')
     }
   })
 
@@ -365,13 +347,10 @@ export default function Movies() {
         data.renamed === data.total ? 'success' : 'warning'
       )
     },
-    onError: (error: any) => {
-      logger.error('Rename files failed', 'Movies', { 
-        error,
-        count: selectedIds.size,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('Rename Failed', error?.response?.data?.detail || 'Failed to rename files', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Rename files failed', 'Movies', { error: err, count: selectedIds.size })
+      showToast('Rename Failed', err || 'Failed to rename files', 'error')
     }
   })
 
@@ -390,13 +369,10 @@ export default function Movies() {
         data.renamed === data.total ? 'success' : 'warning'
       )
     },
-    onError: (error: any) => {
-      logger.error('Rename folders failed', 'Movies', { 
-        error,
-        count: selectedIds.size,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('Rename Failed', error?.response?.data?.detail || 'Failed to rename folders', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Rename folders failed', 'Movies', { error: err, count: selectedIds.size })
+      showToast('Rename Failed', err || 'Failed to rename folders', 'error')
     }
   })
 
@@ -694,13 +670,11 @@ export default function Movies() {
             const allIds = await getAllMatchingMovieIds()
             if (['Refresh Metadata', 'Analyze', 'Sync Watch History', 'Fetch Ratings'].includes(actionName)) {
               // Enqueue a single batch task
-              const resp = actionName === 'Refresh Metadata'
-                ? await moviesApi.refreshMoviesBatch(allIds)
-                : actionName === 'Analyze'
-                  ? await moviesApi.analyzeMoviesBatch(allIds)
-                  : actionName === 'Fetch Ratings'
-                    ? await moviesApi.refreshMoviesBatch(allIds, true)
-                    : await moviesApi.syncWatchHistoryBatch(allIds)
+              let resp
+              if (actionName === 'Refresh Metadata') resp = await moviesApi.refreshMoviesBatch(allIds)
+              else if (actionName === 'Analyze') resp = await moviesApi.analyzeMoviesBatch(allIds)
+              else if (actionName === 'Fetch Ratings') resp = await moviesApi.refreshMoviesBatch(allIds, true)
+              else resp = await moviesApi.syncWatchHistoryBatch(allIds)
               // Use a toast not modal for confirmations
               showToast(`${actionName} Enqueued`, `Task ${resp.data.task_id} enqueued for ${allIds.length} movies.`, 'info')
               setScopeModal(s => ({ ...s, isOpen: false }))
@@ -711,13 +685,11 @@ export default function Movies() {
           },
           onConfirmPage: () => {
             if (['Refresh Metadata', 'Analyze', 'Sync Watch History', 'Fetch Ratings'].includes(actionName)) {
-              const resp = actionName === 'Refresh Metadata'
-                ? moviesApi.refreshMoviesBatch(ids)
-                : actionName === 'Analyze'
-                  ? moviesApi.analyzeMoviesBatch(ids)
-                  : actionName === 'Fetch Ratings'
-                    ? moviesApi.refreshMoviesBatch(ids, true)
-                    : moviesApi.syncWatchHistoryBatch(ids)
+              let resp
+              if (actionName === 'Refresh Metadata') resp = moviesApi.refreshMoviesBatch(ids)
+              else if (actionName === 'Analyze') resp = moviesApi.analyzeMoviesBatch(ids)
+              else if (actionName === 'Fetch Ratings') resp = moviesApi.refreshMoviesBatch(ids, true)
+              else resp = moviesApi.syncWatchHistoryBatch(ids)
               resp.then(r => showToast(`${actionName} Enqueued`, `Task ${r.data.task_id} enqueued for ${ids.length} movies.`, 'info'))
               setScopeModal(s => ({ ...s, isOpen: false }))
               return
