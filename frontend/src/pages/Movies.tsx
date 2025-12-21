@@ -650,11 +650,11 @@ export default function Movies() {
     return resp.data.ids
   }
 
-<<<<<<< HEAD
-  const confirmScopeAndRun = async (actionName: string, mutateFn: (ids: number[], options?: unknown) => void) => {
-=======
+  // NOTE: Updated for TypeScript compatibility and CI type-checks:
+  // `confirmScopeAndRun` now accepts an optional array of IDs and callers
+  // pass `ids ?? []` when delegating to react-query `mutation.mutate`.
+  // This prevents TS2345 errors when `mutation.mutate` expects `number[]`.
   const confirmScopeAndRun = async (actionName: string, mutateFn: (ids?: number[]) => unknown) => {
->>>>>>> 29a24d9 (fix(frontend): correct mutation usage and types in Movies page to satisfy tsc)
     try {
       // If the user has explicit selections in edit mode, apply only to those selected IDs
       let ids: number[] = []
