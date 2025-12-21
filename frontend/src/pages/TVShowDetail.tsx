@@ -11,6 +11,7 @@ import TVRenameModal from '../components/TVRenameModal'
 import MuxConfirmDialog from '../components/MuxConfirmDialog'
 import { useToast } from '../contexts/ToastContext'
 import logger from '../services/logger'
+import { errorDetail } from '../services/errorUtils'
 
 // Format duration from seconds to HH:MM:SS
 const formatDuration = (seconds?: number) => {
@@ -82,11 +83,11 @@ export default function TVShowDetailPage() {
   // Scrape show mutation (also scrapes episodes)
   const scrapeMutation = useMutation({
     mutationFn: (provider?: 'tmdb' | 'omdb') => tvShowsApi.scrapeTVShow(showId, undefined, provider),
-    onSuccess: async (result: any) => {
-      const data = result.data
+    onSuccess: async (result: unknown) => {
+      const data = (result as Record<string, unknown>)?.data as Record<string, unknown> | undefined
       if (data?.task_id) {
         // Enqueued
-        showToast('Refresh Enqueued', `Task ${data.task_id} enqueued to refresh show metadata`, 'info')
+        showToast('Refresh Enqueued', `Task ${(data.task_id as string)} enqueued to refresh show metadata`, 'info')
         logger.dataOperation('refresh_metadata', 'enqueued', 'TVShowDetail', { showId, task_id: data.task_id })
         return
       }
@@ -121,49 +122,51 @@ export default function TVShowDetailPage() {
       logger.dataOperation('generate_nfo', 'success', 'TVShowDetail', { showId })
       showToast('NFO Generated', 'Show NFO file has been created.', 'success')
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
+      const err = (error as Record<string, unknown>)
       logger.error('Generate NFO failed', 'TVShowDetail', { 
-        error,
+        error: err,
         showId,
-        errorMessage: error?.response?.data?.detail || error?.message 
+        errorMessage: (err?.response as Record<string, unknown> | undefined)?.data as string | undefined || (err?.message as string | undefined)
       })
-      showToast('NFO Failed', error?.response?.data?.detail || 'Failed to generate NFO', 'error')
+      showToast('NFO Failed', (err?.response as Record<string, unknown> | undefined)?.data as string | undefined || 'Failed to generate NFO', 'error')
     }
   })
 
   // Analyze all episodes mutation
   const analyzeAllMutation = useMutation({
     mutationFn: () => tvShowsApi.analyzeAllEpisodes(showId),
-    onSuccess: async (result: any) => {
+    onSuccess: async (result: unknown) => {
       await queryClient.invalidateQueries({ queryKey: ['episodes', showId] })
-      const data = result.data
+      const data = (result as Record<string, unknown>)?.data as Record<string, unknown> | undefined
 
       // If the backend enqueued a task, it returns a task_id instead of analyzed/total counts
       if (data?.task_id) {
-        showToast('Analysis Enqueued', `Task ${data.task_id} enqueued to analyze ${data.total_enqueued ?? 'episodes'}`, 'info')
+        showToast('Analysis Enqueued', `Task ${data.task_id as string} enqueued to analyze ${data.total_enqueued ?? 'episodes'}`, 'info')
         logger.dataOperation('analyze_episodes', 'enqueued', 'TVShowDetail', { showId, task_id: data.task_id, total_enqueued: data.total_enqueued })
         return
       }
 
       logger.dataOperation('analyze_episodes', 'success', 'TVShowDetail', { 
         showId, 
-        analyzed: data.analyzed, 
-        total: data.total, 
-        errors: data.errors?.length || 0 
+        analyzed: data?.analyzed, 
+        total: data?.total, 
+        errors: data?.errors?.length || 0 
       })
       showToast(
         'Analysis Complete',
-        `Analyzed ${data.analyzed} of ${data.total} episodes.${data.errors?.length ? `\n${data.errors.length} errors occurred.` : ''}`,
-        data.analyzed === data.total ? 'success' : 'warning'
+        `Analyzed ${data?.analyzed} of ${data?.total} episodes.${data?.errors?.length ? `\n${data?.errors.length} errors occurred.` : ''}`,
+        data?.analyzed === data?.total ? 'success' : 'warning'
       )
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
+      const err = error as Record<string, unknown>
       logger.error('Analyze episodes failed', 'TVShowDetail', { 
-        error,
+        error: err,
         showId,
-        errorMessage: error?.response?.data?.detail || error?.message 
+        errorMessage: (err?.response as Record<string, unknown> | undefined)?.data as string | undefined || (err?.message as string | undefined)
       })
-      showToast('Analysis Failed', error?.response?.data?.detail || 'Failed to analyze episodes', 'error')
+      showToast('Analysis Failed', (err?.response as Record<string, unknown> | undefined)?.data as string | undefined || 'Failed to analyze episodes', 'error')
     }
   })
 
