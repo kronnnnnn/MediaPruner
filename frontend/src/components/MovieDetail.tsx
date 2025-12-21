@@ -479,26 +479,30 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
                       <span className="text-xs text-gray-500">IMDB</span>
                     </div>
                   )}
-                  {movie.rotten_tomatoes_score !== undefined && movie.rotten_tomatoes_score !== null && (
-                    <div className="flex items-center gap-1" title="Rotten Tomatoes Tomatometer">
-                      <span className={`text-sm font-bold ${movie.rotten_tomatoes_score >= 60 ? 'text-red-400' : 'text-green-400'}`}>
-                        {movie.rotten_tomatoes_score}%
-                      </span>
-                      <span className="text-xs text-gray-500">RT</span>
-                    </div>
-                  )}
-                  {movie.metacritic_score !== undefined && movie.metacritic_score !== null && (
-                    <div className="flex items-center gap-1" title="Metacritic Metascore">
-                      <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
-                        movie.metacritic_score >= 75 ? 'bg-green-600 text-white' :
-                        movie.metacritic_score >= 50 ? 'bg-yellow-600 text-white' :
-                        'bg-red-600 text-white'
-                      }`}>
-                        {movie.metacritic_score}
-                      </span>
-                      <span className="text-xs text-gray-500">Meta</span>
-                    </div>
-                  )}
+                  {movie.rotten_tomatoes_score !== undefined && movie.rotten_tomatoes_score !== null && (() => {
+                    const rtClass = movie.rotten_tomatoes_score >= 60 ? 'text-red-400' : 'text-green-400'
+                    return (
+                      <div className="flex items-center gap-1" title="Rotten Tomatoes Tomatometer">
+                        <span className={`text-sm font-bold ${rtClass}`}>
+                          {movie.rotten_tomatoes_score}%
+                        </span>
+                        <span className="text-xs text-gray-500">RT</span>
+                      </div>
+                    )
+                  })()}
+                  {movie.metacritic_score !== undefined && movie.metacritic_score !== null && (() => {
+                    let metaClass = 'bg-red-600 text-white'
+                    if (movie.metacritic_score >= 75) metaClass = 'bg-green-600 text-white'
+                    else if (movie.metacritic_score >= 50) metaClass = 'bg-yellow-600 text-white'
+                    return (
+                      <div className="flex items-center gap-1" title="Metacritic Metascore">
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${metaClass}`}>
+                          {movie.metacritic_score}
+                        </span>
+                        <span className="text-xs text-gray-500">Meta</span>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
 
