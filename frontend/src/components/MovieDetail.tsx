@@ -901,10 +901,26 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
               <span className={`w-2 h-2 rounded-full ${movie.scraped ? 'bg-green-400' : 'bg-gray-500'}`} />
               {movie.scraped ? 'Scraped' : 'Not Scraped'}
             </span>
-            <span className={`flex items-center gap-1 ${movie.media_info_failed ? 'text-red-400' : movie.media_info_scanned ? 'text-green-400' : 'text-gray-500'}`}>
-              <span className={`w-2 h-2 rounded-full ${movie.media_info_failed ? 'bg-red-400' : movie.media_info_scanned ? 'bg-green-400' : 'bg-gray-500'}`} />
-              {movie.media_info_failed ? 'Analysis Failed' : movie.media_info_scanned ? 'Analyzed' : 'Not Analyzed'}
-            </span>
+            {(() => {
+              let mediaStatusClass = 'text-gray-500'
+              let mediaDotClass = 'bg-gray-500'
+              let mediaText = 'Not Analyzed'
+              if (movie.media_info_failed) {
+                mediaStatusClass = 'text-red-400'
+                mediaDotClass = 'bg-red-400'
+                mediaText = 'Analysis Failed'
+              } else if (movie.media_info_scanned) {
+                mediaStatusClass = 'text-green-400'
+                mediaDotClass = 'bg-green-400'
+                mediaText = 'Analyzed'
+              }
+              return (
+                <span className={`flex items-center gap-1 ${mediaStatusClass}`}>
+                  <span className={`w-2 h-2 rounded-full ${mediaDotClass}`} />
+                  {mediaText}
+                </span>
+              )
+            })()}
             <span className={`flex items-center gap-1 ${movie.has_nfo ? 'text-green-400' : 'text-gray-500'}`}>
               <span className={`w-2 h-2 rounded-full ${movie.has_nfo ? 'bg-green-400' : 'bg-gray-500'}`} />
               {movie.has_nfo ? 'NFO Present' : 'No NFO'}
@@ -932,26 +948,27 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
           error={modalError}
           onClose={closeSearchEditModal}
           onRetry={handleRetryWithOverrides}
-          isRetrying={(scrapeNowOverrideMutation as any).isLoading}
+          isRetrying={(scrapeNowOverrideMutation as unknown as { isLoading?: boolean }).isLoading ?? false}
         />
       )}
 
       {/* Delete Confirmation Dialog */}
-      <ConfirmDialog
-        isOpen={showDeleteConfirm}
-        title="Delete Movie"
-        message={`Are you sure you want to delete "${movie.title}"?\n\n${
-          deleteOptions.deleteFolder 
-            ? '⚠️ This will permanently delete the entire folder containing this movie from your disk!'
-            : deleteOptions.deleteFile 
-              ? '⚠️ This will permanently delete the media file from your disk!'
-              : 'This will only remove it from the library. The file will remain on disk.'
-        }`}
-        confirmLabel={deleteOptions.deleteFolder || deleteOptions.deleteFile ? 'Delete Files' : 'Remove from Library'}
-        variant={deleteOptions.deleteFolder || deleteOptions.deleteFile ? 'danger' : 'warning'}
-        onConfirm={confirmDelete}
-        onCancel={() => setShowDeleteConfirm(false)}
-      />
+      {(() => {
+        let deleteMessage = 'This will only remove it from the library. The file will remain on disk.'
+        if (deleteOptions.deleteFolder) deleteMessage = '⚠️ This will permanently delete the entire folder containing this movie from your disk!'
+        else if (deleteOptions.deleteFile) deleteMessage = '⚠️ This will permanently delete the media file from your disk!'
+        return (
+          <ConfirmDialog
+            isOpen={showDeleteConfirm}
+            title="Delete Movie"
+            message={`Are you sure you want to delete "${movie.title}"?\n\n${deleteMessage}`}
+            confirmLabel={deleteOptions.deleteFolder || deleteOptions.deleteFile ? 'Delete Files' : 'Remove from Library'}
+            variant={deleteOptions.deleteFolder || deleteOptions.deleteFile ? 'danger' : 'warning'}
+            onConfirm={confirmDelete}
+            onCancel={() => setShowDeleteConfirm(false)}
+          />
+        )
+      })()}
 
       {/* Mux Subtitle Confirmation Dialog */}
       <MuxConfirmDialog
