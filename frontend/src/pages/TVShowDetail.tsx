@@ -246,14 +246,15 @@ export default function TVShowDetailPage() {
     // Preflight search at provider to surface candidates before enqueuing
     setSearching(true)
     setSearchResults(null)
-    setSearchProvider(provider as any || 'tmdb')
-    tvShowsApi.searchTVShow(showId, provider as any).then(res => {
-      const data = res.data
-      setSearchResults(data.results || [])
+    setSearchProvider((provider as 'tmdb' | 'omdb') || 'tmdb')
+    tvShowsApi.searchTVShow(showId, provider as 'tmdb' | 'omdb' | undefined).then(res => {
+      const data = (res as Record<string, unknown>)?.data as Record<string, unknown> | undefined
+      setSearchResults((data?.results as unknown[]) || [])
       setShowSearchModal(true)
-    }).catch(err => {
+    }).catch((err: unknown) => {
+      const e = err as Record<string, unknown>
       // If search fails, fall back to enqueuing and show error toast
-      showToast('Search Failed', err?.response?.data?.detail || 'Search failed, enqueuing anyway', 'warning')
+      showToast('Search Failed', (e?.response as Record<string, unknown> | undefined)?.data as string | undefined || 'Search failed, enqueuing anyway', 'warning')
       scrapeMutation.mutate(provider)
     }).finally(() => setSearching(false))
   }
@@ -262,22 +263,22 @@ export default function TVShowDetailPage() {
     // If a candidate selected, enqueue with tmdb_id/imdb_id override
     const provider = metadataProvider === 'auto' ? undefined : metadataProvider
     try {
-      let res: any = null
+      let res: unknown = null
       if (selectedCandidate) {
-        const body: any = {}
+        const body: Record<string, unknown> = {}
         if (selectedCandidate.tmdb_id) body.tmdb_id = selectedCandidate.tmdb_id
         if (selectedCandidate.imdb_id) body.imdb_id = selectedCandidate.imdb_id
-        res = await tvShowsApi.scrapeTVShow(showId, body, provider as any)
+        res = await tvShowsApi.scrapeTVShow(showId, body, provider as 'tmdb' | 'omdb' | undefined)
       } else if (manualTitle) {
-        const body: any = { title: manualTitle }
+        const body: Record<string, unknown> = { title: manualTitle }
         if (manualYear) body.year = parseInt(manualYear)
-        res = await tvShowsApi.scrapeTVShow(showId, body, provider as any)
+        res = await tvShowsApi.scrapeTVShow(showId, body, provider as 'tmdb' | 'omdb' | undefined)
       } else {
         // No selection - enqueue normally
-        res = await tvShowsApi.scrapeTVShow(showId, undefined, provider as any)
+        res = await tvShowsApi.scrapeTVShow(showId, undefined, provider as 'tmdb' | 'omdb' | undefined)
       }
 
-      const data = res?.data
+      const data = (res as Record<string, unknown>)?.data as Record<string, unknown> | undefined
       if (data?.task_id) {
         showToast('Refresh Enqueued', `Task ${data.task_id} enqueued to refresh show metadata`, 'info')
         logger.dataOperation('refresh_metadata', 'enqueued', 'TVShowDetail', { showId, task_id: data.task_id, total_enqueued: data.total_enqueued })
