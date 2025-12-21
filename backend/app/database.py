@@ -38,6 +38,12 @@ async def migrate_db():
        not re-applied.
     """
     async with engine.begin() as conn:
+        # Ensure base tables exist (so SQL migrations that reference tables can run)
+        try:
+            await conn.run_sync(Base.metadata.create_all)
+        except Exception:
+            pass
+
         # Check and add new columns to movies table
         movies_columns = [
             ("release_group", "VARCHAR(128)"),
