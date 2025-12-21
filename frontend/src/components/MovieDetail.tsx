@@ -255,7 +255,9 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
   }
 
   const handleDeleteClick = (deleteFile: boolean, deleteFolder: boolean) => {
-    const deleteType = deleteFolder ? 'folder' : deleteFile ? 'file' : 'library'
+    let deleteType = 'library'
+    if (deleteFolder) deleteType = 'folder'
+    else if (deleteFile) deleteType = 'file'
     logger.buttonClick(`Delete (${deleteType})`, 'MovieDetail', { movieId, deleteFile, deleteFolder })
     setDeleteOptions({ deleteFile, deleteFolder })
     setShowDeleteConfirm(true)
@@ -578,7 +580,11 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
                 <div className="mt-3">
                   <span className="text-xs text-gray-500">Last Watched</span>
                   <div className="text-sm text-gray-900 dark:text-white">
-                    {watchHistory?.history?.[0]?.date ? new Date(watchHistory.history[0].date * 1000).toLocaleString() : movie.last_watched_date ? new Date(movie.last_watched_date).toLocaleString() : 'Never'}
+                    {(() => {
+                      if (watchHistory?.history?.[0]?.date) return new Date(watchHistory.history[0].date * 1000).toLocaleString()
+                      if (movie.last_watched_date) return new Date(movie.last_watched_date).toLocaleString()
+                      return 'Never'
+                    })()}
                   </div>
                 </div>
                 <div className="mt-2">
@@ -655,11 +661,17 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
                     <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-600">
                       <span className="text-gray-500 dark:text-gray-400 text-xs">All tracks:</span>
                       <div className="mt-1 space-y-1">
-                        {audioTracks.map((track: any, idx: number) => (
-                          <div key={idx} className="text-xs text-gray-600 dark:text-gray-300">
-                            {track.codec} {track.channels} {track.language && `(${track.language})`}
-                          </div>
-                        ))}
+                        {audioTracks.map((rawTrack, idx: number) => {
+                          const track = rawTrack as Record<string, unknown>
+                          const codec = track.codec as string | undefined
+                          const channels = track.channels as string | number | undefined
+                          const language = track.language as string | undefined
+                          return (
+                            <div key={idx} className="text-xs text-gray-600 dark:text-gray-300">
+                              {codec} {channels} {language && `(${language})`}
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
                   )}
@@ -1014,7 +1026,7 @@ function SearchEditModalComponent({
   year: number | null
   setTitle: (t: string) => void
   setYear: (y: number | null) => void
-  tries: any[] | null
+  tries: Record<string, unknown>[] | null
   error: string | null
   onClose: () => void
   onRetry: () => void
