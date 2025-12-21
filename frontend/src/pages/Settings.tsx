@@ -34,14 +34,6 @@ const getStatusIndicator = (
   )
 }
 
-// Helper function to render TMDB API status indicator
-const getTmdbStatusIndicator = (
-  tmdbStatusLoading: boolean,
-  tmdbConfigured: boolean | undefined
-): JSX.Element => {
-  return getStatusIndicator(tmdbStatusLoading, tmdbConfigured, 'Not configured')
-}
-
 type SettingsTab = 'library' | 'api' | 'logs'
 
 export default function Settings() {
@@ -740,7 +732,7 @@ export default function Settings() {
           {/* Current Status */}
           <div className="flex items-center gap-2 mb-4">
             <span className="text-gray-500 dark:text-gray-400 text-sm">TMDB API Status:</span>
-            {getTmdbStatusIndicator(tmdbStatusLoading, tmdbStatus?.configured)}
+            {getStatusIndicator(tmdbStatusLoading, tmdbStatus?.configured, 'Not configured')}
           </div>
 
           <form onSubmit={handleSaveTmdbKey}>
