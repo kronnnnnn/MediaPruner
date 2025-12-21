@@ -59,6 +59,8 @@ jobs:
         with:
           script: |
             const run = context.payload.workflow_run || {};
+            core.info('DEBUG github.event_name: ' + github.event_name);
+            core.info('DEBUG context.payload.inputs: ' + JSON.stringify(context.payload.inputs));
             let prs = [];
 
             if (run.pull_requests && run.pull_requests.length) {
