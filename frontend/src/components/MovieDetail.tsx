@@ -87,7 +87,7 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
   const [showSearchEditModal, setShowSearchEditModal] = useState(false)
   const [editTitle, setEditTitle] = useState<string | null>(null)
   const [editYear, setEditYear] = useState<number | null>(null)
-  const [searchTries, setSearchTries] = useState<any[] | null>(null)
+  const [searchTries, setSearchTries] = useState<Array<Record<string, unknown>> | null>(null)
   const [modalError, setModalError] = useState<string | null>(null)
 
   const scrapeNowOverrideMutation = useMutation({
@@ -141,9 +141,9 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
         const tries = (detail as { tried?: Array<Record<string, unknown>> }).tried ?? []
         setSearchTries(tries)
         // Pre-fill the edit fields with the most relevant attempted search (override or stored_title)
-        const override = tries.find(t => (t as any).method === 'override') as Record<string, unknown> | undefined
-        const stored = tries.find(t => (t as any).method === 'stored_title') as Record<string, unknown> | undefined
-        const parsed = tries.find(t => (t as any).method === 'parsed_filename') as Record<string, unknown> | undefined
+        const override = tries.find(t => typeof (t as Record<string, unknown>)['method'] === 'string' && (t as Record<string, unknown>)['method'] === 'override') as Record<string, unknown> | undefined
+        const stored = tries.find(t => typeof (t as Record<string, unknown>)['method'] === 'string' && (t as Record<string, unknown>)['method'] === 'stored_title') as Record<string, unknown> | undefined
+        const parsed = tries.find(t => typeof (t as Record<string, unknown>)['method'] === 'string' && (t as Record<string, unknown>)['method'] === 'parsed_filename') as Record<string, unknown> | undefined
         const initial = (override?.title as string) ?? (stored?.title as string) ?? (parsed?.title as string) ?? movie?.title ?? ''
         const initialYear = (override?.year as number) ?? (stored?.year as number) ?? (parsed?.year as number) ?? movie?.year ?? null
         const cleaned = parseTitleAndYear(initial)
