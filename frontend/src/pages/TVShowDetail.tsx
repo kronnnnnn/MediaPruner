@@ -104,13 +104,14 @@ export default function TVShowDetailPage() {
       const episodeMsg = data?.episodes_updated ? ` and ${data.episodes_updated} episodes` : ''
       showToast('Metadata Updated', `Show${episodeMsg} metadata has been refreshed from ${data?.source?.toUpperCase() || 'external source'}${episodeSource}.`, 'success')
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
+      const err = error as Record<string, unknown>
       logger.error('Refresh metadata failed', 'TVShowDetail', { 
-        error,
+        error: err,
         showId,
-        errorMessage: error?.response?.data?.detail || error?.message 
+        errorMessage: (err?.response as Record<string, unknown> | undefined)?.data as string | undefined || (err?.message as string | undefined)
       })
-      showToast('Refresh Failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
+      showToast('Refresh Failed', (err?.response as Record<string, unknown> | undefined)?.data as string | undefined || 'Failed to refresh metadata', 'error')
     }
   })
 

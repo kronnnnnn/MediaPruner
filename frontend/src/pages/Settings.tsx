@@ -546,7 +546,11 @@ export default function Settings() {
             ) : (
               <FolderPlus className="w-4 h-4" />
             )}
-            {addPathMutation.isPending ? 'Adding...' : scanPathMutation.isPending ? 'Scanning...' : 'Add Path & Scan'}
+            {(() => {
+              if (addPathMutation.isPending) return 'Adding...'
+              if (scanPathMutation.isPending) return 'Scanning...'
+              return 'Add Path & Scan'
+            })()}
           </button>
           {addPathMutation.isError && (
             <p className="mt-2 text-red-400 text-sm">
