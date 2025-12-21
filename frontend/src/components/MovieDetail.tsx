@@ -8,6 +8,7 @@ import MuxConfirmDialog from './MuxConfirmDialog'
 import MessageModal, { useMessageModal } from './MessageModal'
 import { useToast } from '../contexts/ToastContext'
 import logger from '../services/logger'
+import { errorDetail } from '../services/errorUtils'
 
 interface MovieDetailProps {
   movieId: number
@@ -25,7 +26,7 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteOptions, setDeleteOptions] = useState<{ deleteFile: boolean; deleteFolder: boolean }>({ deleteFile: false, deleteFolder: false })
   const [showMuxConfirm, setShowMuxConfirm] = useState(false)
-  const [muxPreview, setMuxPreview] = useState<any>(null)
+  const [muxPreview, setMuxPreview] = useState<Record<string, unknown> | null>(null)
   const [muxPreviewError, setMuxPreviewError] = useState<string | null>(null)
 
   // Log modal open on mount
@@ -91,40 +92,41 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
 
   const scrapeNowOverrideMutation = useMutation({
     mutationFn: (payload: { title?: string; year?: number }) => moviesApi.scrapeMovieNow(movieId, payload),
-    onSuccess: async (response: any) => {
+    onSuccess: async (response: { data?: unknown }) => {
       await queryClient.invalidateQueries({ queryKey: ['movie', movieId] })
       await queryClient.invalidateQueries({ queryKey: ['movies'] })
-      const data = response?.data
+      const data = response?.data as Record<string, unknown> | undefined
       setShowSearchEditModal(false)
       setModalError(null)
-      if (data?.omdb_ratings_fetched) {
+      if (data && data['omdb_ratings_fetched']) {
         showToast('Metadata updated', 'OMDb was used as a fallback and ratings were applied', 'info')
       } else {
         // Use a toast instead of a modal confirmation — details refresh automatically
         showToast('Metadata updated', 'Movie metadata refreshed', 'success')
       }
     },
-    onError: (error: any) => {
-      const detail = error?.response?.data?.detail
-      if (detail && typeof detail === 'object' && detail.tried) {
-        // Update tries and allow the user to edit/retry
-        setSearchTries(detail.tried)
+    onError: (error: unknown) => {
+      const detail = (error as { response?: { data?: { detail?: unknown } } } | null)?.response?.data?.detail
+      if (detail && typeof detail === 'object' && 'tried' in detail) {
+        const tries = (detail as { tried?: Array<Record<string, unknown>> }).tried ?? []
+        setSearchTries(tries)
         setModalError('Search did not find a match — you can edit the search and try again')
       } else {
         setShowSearchEditModal(false)
         setModalError(null)
-        showToast('Metadata refresh failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
+        const err = errorDetail(error)
+        showToast('Metadata refresh failed', err || 'Failed to refresh metadata', 'error')
       }
     }
   })
 
   const scrapeMutation = useMutation({
     mutationFn: () => moviesApi.scrapeMovieNow(movieId),
-    onSuccess: async (response: any) => {
+    onSuccess: async (response: { data?: unknown }) => {
       await queryClient.invalidateQueries({ queryKey: ['movie', movieId] })
       await queryClient.invalidateQueries({ queryKey: ['movies'] })
-      const data = response?.data
-      if (data?.omdb_ratings_fetched) {
+      const data = response?.data as Record<string, unknown> | undefined
+      if (data && data['omdb_ratings_fetched']) {
         // Use the global toast for OMDb fallbacks instead of a modal popup
         showToast('Metadata updated', 'OMDb was used as a fallback and ratings were applied', 'info')
       } else {
@@ -132,17 +134,18 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
         showToast('Metadata updated', 'Movie metadata refreshed', 'success')
       }
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       // If the server returned search attempts, surface an edit-dialog with the tried searches
-      const detail = error?.response?.data?.detail
-      if (detail && typeof detail === 'object' && detail.tried) {
-        setSearchTries(detail.tried)
+      const detail = (error as { response?: { data?: { detail?: unknown } } } | null)?.response?.data?.detail
+      if (detail && typeof detail === 'object' && 'tried' in detail) {
+        const tries = (detail as { tried?: Array<Record<string, unknown>> }).tried ?? []
+        setSearchTries(tries)
         // Pre-fill the edit fields with the most relevant attempted search (override or stored_title)
-        const override = detail.tried.find((t: any) => t.method === 'override')
-        const stored = detail.tried.find((t: any) => t.method === 'stored_title')
-        const parsed = detail.tried.find((t: any) => t.method === 'parsed_filename')
-        const initial = override?.title ?? stored?.title ?? parsed?.title ?? movie?.title ?? ''
-        const initialYear = override?.year ?? stored?.year ?? parsed?.year ?? movie?.year ?? null
+        const override = tries.find(t => (t as any).method === 'override') as Record<string, unknown> | undefined
+        const stored = tries.find(t => (t as any).method === 'stored_title') as Record<string, unknown> | undefined
+        const parsed = tries.find(t => (t as any).method === 'parsed_filename') as Record<string, unknown> | undefined
+        const initial = (override?.title as string) ?? (stored?.title as string) ?? (parsed?.title as string) ?? movie?.title ?? ''
+        const initialYear = (override?.year as number) ?? (stored?.year as number) ?? (parsed?.year as number) ?? movie?.year ?? null
         const cleaned = parseTitleAndYear(initial)
         setEditTitle(cleaned.title)
         // Prefer parsed year (from right-most match) if available
@@ -152,7 +155,8 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
         return
       }
 
-      showToast('Metadata refresh failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
+      const err = errorDetail(error)
+      showToast('Metadata refresh failed', err || 'Failed to refresh metadata', 'error')
     }
   })
 
@@ -163,8 +167,9 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
       await queryClient.invalidateQueries({ queryKey: ['movies'] })
       showToast('Analysis Complete', 'File analysis completed successfully', 'success')
     },
-    onError: (error: any) => {
-      showToast('Analysis Failed', error?.response?.data?.detail || 'Failed to analyze file', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      showToast('Analysis Failed', err || 'Failed to analyze file', 'error')
     }
   })
 
@@ -226,8 +231,8 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
       setShowMuxConfirm(false)
       setMuxPreview(null)
     },
-    onError: (error: any) => {
-      setMuxPreviewError(error?.response?.data?.detail || 'Failed to embed subtitle')
+    onError: (error: unknown) => {
+      setMuxPreviewError(errorDetail(error) || 'Failed to embed subtitle')
     }
   })
 
@@ -240,8 +245,8 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
     try {
       const response = await moviesApi.getMuxSubtitlePreview(movieId)
       setMuxPreview(response.data)
-    } catch (error: any) {
-      setMuxPreviewError(error?.response?.data?.detail || 'Failed to get preview')
+    } catch (error: unknown) {
+      setMuxPreviewError(errorDetail(error) || 'Failed to get preview')
     }
   }
 
