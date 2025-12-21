@@ -9,7 +9,7 @@ export default function Queues() {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({})
   const [groupCollapsed, setGroupCollapsed] = useState<Record<number, Record<string, boolean>>>({})
   const [loadingItems, setLoadingItems] = useState<Record<number, boolean>>({})
-  const [taskDetails, setTaskDetails] = useState<Record<number, any>>({})
+  const [taskDetails, setTaskDetails] = useState<Record<number, unknown>>({})
   const [modalMovieId, setModalMovieId] = useState<number | null>(null)
 
   const [isClearing, setIsClearing] = useState(false)
@@ -57,7 +57,7 @@ export default function Queues() {
 
   const currentTasks = tasks.filter(t => {
     const s = String(t.status).toLowerCase()
-    const hasFailed = Array.isArray(t.items) && t.items.some((i: any) => String(i.status).toLowerCase() === 'failed')
+    const hasFailed = Array.isArray(t.items) && t.items.some((i: Record<string, unknown>) => String(i.status).toLowerCase() === 'failed')
     // Treat a completed task with any failed items as history
     if (s === 'completed' && hasFailed) return false
     return !['completed', 'deleted'].includes(s)
@@ -65,7 +65,7 @@ export default function Queues() {
 
   const historyTasks = tasks.filter(t => {
     const s = String(t.status).toLowerCase()
-    const hasFailed = Array.isArray(t.items) && t.items.some((i: any) => String(i.status).toLowerCase() === 'failed')
+    const hasFailed = Array.isArray(t.items) && t.items.some((i: Record<string, unknown>) => String(i.status).toLowerCase() === 'failed')
     return ['completed', 'deleted', 'failed'].includes(s) || (s === 'completed' && hasFailed)
   })
 
@@ -91,10 +91,10 @@ export default function Queues() {
     }
   }
 
-  const groupItemsByStatus = (items: any[]) => {
-    const map: Record<string, any[]> = {}
+  const groupItemsByStatus = (items: unknown[]) => {
+    const map: Record<string, unknown[]> = {}
     for (const it of items) {
-      const s = String(it.status).toLowerCase()
+      const s = String((it as Record<string, unknown>).status).toLowerCase()
       if (!map[s]) map[s] = []
       map[s].push(it)
     }
@@ -165,52 +165,67 @@ export default function Queues() {
                         </div>
                       </div>
 
-                      {!collapsed && g.items.map((it: any) => (
-                        <div key={it.id} className="p-3 rounded bg-white dark:bg-gray-800 border flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <div className="text-sm font-medium">Item #{it.index} — <span className="capitalize">{it.status}</span></div>
-                              <div className="text-xs text-gray-400">{it.started_at ? new Date(it.started_at).toLocaleString() : ''}{it.finished_at ? ` — ${new Date(it.finished_at).toLocaleString()}` : ''}</div>
+                      {!collapsed && g.items.map((rawIt) => {
+                        const it = rawIt as Record<string, unknown>
+                        const id = Number(it.id)
+                        const index = Number(it.index)
+                        const status = String(it.status)
+                        const startedAt = it.started_at as string | undefined
+                        const finishedAt = it.finished_at as string | undefined
+                        const movieTitle = it.movie_title as string | undefined
+                        const payloadParsed = it.payload_parsed as Record<string, unknown> | undefined
+                        const movieUrl = it.movie_url as string | undefined
+                        const movieSummary = it.movie_summary as string | undefined
+                        const result = it.result as unknown
+                        const resultSummary = it.result_summary as string | undefined
+
+                        return (
+                          <div key={id} className="p-3 rounded bg-white dark:bg-gray-800 border flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <div className="text-sm font-medium">Item #{index} — <span className="capitalize">{status}</span></div>
+                                <div className="text-xs text-gray-400">{startedAt ? new Date(startedAt).toLocaleString() : ''}{finishedAt ? ` — ${new Date(finishedAt).toLocaleString()}` : ''}</div>
+                              </div>
+
+                              { (movieTitle || (payloadParsed && payloadParsed.movie_id)) && (
+                                <div className="mt-2 text-sm text-gray-300 flex items-center gap-2">
+                                  <Film className="w-4 h-4 text-gray-400" />
+                                  <div>
+                                    <div className="text-sm font-semibold">
+                                      { (payloadParsed && payloadParsed.movie_id) ? (
+                                        <button type="button" onClick={() => setModalMovieId(Number(payloadParsed.movie_id))} className="hover:underline text-primary-400 font-semibold text-sm">
+                                          {movieTitle ?? `#${payloadParsed.movie_id}`}
+                                        </button>
+                                      ) : movieUrl ? (
+                                        <Link className="hover:underline text-primary-400" to={movieUrl}>{movieTitle ?? `#${payloadParsed?.movie_id}`}</Link>
+                                      ) : (
+                                        movieTitle ?? `#${payloadParsed?.movie_id}`
+                                      )}
+                                    </div>
+                                    {movieSummary && <div className="text-xs text-gray-400">{movieSummary}</div>}
+                                  </div>
+                                </div>
+                              )}
+
+                              {resultSummary ? (
+                                <div className="mt-1 text-xs">
+                                  <span className={`inline-block px-2 py-0.5 rounded text-xs ${resultSummary.startsWith('Error') ? 'text-red-300' : 'text-gray-300 bg-gray-800/50'}`}>{resultSummary}</span>
+                                </div>
+                              ) : result && (
+                                <div className="mt-1 text-xs text-gray-500">Result: <code className="break-words">{typeof result === 'string' ? result : JSON.stringify(result)}</code></div>
+                              )}
                             </div>
 
-                            { (it.movie_title || (it.payload_parsed && it.payload_parsed.movie_id)) && (
-                              <div className="mt-2 text-sm text-gray-300 flex items-center gap-2">
-                                <Film className="w-4 h-4 text-gray-400" />
-                                <div>
-                                  <div className="text-sm font-semibold">
-                                    { (it.payload_parsed && it.payload_parsed.movie_id) ? (
-                                      <button type="button" onClick={() => setModalMovieId(it.payload_parsed.movie_id)} className="hover:underline text-primary-400 font-semibold text-sm">
-                                        {it.movie_title ?? `#${it.payload_parsed.movie_id}`}
-                                      </button>
-                                    ) : it.movie_url ? (
-                                      <Link className="hover:underline text-primary-400" to={it.movie_url}>{it.movie_title ?? `#${it.payload_parsed.movie_id}`}</Link>
-                                    ) : (
-                                      it.movie_title ?? `#${it.payload_parsed?.movie_id}`
-                                    )}
-                                  </div>
-                                  {it.movie_summary && <div className="text-xs text-gray-400">{it.movie_summary}</div>}
-                                </div>
-                              </div>
-                            )}
-
-                            {it.result_summary ? (
-                              <div className="mt-1 text-xs">
-                                <span className={`inline-block px-2 py-0.5 rounded text-xs ${it.result_summary.startsWith('Error') ? 'text-red-300' : 'text-gray-300 bg-gray-800/50'}`}>{it.result_summary}</span>
-                              </div>
-                            ) : it.result && (
-                              <div className="mt-1 text-xs text-gray-500">Result: <code className="break-words">{typeof it.result === 'string' ? it.result : JSON.stringify(it.result)}</code></div>
-                            )}
+                            <div className="flex flex-col items-end gap-2">
+                              {result && (
+                                <button title="Copy result" className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => copyText(typeof result === 'string' ? result : JSON.stringify(result))}>
+                                  <Copy className="w-4 h-4 text-gray-400" />
+                                </button>
+                              )}
+                            </div>
                           </div>
-
-                          <div className="flex flex-col items-end gap-2">
-                            {it.result && (
-                              <button title="Copy result" className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => copyText(typeof it.result === 'string' ? it.result : JSON.stringify(it.result))}>
-                                <Copy className="w-4 h-4 text-gray-400" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
 
                     </div>
                   )
