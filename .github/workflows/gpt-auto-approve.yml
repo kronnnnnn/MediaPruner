@@ -44,6 +44,12 @@ jobs:
           echo "Debugging GitHub App auth..."
           node -e "(async()=>{ try{ const appId=process.env.AUTO_APPROVE_APP_ID; const pk=process.env.AUTO_APPROVE_APP_PRIVATE_KEY; console.log('AUTO_APPROVE_APP_ID set:', !!appId); console.log('AUTO_APPROVE_APP_PRIVATE_KEY set:', !!pk); if(!appId||!pk){ console.log('App secrets missing; skipping detailed auth test.'); process.exit(0);} const { createAppAuth } = await import('@octokit/auth-app'); const appAuth = createAppAuth({ appId: parseInt(appId,10), privateKey: pk }); const appAuthentication = await appAuth({ type: 'app' }); console.log('App JWT obtained:', !!appAuthentication.token); const { Octokit } = await import('@octokit/rest'); const appOct = new Octokit({ auth: appAuthentication.token }); const owner = process.env.GITHUB_REPOSITORY.split('/')[0]; const repo = process.env.GITHUB_REPOSITORY.split('/')[1]; const installationResp = await appOct.rest.apps.getRepoInstallation({ owner, repo }); console.log('Found installation id:', installationResp.data.id); }catch(e){ console.error('App auth diagnostic failed:', e.message || e); process.exit(1);} })()"
 
+      - name: Dump event payload
+        run: |
+          echo "GITHUB_EVENT_NAME=$GITHUB_EVENT_NAME"
+          echo "GITHUB_EVENT_PATH=$GITHUB_EVENT_PATH"
+          cat "$GITHUB_EVENT_PATH" || true
+
       - name: Approve PRs after successful CI and Copilot label
         uses: actions/github-script@v7
         env:
