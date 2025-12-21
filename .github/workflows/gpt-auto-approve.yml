@@ -65,9 +65,9 @@ jobs:
 
             if (run.pull_requests && run.pull_requests.length) {
               prs = run.pull_requests;
-            } else if (github.event_name === 'pull_request' && github.event.action === 'labeled' && github.event.label && github.event.label.name === 'copilot-approved') {
-              prs = [{ number: github.event.pull_request.number }];
-            } else if (github.event_name === 'workflow_dispatch' && context.payload.inputs && context.payload.inputs.pull_number) {
+            } else if (context.eventName === 'pull_request' && context.payload.action === 'labeled' && context.payload.label && context.payload.label.name === 'copilot-approved') {
+              prs = [{ number: context.payload.pull_request.number }];
+            } else if (context.eventName === 'workflow_dispatch' && context.payload.inputs && context.payload.inputs.pull_number) {
               prs = [{ number: parseInt(context.payload.inputs.pull_number, 10) }];
             }
 
