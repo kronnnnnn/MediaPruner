@@ -1,5 +1,4 @@
 import pytest
-import httpx
 
 from app.services.omdb import OMDbService
 

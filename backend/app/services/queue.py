@@ -7,7 +7,6 @@ from typing import List, Optional
 from pathlib import Path
 
 import app.database as database
-from app.database import async_session
 from sqlalchemy import text
 from app.models import QueueTask, QueueItem, QueueStatus
 
@@ -315,7 +314,7 @@ async def cancel_task(task_id: int):
 
     Returns a simple mapping with task id and status on success, or None if not found.
     """
-    from sqlalchemy import update, select
+    from sqlalchemy import update
 
     async with database.async_session() as session:
         # Check task exists

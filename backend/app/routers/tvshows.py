@@ -507,29 +507,7 @@ async def search_tvshow_candidates(
         detail=f"TV show not found{provider_msg}. Searched for: '{search_title}'. Please check the show title or try a different provider."
     )
 
-    # Fallback to OMDb if configured or forced
-    if provider in (None, 'omdb'):
-        from app.services.omdb import get_omdb_api_key_from_db, OMDbService
 
-        api_key = await get_omdb_api_key_from_db(db)
-        logger.info(f"Search candidates requested for show_id={show_id} title='{title}' provider=omdb")
-
-        if api_key:
-            omdb_svc = OMDbService(api_key)
-            try:
-                omdb_res = await omdb_svc.search_tvshow(title, year)
-                if omdb_res:
-                    logger.info(f"OMDb search returned candidate for show_id={show_id} imdb_id={omdb_res.imdb_id}")
-                    return {'provider': 'omdb', 'results': [{
-                        'imdb_id': omdb_res.imdb_id,
-                        'title': omdb_res.title,
-                        'year': omdb_res.year,
-                        'plot': omdb_res.plot,
-                        'poster': omdb_res.poster,
-                    }], 'tried': getattr(omdb_svc, 'last_request_params', None)}
-            finally:
-                await omdb_svc.close()
-    return {'provider': provider or 'tmdb', 'results': []}
 
 
 @router.post("/{show_id}/scrape-episodes")
@@ -837,7 +815,6 @@ async def analyze_episode_file(
     # Enqueue analyze task (queue-based processing)
     from app.services.queue import create_task
 
-    from app.services.queue import create_task
 
     task = await create_task('analyze', items=[{"episode_id": episode.id}], meta={"show_id": show_id})
 

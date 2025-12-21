@@ -1,5 +1,4 @@
 import pytest
-import asyncio
 
 from sqlalchemy import select
 from app.services.queue import create_task, QueueWorker, get_task
@@ -11,7 +10,6 @@ pytestmark = pytest.mark.asyncio
 
 async def test_refresh_metadata_show_no_metadata(temp_db, monkeypatch):
     # Create a library path and tvshow
-    from sqlalchemy.ext.asyncio import AsyncSession
     from app.database import async_session
 
     async with async_session() as s:
