@@ -33,15 +33,16 @@ const getTmdbStatusIndicator = (
   )
 }
 
-// Helper function to render OMDb API status indicator
-const getOmdbStatusIndicator = (
-  omdbStatusLoading: boolean,
-  omdbConfigured: boolean | undefined
+// Generic helper function to render API status indicator
+const getStatusIndicator = (
+  isLoading: boolean,
+  isConfigured: boolean | undefined,
+  notConfiguredText: string = 'Not configured'
 ): JSX.Element => {
-  if (omdbStatusLoading) {
+  if (isLoading) {
     return <Loader2 className="w-4 h-4 animate-spin text-gray-500 dark:text-gray-400" />
   }
-  if (omdbConfigured) {
+  if (isConfigured) {
     return (
       <span className="flex items-center gap-1 text-green-400 text-sm">
         <Check className="w-4 h-4" />
@@ -52,55 +53,7 @@ const getOmdbStatusIndicator = (
   return (
     <span className="flex items-center gap-1 text-yellow-400 text-sm">
       <X className="w-4 h-4" />
-      Not configured (optional)
-    </span>
-  )
-}
-
-// Helper function to render Tautulli status indicator
-const getTautulliStatusIndicator = (
-  tautulliStatusLoading: boolean,
-  tautulliConfigured: boolean | undefined
-): JSX.Element => {
-  if (tautulliStatusLoading) {
-    return <Loader2 className="w-4 h-4 animate-spin text-gray-500 dark:text-gray-400" />
-  }
-  if (tautulliConfigured) {
-    return (
-      <span className="flex items-center gap-1 text-green-400 text-sm">
-        <Check className="w-4 h-4" />
-        Configured
-      </span>
-    )
-  }
-  return (
-    <span className="flex items-center gap-1 text-yellow-400 text-sm">
-      <X className="w-4 h-4" />
-      Not configured (optional)
-    </span>
-  )
-}
-
-// Helper function to render Plex status indicator
-const getPlexStatusIndicator = (
-  plexStatusLoading: boolean,
-  plexConfigured: boolean | undefined
-): JSX.Element => {
-  if (plexStatusLoading) {
-    return <Loader2 className="w-4 h-4 animate-spin text-gray-500 dark:text-gray-400" />
-  }
-  if (plexConfigured) {
-    return (
-      <span className="flex items-center gap-1 text-green-400 text-sm">
-        <Check className="w-4 h-4" />
-        Configured
-      </span>
-    )
-  }
-  return (
-    <span className="flex items-center gap-1 text-yellow-400 text-sm">
-      <X className="w-4 h-4" />
-      Not configured (optional)
+      {notConfiguredText}
     </span>
   )
 }
@@ -887,7 +840,7 @@ export default function Settings() {
           {/* OMDb API Key Section */}
           <div className="flex items-center gap-2 mb-4">
             <span className="text-gray-500 dark:text-gray-400 text-sm">OMDb API Status:</span>
-            {getOmdbStatusIndicator(omdbStatusLoading, omdbStatus?.configured)}
+            {getStatusIndicator(omdbStatusLoading, omdbStatus?.configured, 'Not configured (optional)')}
           </div>
 
           <form onSubmit={handleSaveOmdbKey}>
@@ -973,7 +926,7 @@ export default function Settings() {
           {/* Tautulli Integration Section */}
           <div className="flex items-center gap-2 mb-4">
             <span className="text-gray-500 dark:text-gray-400 text-sm">Tautulli Status:</span>
-            {getTautulliStatusIndicator(tautulliStatusLoading, tautulliStatus?.configured)}
+            {getStatusIndicator(tautulliStatusLoading, tautulliStatus?.configured, 'Not configured (optional)')}
           </div>
 
           <form onSubmit={handleSaveTautulli}>
@@ -1074,7 +1027,7 @@ export default function Settings() {
           {/* Plex Integration Section */}
           <div className="flex items-center gap-2 mb-4">
             <span className="text-gray-500 dark:text-gray-400 text-sm">Plex Status:</span>
-            {getPlexStatusIndicator(plexStatusLoading, plexStatus?.configured)}
+            {getStatusIndicator(plexStatusLoading, plexStatus?.configured, 'Not configured (optional)')}
           </div>
 
           <form onSubmit={handleSavePlex}>
