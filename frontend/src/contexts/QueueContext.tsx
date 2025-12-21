@@ -171,7 +171,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
     return () => {
       if (reconnectTimer) window.clearTimeout(reconnectTimer)
-      try { es?.close() } catch (e) { console.debug('[queues] EventSource close failed', e) }
+      try { es?.close() } catch (e) { console.warn('[queues] EventSource close failed', e) }
       setConnected(false)
       // Remove global listeners in case component unmounts
       if (onFocus) window.removeEventListener('focus', onFocus)

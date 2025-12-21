@@ -9,6 +9,30 @@ import { useToast } from '../contexts/ToastContext'
 import logger from '../services/logger'
 import { errorDetail } from '../services/errorUtils'
 
+// Helper function to render TMDB API status indicator
+const getTmdbStatusIndicator = (
+  tmdbStatusLoading: boolean,
+  tmdbConfigured: boolean | undefined
+): JSX.Element => {
+  if (tmdbStatusLoading) {
+    return <Loader2 className="w-4 h-4 animate-spin text-gray-500 dark:text-gray-400" />
+  }
+  if (tmdbConfigured) {
+    return (
+      <span className="flex items-center gap-1 text-green-400 text-sm">
+        <Check className="w-4 h-4" />
+        Configured
+      </span>
+    )
+  }
+  return (
+    <span className="flex items-center gap-1 text-yellow-400 text-sm">
+      <X className="w-4 h-4" />
+      Not configured
+    </span>
+  )
+}
+
 type SettingsTab = 'library' | 'api' | 'logs'
 
 export default function Settings() {
@@ -653,21 +677,7 @@ export default function Settings() {
           {/* Current Status */}
           <div className="flex items-center gap-2 mb-4">
             <span className="text-gray-500 dark:text-gray-400 text-sm">TMDB API Status:</span>
-            {(() => {
-              if (tmdbStatusLoading) return <Loader2 className="w-4 h-4 animate-spin text-gray-500 dark:text-gray-400" />
-              if (tmdbStatus?.configured) return (
-                <span className="flex items-center gap-1 text-green-400 text-sm">
-                  <Check className="w-4 h-4" />
-                  Configured
-                </span>
-              )
-              return (
-                <span className="flex items-center gap-1 text-yellow-400 text-sm">
-                  <X className="w-4 h-4" />
-                  Not configured
-                </span>
-              )
-            })()}
+            {getTmdbStatusIndicator(tmdbStatusLoading, tmdbStatus?.configured)}
           </div>
 
           <form onSubmit={handleSaveTmdbKey}>
