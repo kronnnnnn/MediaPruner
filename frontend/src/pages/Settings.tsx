@@ -9,15 +9,16 @@ import { useToast } from '../contexts/ToastContext'
 import logger from '../services/logger'
 import { errorDetail } from '../services/errorUtils'
 
-// Helper function to render TMDB API status indicator
-const getTmdbStatusIndicator = (
-  tmdbStatusLoading: boolean,
-  tmdbConfigured: boolean | undefined
+// Generic helper function to render API status indicator
+const getStatusIndicator = (
+  isLoading: boolean,
+  isConfigured: boolean | undefined,
+  notConfiguredText: string = 'Not configured'
 ): JSX.Element => {
-  if (tmdbStatusLoading) {
+  if (isLoading) {
     return <Loader2 className="w-4 h-4 animate-spin text-gray-500 dark:text-gray-400" />
   }
-  if (tmdbConfigured) {
+  if (isConfigured) {
     return (
       <span className="flex items-center gap-1 text-green-400 text-sm">
         <Check className="w-4 h-4" />
@@ -28,7 +29,7 @@ const getTmdbStatusIndicator = (
   return (
     <span className="flex items-center gap-1 text-yellow-400 text-sm">
       <X className="w-4 h-4" />
-      Not configured
+      {notConfiguredText}
     </span>
   )
 }
@@ -427,6 +428,138 @@ export default function Settings() {
     }
   }
 
+  // Render function for add path button text
+  const renderAddPathButtonText = () => {
+    if (addPathMutation.isPending) return 'Adding...'
+    if (scanPathMutation.isPending) return 'Scanning...'
+    return 'Add Path & Scan'
+  }
+
+  // Render function for library paths list
+  const renderLibraryPaths = () => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+          <span className="ml-3 text-gray-500 dark:text-gray-400">Loading library paths...</span>
+        </div>
+      )
+    }
+
+    if (isError) {
+      return (
+        <div className="text-center py-8 text-red-400">
+          <p>Failed to load library paths</p>
+          <p className="text-sm mt-1">Make sure the backend server is running</p>
+        </div>
+      )
+    }
+
+    if (paths && paths.length > 0) {
+      return (
+        <div className="space-y-3">
+          {paths.map((path) => (
+            <div key={path.id} className="flex items-center justify-between p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-lg ${path.media_type === 'movie' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                  {path.media_type === 'movie' ? <Film className="w-5 h-5" /> : <Tv className="w-5 h-5" />}
+                </div>
+                <div>
+                  <p className="text-gray-900 dark:text-white font-medium">{path.name}</p>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm font-mono">{path.path}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="text-right">
+                  <p className="text-white">{path.file_count} files</p>
+                  <p className={`text-sm ${path.exists ? 'text-green-400' : 'text-red-400'}`}>
+                    {path.exists ? 'Available' : 'Not found'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleScanPath(path.id)}
+                  disabled={scanningPathId === path.id}
+                  className="p-2 text-gray-500 dark:text-gray-400 hover:text-primary-400 hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
+                  title="Scan this folder"
+                >
+                  {scanningPathId === path.id ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-5 h-5" />
+                  )}
+                </button>
+                <button
+                  onClick={() => handleRemovePath(path)}
+                  disabled={removePathMutation.isPending || scanningPathId === path.id}
+                  className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
+                  title="Remove path"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    return (
+      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+        <FolderPlus className="w-12 h-12 mx-auto mb-3 opacity-50" />
+        <p>No library paths configured</p>
+        <p className="text-sm mt-1">Add a folder path above to get started</p>
+      </div>
+    )
+  }
+
+  // Render function for log entries
+  const renderLogEntries = () => {
+    if (logsLoading) {
+      return (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+          <span className="ml-3 text-gray-400">Loading logs...</span>
+        </div>
+      )
+    }
+
+    if (logsData?.logs && logsData.logs.length > 0) {
+      return logsData.logs.map((log) => (
+        <div key={log.id} className="p-4 hover:bg-gray-750">
+          <div className="flex items-start gap-3">
+            <span className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs ${getLevelColor(log.level)}`}>
+              {getLevelIcon(log.level)}
+              {log.level}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-white break-words">{log.message}</p>
+              <div className="flex flex-wrap gap-4 mt-1 text-xs text-gray-500">
+                <span>{new Date(log.timestamp).toLocaleString()}</span>
+                <span>{log.logger_name}</span>
+                {log.module && log.function && (
+                  <span>{log.module}.{log.function}:{log.line_number}</span>
+                )}
+              </div>
+              {log.exception && (
+                <pre className="mt-2 p-2 bg-red-900/20 border border-red-900/50 rounded text-xs text-red-300 overflow-x-auto whitespace-pre-wrap">
+                  {log.exception}
+                </pre>
+              )}
+            </div>
+          </div>
+        </div>
+      ))
+    }
+
+    return (
+      <div className="text-center py-8 text-gray-500">
+        <ScrollText className="w-12 h-12 mx-auto mb-3 opacity-50" />
+        <p>No logs found</p>
+        <p className="text-sm mt-1">Logs will appear here when the application generates them</p>
+      </div>
+    )
+  }
+
   return (
     <div className="w-[80%] max-w-6xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-white">Settings</h1>
@@ -570,11 +703,7 @@ export default function Settings() {
             ) : (
               <FolderPlus className="w-4 h-4" />
             )}
-            {(() => {
-              if (addPathMutation.isPending) return 'Adding...'
-              if (scanPathMutation.isPending) return 'Scanning...'
-              return 'Add Path & Scan'
-            })()}
+            {renderAddPathButtonText()}
           </button>
           {addPathMutation.isError && (
             <p className="mt-2 text-red-400 text-sm">
@@ -585,81 +714,7 @@ export default function Settings() {
 
         {/* Existing Paths */}
         <div className="p-4">
-          {(() => {
-            if (isLoading) {
-              return (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
-                  <span className="ml-3 text-gray-500 dark:text-gray-400">Loading library paths...</span>
-                </div>
-              )
-            }
-
-            if (isError) {
-              return (
-                <div className="text-center py-8 text-red-400">
-                  <p>Failed to load library paths</p>
-                  <p className="text-sm mt-1">Make sure the backend server is running</p>
-                </div>
-              )
-            }
-
-            if (paths && paths.length > 0) {
-              return (
-                <div className="space-y-3">
-                  {paths.map((path) => (
-                    <div key={path.id} className="flex items-center justify-between p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                      <div className="flex items-center gap-4">
-                        <div className={`p-3 rounded-lg ${path.media_type === 'movie' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
-                          {path.media_type === 'movie' ? <Film className="w-5 h-5" /> : <Tv className="w-5 h-5" />}
-                        </div>
-                        <div>
-                          <p className="text-gray-900 dark:text-white font-medium">{path.name}</p>
-                          <p className="text-gray-500 dark:text-gray-400 text-sm font-mono">{path.path}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <p className="text-white">{path.file_count} files</p>
-                          <p className={`text-sm ${path.exists ? 'text-green-400' : 'text-red-400'}`}>
-                            {path.exists ? 'Available' : 'Not found'}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => handleScanPath(path.id)}
-                          disabled={scanningPathId === path.id}
-                          className="p-2 text-gray-500 dark:text-gray-400 hover:text-primary-400 hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
-                          title="Scan this folder"
-                        >
-                          {scanningPathId === path.id ? (
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                          ) : (
-                            <RefreshCw className="w-5 h-5" />
-                          )}
-                        </button>
-                        <button
-                          onClick={() => handleRemovePath(path)}
-                          disabled={removePathMutation.isPending || scanningPathId === path.id}
-                          className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
-                          title="Remove path"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            }
-
-            return (
-              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                <FolderPlus className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No library paths configured</p>
-                <p className="text-sm mt-1">Add a folder path above to get started</p>
-              </div>
-            )
-          })()}
+          {renderLibraryPaths()}
         </div>
       </div>
     )}
@@ -677,7 +732,7 @@ export default function Settings() {
           {/* Current Status */}
           <div className="flex items-center gap-2 mb-4">
             <span className="text-gray-500 dark:text-gray-400 text-sm">TMDB API Status:</span>
-            {getTmdbStatusIndicator(tmdbStatusLoading, tmdbStatus?.configured)}
+            {getStatusIndicator(tmdbStatusLoading, tmdbStatus?.configured, 'Not configured')}
           </div>
 
           <form onSubmit={handleSaveTmdbKey}>
@@ -761,21 +816,7 @@ export default function Settings() {
           {/* OMDb API Key Section */}
           <div className="flex items-center gap-2 mb-4">
             <span className="text-gray-500 dark:text-gray-400 text-sm">OMDb API Status:</span>
-            {(() => {
-              if (omdbStatusLoading) return <Loader2 className="w-4 h-4 animate-spin text-gray-500 dark:text-gray-400" />
-              if (omdbStatus?.configured) return (
-                <span className="flex items-center gap-1 text-green-400 text-sm">
-                  <Check className="w-4 h-4" />
-                  Configured
-                </span>
-              )
-              return (
-                <span className="flex items-center gap-1 text-yellow-400 text-sm">
-                  <X className="w-4 h-4" />
-                  Not configured (optional)
-                </span>
-              )
-            })()} 
+            {getStatusIndicator(omdbStatusLoading, omdbStatus?.configured, 'Not configured (optional)')}
           </div>
 
           <form onSubmit={handleSaveOmdbKey}>
@@ -861,21 +902,7 @@ export default function Settings() {
           {/* Tautulli Integration Section */}
           <div className="flex items-center gap-2 mb-4">
             <span className="text-gray-500 dark:text-gray-400 text-sm">Tautulli Status:</span>
-            {(() => {
-              if (tautulliStatusLoading) return <Loader2 className="w-4 h-4 animate-spin text-gray-500 dark:text-gray-400" />
-              if (tautulliStatus?.configured) return (
-                <span className="flex items-center gap-1 text-green-400 text-sm">
-                  <Check className="w-4 h-4" />
-                  Configured
-                </span>
-              )
-              return (
-                <span className="flex items-center gap-1 text-yellow-400 text-sm">
-                  <X className="w-4 h-4" />
-                  Not configured (optional)
-                </span>
-              )
-            })()} 
+            {getStatusIndicator(tautulliStatusLoading, tautulliStatus?.configured, 'Not configured (optional)')}
           </div>
 
           <form onSubmit={handleSaveTautulli}>
@@ -976,21 +1003,7 @@ export default function Settings() {
           {/* Plex Integration Section */}
           <div className="flex items-center gap-2 mb-4">
             <span className="text-gray-500 dark:text-gray-400 text-sm">Plex Status:</span>
-            {(() => {
-              if (plexStatusLoading) return <Loader2 className="w-4 h-4 animate-spin text-gray-500 dark:text-gray-400" />
-              if (plexStatus?.configured) return (
-                <span className="flex items-center gap-1 text-green-400 text-sm">
-                  <Check className="w-4 h-4" />
-                  Configured
-                </span>
-              )
-              return (
-                <span className="flex items-center gap-1 text-yellow-400 text-sm">
-                  <X className="w-4 h-4" />
-                  Not configured (optional)
-                </span>
-              )
-            })()} 
+            {getStatusIndicator(plexStatusLoading, plexStatus?.configured, 'Not configured (optional)')}
           </div>
 
           <form onSubmit={handleSavePlex}>
@@ -1184,48 +1197,7 @@ export default function Settings() {
 
         {/* Log Entries */}
         <div className="divide-y divide-gray-700 max-h-[600px] overflow-y-auto">
-          {(() => {
-            if (logsLoading) return (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
-                <span className="ml-3 text-gray-400">Loading logs...</span>
-              </div>
-            )
-            if (logsData?.logs && logsData.logs.length > 0) return (
-              logsData.logs.map((log) => (
-                <div key={log.id} className="p-4 hover:bg-gray-750">
-                  <div className="flex items-start gap-3">
-                    <span className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs ${getLevelColor(log.level)}`}>
-                      {getLevelIcon(log.level)}
-                      {log.level}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white break-words">{log.message}</p>
-                      <div className="flex flex-wrap gap-4 mt-1 text-xs text-gray-500">
-                        <span>{new Date(log.timestamp).toLocaleString()}</span>
-                        <span>{log.logger_name}</span>
-                        {log.module && log.function && (
-                          <span>{log.module}.{log.function}:{log.line_number}</span>
-                        )}
-                      </div>
-                      {log.exception && (
-                        <pre className="mt-2 p-2 bg-red-900/20 border border-red-900/50 rounded text-xs text-red-300 overflow-x-auto whitespace-pre-wrap">
-                          {log.exception}
-                        </pre>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))
-            )
-            return (
-              <div className="text-center py-8 text-gray-500">
-                <ScrollText className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No logs found</p>
-                <p className="text-sm mt-1">Logs will appear here when the application generates them</p>
-              </div>
-            )
-          })()}
+          {renderLogEntries()}
         </div>
 
         {/* Log Pagination */}
