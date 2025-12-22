@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { X, FileEdit, Eye, Check, RefreshCw, Tv } from 'lucide-react'
 import { tvShowsApi, TVShow } from '../services/api'
 import logger from '../services/logger'
+import { errorDetail } from '../services/errorUtils' 
 
 // Custom hook for debouncing values
 function useDebounce<T>(value: T, delay: number): T {
@@ -75,14 +76,14 @@ export default function TVRenameModal({ show, onClose }: TVRenameModalProps) {
   // Rename mutation
   const renameMutation = useMutation({
     mutationFn: () => tvShowsApi.renameTVShow(show.id, currentPattern, organizeInSeasonFolder, replaceSpacesValue),
-    onSuccess: async (result: any) => {
-      const data = result.data
-      logger.dataOperation('rename', `episodes renamed: ${data.renamed}/${data.total}`, 'TVRenameModal', { 
+    onSuccess: async (result: unknown) => {
+      const data = (result as Record<string, unknown>)?.data as Record<string, unknown> | undefined
+      logger.dataOperation('rename', `episodes renamed: ${data?.renamed}/${data?.total}`, 'TVRenameModal', { 
         showId: show.id, 
         pattern: currentPattern,
-        renamed: data.renamed,
-        total: data.total,
-        errors: data.errors?.length || 0
+        renamed: data?.renamed,
+        total: data?.total,
+        errors: (data?.errors as unknown[] | undefined)?.length || 0
       })
       await queryClient.invalidateQueries({ queryKey: ['tvshows'] })
       await queryClient.invalidateQueries({ queryKey: ['tvshow', show.id] })
@@ -348,7 +349,7 @@ export default function TVRenameModal({ show, onClose }: TVRenameModalProps) {
 
           {renameMutation.isError && (
             <div className="p-3 bg-red-500/20 border border-red-500 rounded-lg text-red-300 text-sm">
-              {(renameMutation.error as any)?.response?.data?.detail || 'Failed to rename episodes'}
+              {errorDetail(renameMutation.error) || 'Failed to rename episodes'}
             </div>
           )}
         </div>

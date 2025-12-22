@@ -11,6 +11,7 @@ import TVRenameModal from '../components/TVRenameModal'
 import MuxConfirmDialog from '../components/MuxConfirmDialog'
 import { useToast } from '../contexts/ToastContext'
 import logger from '../services/logger'
+import { errorDetail } from '../services/errorUtils'
 
 // Format duration from seconds to HH:MM:SS
 const formatDuration = (seconds?: number) => {
@@ -51,16 +52,16 @@ export default function TVShowDetailPage() {
   const [expandedSeason, setExpandedSeason] = useState<number | null>(null)
   const [renameModalOpen, setRenameModalOpen] = useState(false)
   const [showMuxConfirm, setShowMuxConfirm] = useState(false)
-  const [muxPreview, setMuxPreview] = useState<any>(null)
+  const [muxPreview, setMuxPreview] = useState<unknown>(null)
   const [muxPreviewError, setMuxPreviewError] = useState<string | null>(null)
   const [muxProgress, setMuxProgress] = useState<{ current: number; total: number } | null>(null)
   const [isMuxing, setIsMuxing] = useState(false)
   const [metadataProvider, setMetadataProvider] = useState<'auto' | 'tmdb' | 'omdb'>('auto')
   const [searching, setSearching] = useState(false)
-  const [searchResults, setSearchResults] = useState<any[] | null>(null)
+  const [searchResults, setSearchResults] = useState<Record<string, unknown>[] | null>(null)
   const [searchProvider, setSearchProvider] = useState<'tmdb' | 'omdb' | null>(null)
   const [showSearchModal, setShowSearchModal] = useState(false)
-  const [selectedCandidate, setSelectedCandidate] = useState<any | null>(null)
+  const [selectedCandidate, setSelectedCandidate] = useState<Record<string, unknown> | null>(null)
   const [manualTitle, setManualTitle] = useState<string>('')
   const [manualYear, setManualYear] = useState<string>('')
   const seasonRefs = useRef<Record<number, HTMLDivElement | null>>({})
@@ -82,11 +83,11 @@ export default function TVShowDetailPage() {
   // Scrape show mutation (also scrapes episodes)
   const scrapeMutation = useMutation({
     mutationFn: (provider?: 'tmdb' | 'omdb') => tvShowsApi.scrapeTVShow(showId, undefined, provider),
-    onSuccess: async (result: any) => {
-      const data = result.data
+    onSuccess: async (result: unknown) => {
+      const data = (result as unknown as { data?: unknown })?.data as Record<string, unknown> | undefined
       if (data?.task_id) {
         // Enqueued
-        showToast('Refresh Enqueued', `Task ${data.task_id} enqueued to refresh show metadata`, 'info')
+        showToast('Refresh Enqueued', `Task ${(data.task_id as string)} enqueued to refresh show metadata`, 'info')
         logger.dataOperation('refresh_metadata', 'enqueued', 'TVShowDetail', { showId, task_id: data.task_id })
         return
       }
@@ -99,17 +100,18 @@ export default function TVShowDetailPage() {
         source: data?.source,
         episodesUpdated: data?.episodes_updated 
       })
-      const episodeSource = data?.episode_source ? ` (episodes from ${data.episode_source.toUpperCase()})` : ''
+      const episodeSource = data?.episode_source ? ` (episodes from ${String(data.episode_source).toUpperCase()})` : ''
       const episodeMsg = data?.episodes_updated ? ` and ${data.episodes_updated} episodes` : ''
-      showToast('Metadata Updated', `Show${episodeMsg} metadata has been refreshed from ${data?.source?.toUpperCase() || 'external source'}${episodeSource}.`, 'success')
+      showToast('Metadata Updated', `Show${episodeMsg} metadata has been refreshed from ${String(data?.source)?.toUpperCase() || 'external source'}${episodeSource}.`, 'success')
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
+      const err = error as Record<string, unknown>
       logger.error('Refresh metadata failed', 'TVShowDetail', { 
-        error,
+        error: err,
         showId,
-        errorMessage: error?.response?.data?.detail || error?.message 
+        errorMessage: (err?.response as Record<string, unknown> | undefined)?.data as string | undefined || (err?.message as string | undefined)
       })
-      showToast('Refresh Failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
+      showToast('Refresh Failed', (err?.response as Record<string, unknown> | undefined)?.data as string | undefined || 'Failed to refresh metadata', 'error')
     }
   })
 
@@ -121,49 +123,51 @@ export default function TVShowDetailPage() {
       logger.dataOperation('generate_nfo', 'success', 'TVShowDetail', { showId })
       showToast('NFO Generated', 'Show NFO file has been created.', 'success')
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
+      const err = (error as Record<string, unknown>)
       logger.error('Generate NFO failed', 'TVShowDetail', { 
-        error,
+        error: err,
         showId,
-        errorMessage: error?.response?.data?.detail || error?.message 
+        errorMessage: (err?.response as Record<string, unknown> | undefined)?.data as string | undefined || (err?.message as string | undefined)
       })
-      showToast('NFO Failed', error?.response?.data?.detail || 'Failed to generate NFO', 'error')
+      showToast('NFO Failed', (err?.response as Record<string, unknown> | undefined)?.data as string | undefined || 'Failed to generate NFO', 'error')
     }
   })
 
   // Analyze all episodes mutation
   const analyzeAllMutation = useMutation({
     mutationFn: () => tvShowsApi.analyzeAllEpisodes(showId),
-    onSuccess: async (result: any) => {
+    onSuccess: async (result: unknown) => {
       await queryClient.invalidateQueries({ queryKey: ['episodes', showId] })
-      const data = result.data
+      const data = (result as Record<string, unknown>)?.data as Record<string, unknown> | undefined
 
       // If the backend enqueued a task, it returns a task_id instead of analyzed/total counts
       if (data?.task_id) {
-        showToast('Analysis Enqueued', `Task ${data.task_id} enqueued to analyze ${data.total_enqueued ?? 'episodes'}`, 'info')
+        showToast('Analysis Enqueued', `Task ${data.task_id as string} enqueued to analyze ${data.total_enqueued ?? 'episodes'}`, 'info')
         logger.dataOperation('analyze_episodes', 'enqueued', 'TVShowDetail', { showId, task_id: data.task_id, total_enqueued: data.total_enqueued })
         return
       }
 
       logger.dataOperation('analyze_episodes', 'success', 'TVShowDetail', { 
         showId, 
-        analyzed: data.analyzed, 
-        total: data.total, 
-        errors: data.errors?.length || 0 
+        analyzed: data?.analyzed, 
+        total: data?.total, 
+        errors: Array.isArray(data?.errors) ? (data?.errors as unknown[]).length : 0
       })
       showToast(
         'Analysis Complete',
-        `Analyzed ${data.analyzed} of ${data.total} episodes.${data.errors?.length ? `\n${data.errors.length} errors occurred.` : ''}`,
-        data.analyzed === data.total ? 'success' : 'warning'
+        `Analyzed ${data?.analyzed} of ${data?.total} episodes.${Array.isArray(data?.errors) && (data?.errors as unknown[]).length ? `\n${(data?.errors as unknown[]).length} errors occurred.` : ''}`,
+        data?.analyzed === data?.total ? 'success' : 'warning'
       )
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
+      const err = error as Record<string, unknown>
       logger.error('Analyze episodes failed', 'TVShowDetail', { 
-        error,
+        error: err,
         showId,
-        errorMessage: error?.response?.data?.detail || error?.message 
+        errorMessage: (err?.response as Record<string, unknown> | undefined)?.data as string | undefined || (err?.message as string | undefined)
       })
-      showToast('Analysis Failed', error?.response?.data?.detail || 'Failed to analyze episodes', 'error')
+      showToast('Analysis Failed', (err?.response as Record<string, unknown> | undefined)?.data as string | undefined || 'Failed to analyze episodes', 'error')
     }
   })
 
@@ -178,15 +182,15 @@ export default function TVShowDetailPage() {
     try {
       const response = await tvShowsApi.getMuxSubtitlesPreview(showId)
       setMuxPreview(response.data)
-    } catch (error: any) {
-      setMuxPreviewError(error?.response?.data?.detail || 'Failed to get preview')
+    } catch (error: unknown) {
+      setMuxPreviewError(errorDetail(error) || 'Failed to get preview')
     }
   }
 
   const confirmMuxSubtitles = async () => {
-    if (!muxPreview?.episodes) return
-    
-    const episodesToMux = muxPreview.episodes.filter((ep: any) => ep.can_mux)
+    if (!muxPreview || !(muxPreview as Record<string, unknown>).episodes) return
+
+    const episodesToMux = ((muxPreview as Record<string, unknown>).episodes as unknown[]).filter((ep) => Boolean((ep as Record<string, unknown>).can_mux))
     const total = episodesToMux.length
     
     setIsMuxing(true)
@@ -200,10 +204,10 @@ export default function TVShowDetailPage() {
       setMuxProgress({ current: i + 1, total })
       
       try {
-        await tvShowsApi.muxEpisodeSubtitle(showId, ep.episode_id)
+        await tvShowsApi.muxEpisodeSubtitle(showId, (ep as Record<string, unknown>).episode_id as number)
         muxed++
-      } catch (error: any) {
-        errors.push(`S${ep.season_number}E${ep.episode_number}: ${error?.response?.data?.detail || 'Failed'}`)
+      } catch (error: unknown) {
+        errors.push(`S${(ep as Record<string, unknown>).season_number}E${(ep as Record<string, unknown>).episode_number}: ${errorDetail(error) || 'Failed'}`)
       }
     }
     
@@ -243,14 +247,16 @@ export default function TVShowDetailPage() {
     // Preflight search at provider to surface candidates before enqueuing
     setSearching(true)
     setSearchResults(null)
-    setSearchProvider(provider as any || 'tmdb')
-    tvShowsApi.searchTVShow(showId, provider as any).then(res => {
-      const data = res.data
-      setSearchResults(data.results || [])
+    setSearchProvider((provider as 'tmdb' | 'omdb') || 'tmdb')
+    tvShowsApi.searchTVShow(showId, provider as 'tmdb' | 'omdb' | undefined).then(res => {
+      const data = (res as unknown as Record<string, unknown>)?.data as Record<string, unknown> | undefined
+      const results = (data?.results as unknown[] | undefined) ?? []
+      setSearchResults(results as Record<string, unknown>[])
       setShowSearchModal(true)
-    }).catch(err => {
+    }).catch((err: unknown) => {
+      const e = err as Record<string, unknown>
       // If search fails, fall back to enqueuing and show error toast
-      showToast('Search Failed', err?.response?.data?.detail || 'Search failed, enqueuing anyway', 'warning')
+      showToast('Search Failed', (e?.response as Record<string, unknown> | undefined)?.data as string | undefined || 'Search failed, enqueuing anyway', 'warning')
       scrapeMutation.mutate(provider)
     }).finally(() => setSearching(false))
   }
@@ -259,22 +265,22 @@ export default function TVShowDetailPage() {
     // If a candidate selected, enqueue with tmdb_id/imdb_id override
     const provider = metadataProvider === 'auto' ? undefined : metadataProvider
     try {
-      let res: any = null
+      let res: unknown = null
       if (selectedCandidate) {
-        const body: any = {}
+        const body: Record<string, unknown> = {}
         if (selectedCandidate.tmdb_id) body.tmdb_id = selectedCandidate.tmdb_id
         if (selectedCandidate.imdb_id) body.imdb_id = selectedCandidate.imdb_id
-        res = await tvShowsApi.scrapeTVShow(showId, body, provider as any)
+        res = await tvShowsApi.scrapeTVShow(showId, body, provider as 'tmdb' | 'omdb' | undefined)
       } else if (manualTitle) {
-        const body: any = { title: manualTitle }
+        const body: Record<string, unknown> = { title: manualTitle }
         if (manualYear) body.year = parseInt(manualYear)
-        res = await tvShowsApi.scrapeTVShow(showId, body, provider as any)
+        res = await tvShowsApi.scrapeTVShow(showId, body, provider as 'tmdb' | 'omdb' | undefined)
       } else {
         // No selection - enqueue normally
-        res = await tvShowsApi.scrapeTVShow(showId, undefined, provider as any)
+        res = await tvShowsApi.scrapeTVShow(showId, undefined, provider as 'tmdb' | 'omdb' | undefined)
       }
 
-      const data = res?.data
+      const data = (res as Record<string, unknown>)?.data as Record<string, unknown> | undefined
       if (data?.task_id) {
         showToast('Refresh Enqueued', `Task ${data.task_id} enqueued to refresh show metadata`, 'info')
         logger.dataOperation('refresh_metadata', 'enqueued', 'TVShowDetail', { showId, task_id: data.task_id, total_enqueued: data.total_enqueued })
@@ -284,8 +290,8 @@ export default function TVShowDetailPage() {
       }
 
       setShowSearchModal(false)
-    } catch (err: any) {
-      showMessage('Scrape Failed', err?.response?.data?.detail || 'Failed to enqueue scrape', 'error')
+    } catch (err: unknown) {
+      showMessage('Scrape Failed', errorDetail(err) || 'Failed to enqueue scrape', 'error')
     }
   }
 
@@ -372,15 +378,16 @@ export default function TVShowDetailPage() {
           <span>Back</span>
         </button>
         <h1 className="text-2xl font-bold text-white truncate">{show.title}</h1>
-        {show.status && (
-          <span className={`px-2 py-1 rounded text-xs ${
-            show.status === 'Ended' ? 'bg-red-500/20 text-red-400' :
-            show.status === 'Returning Series' ? 'bg-green-500/20 text-green-400' :
-            'bg-gray-500/20 text-gray-400'
-          }`}>
-            {show.status}
-          </span>
-        )}
+        {show.status && (() => {
+          let statusClass = 'bg-gray-500/20 text-gray-400'
+          if (show.status === 'Ended') statusClass = 'bg-red-500/20 text-red-400'
+          else if (show.status === 'Returning Series') statusClass = 'bg-green-500/20 text-green-400'
+          return (
+            <span className={`px-2 py-1 rounded text-xs ${statusClass}`}>
+              {show.status}
+            </span>
+          )
+        })()} 
       </div>
 
       {/* Main content */}
@@ -590,13 +597,11 @@ export default function TVShowDetailPage() {
                           {totalWithSubs}
                         </span>
                       )}
-                      <span className={`text-xs px-2 py-0.5 rounded ${
-                        analyzedCount === seasonEpisodes.length 
-                          ? 'bg-green-500/20 text-green-400'
-                          : analyzedCount > 0
-                            ? 'bg-yellow-500/20 text-yellow-400'
-                            : 'bg-gray-500/20 text-gray-400'
-                      }`}>
+                      <span className={`text-xs px-2 py-0.5 rounded ${(() => {
+                        if (analyzedCount === seasonEpisodes.length) return 'bg-green-500/20 text-green-400'
+                        if (analyzedCount > 0) return 'bg-yellow-500/20 text-yellow-400'
+                        return 'bg-gray-500/20 text-gray-400'
+                      })()}`}> 
                         {analyzedCount}/{seasonEpisodes.length} analyzed
                       </span>
                     </div>
@@ -751,10 +756,20 @@ export default function TVShowDetailPage() {
                   <div className="mt-3 space-y-2">
                     {searchResults.map((r, idx) => (
                       <label key={idx} className={`flex items-center gap-3 p-2 rounded ${selectedCandidate === r ? 'bg-gray-700 border border-gray-600' : 'hover:bg-gray-700/20'}`}>
-                        <input type="radio" name="candidate" checked={selectedCandidate === r} onChange={() => setSelectedCandidate(r)} />
+                        <input type="radio" name="candidate" checked={selectedCandidate === r} onChange={() => setSelectedCandidate(r as Record<string, unknown>)} />
                         <div className="flex-1">
-                          <div className="text-white font-medium">{r.title} {r.year ? `(${r.year})` : ''}</div>
-                          {r.overview && <div className="text-sm text-gray-400 truncate">{r.overview}</div>}
+                          {(() => {
+                            const rr = r as Record<string, unknown>
+                            const title = String(rr.title)
+                            const year = rr.year
+                            const overview = rr.overview as unknown
+                            return (
+                              <>
+                                <div className="text-white font-medium">{title} {year ? `(${String(year)})` : ''}</div>
+                                {typeof overview === 'string' && <div className="text-sm text-gray-400 truncate">{overview}</div>}
+                              </>
+                            )
+                          })()}
                         </div>
                       </label>
                     ))}

@@ -8,6 +8,7 @@ import MuxConfirmDialog from './MuxConfirmDialog'
 import MessageModal, { useMessageModal } from './MessageModal'
 import { useToast } from '../contexts/ToastContext'
 import logger from '../services/logger'
+import { errorDetail } from '../services/errorUtils'
 
 interface MovieDetailProps {
   movieId: number
@@ -25,7 +26,7 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteOptions, setDeleteOptions] = useState<{ deleteFile: boolean; deleteFolder: boolean }>({ deleteFile: false, deleteFolder: false })
   const [showMuxConfirm, setShowMuxConfirm] = useState(false)
-  const [muxPreview, setMuxPreview] = useState<any>(null)
+  const [muxPreview, setMuxPreview] = useState<unknown | null>(null)
   const [muxPreviewError, setMuxPreviewError] = useState<string | null>(null)
 
   // Log modal open on mount
@@ -86,45 +87,46 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
   const [showSearchEditModal, setShowSearchEditModal] = useState(false)
   const [editTitle, setEditTitle] = useState<string | null>(null)
   const [editYear, setEditYear] = useState<number | null>(null)
-  const [searchTries, setSearchTries] = useState<any[] | null>(null)
+  const [searchTries, setSearchTries] = useState<Array<Record<string, unknown>> | null>(null)
   const [modalError, setModalError] = useState<string | null>(null)
 
   const scrapeNowOverrideMutation = useMutation({
     mutationFn: (payload: { title?: string; year?: number }) => moviesApi.scrapeMovieNow(movieId, payload),
-    onSuccess: async (response: any) => {
+    onSuccess: async (response: { data?: unknown }) => {
       await queryClient.invalidateQueries({ queryKey: ['movie', movieId] })
       await queryClient.invalidateQueries({ queryKey: ['movies'] })
-      const data = response?.data
+      const data = response?.data as Record<string, unknown> | undefined
       setShowSearchEditModal(false)
       setModalError(null)
-      if (data?.omdb_ratings_fetched) {
+      if (data && data['omdb_ratings_fetched']) {
         showToast('Metadata updated', 'OMDb was used as a fallback and ratings were applied', 'info')
       } else {
         // Use a toast instead of a modal confirmation — details refresh automatically
         showToast('Metadata updated', 'Movie metadata refreshed', 'success')
       }
     },
-    onError: (error: any) => {
-      const detail = error?.response?.data?.detail
-      if (detail && typeof detail === 'object' && detail.tried) {
-        // Update tries and allow the user to edit/retry
-        setSearchTries(detail.tried)
+    onError: (error: unknown) => {
+      const detail = (error as { response?: { data?: { detail?: unknown } } } | null)?.response?.data?.detail
+      if (detail && typeof detail === 'object' && 'tried' in detail) {
+        const tries = (detail as { tried?: Array<Record<string, unknown>> }).tried ?? []
+        setSearchTries(tries)
         setModalError('Search did not find a match — you can edit the search and try again')
       } else {
         setShowSearchEditModal(false)
         setModalError(null)
-        showToast('Metadata refresh failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
+        const err = errorDetail(error)
+        showToast('Metadata refresh failed', err || 'Failed to refresh metadata', 'error')
       }
     }
   })
 
   const scrapeMutation = useMutation({
     mutationFn: () => moviesApi.scrapeMovieNow(movieId),
-    onSuccess: async (response: any) => {
+    onSuccess: async (response: { data?: unknown }) => {
       await queryClient.invalidateQueries({ queryKey: ['movie', movieId] })
       await queryClient.invalidateQueries({ queryKey: ['movies'] })
-      const data = response?.data
-      if (data?.omdb_ratings_fetched) {
+      const data = response?.data as Record<string, unknown> | undefined
+      if (data && data['omdb_ratings_fetched']) {
         // Use the global toast for OMDb fallbacks instead of a modal popup
         showToast('Metadata updated', 'OMDb was used as a fallback and ratings were applied', 'info')
       } else {
@@ -132,17 +134,18 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
         showToast('Metadata updated', 'Movie metadata refreshed', 'success')
       }
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       // If the server returned search attempts, surface an edit-dialog with the tried searches
-      const detail = error?.response?.data?.detail
-      if (detail && typeof detail === 'object' && detail.tried) {
-        setSearchTries(detail.tried)
+      const detail = (error as { response?: { data?: { detail?: unknown } } } | null)?.response?.data?.detail
+      if (detail && typeof detail === 'object' && 'tried' in detail) {
+        const tries = (detail as { tried?: Array<Record<string, unknown>> }).tried ?? []
+        setSearchTries(tries)
         // Pre-fill the edit fields with the most relevant attempted search (override or stored_title)
-        const override = detail.tried.find((t: any) => t.method === 'override')
-        const stored = detail.tried.find((t: any) => t.method === 'stored_title')
-        const parsed = detail.tried.find((t: any) => t.method === 'parsed_filename')
-        const initial = override?.title ?? stored?.title ?? parsed?.title ?? movie?.title ?? ''
-        const initialYear = override?.year ?? stored?.year ?? parsed?.year ?? movie?.year ?? null
+        const override = tries.find(t => typeof (t as Record<string, unknown>)['method'] === 'string' && (t as Record<string, unknown>)['method'] === 'override') as Record<string, unknown> | undefined
+        const stored = tries.find(t => typeof (t as Record<string, unknown>)['method'] === 'string' && (t as Record<string, unknown>)['method'] === 'stored_title') as Record<string, unknown> | undefined
+        const parsed = tries.find(t => typeof (t as Record<string, unknown>)['method'] === 'string' && (t as Record<string, unknown>)['method'] === 'parsed_filename') as Record<string, unknown> | undefined
+        const initial = (override?.title as string) ?? (stored?.title as string) ?? (parsed?.title as string) ?? movie?.title ?? ''
+        const initialYear = (override?.year as number) ?? (stored?.year as number) ?? (parsed?.year as number) ?? movie?.year ?? null
         const cleaned = parseTitleAndYear(initial)
         setEditTitle(cleaned.title)
         // Prefer parsed year (from right-most match) if available
@@ -152,7 +155,8 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
         return
       }
 
-      showToast('Metadata refresh failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
+      const err = errorDetail(error)
+      showToast('Metadata refresh failed', err || 'Failed to refresh metadata', 'error')
     }
   })
 
@@ -163,8 +167,9 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
       await queryClient.invalidateQueries({ queryKey: ['movies'] })
       showToast('Analysis Complete', 'File analysis completed successfully', 'success')
     },
-    onError: (error: any) => {
-      showToast('Analysis Failed', error?.response?.data?.detail || 'Failed to analyze file', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      showToast('Analysis Failed', err || 'Failed to analyze file', 'error')
     }
   })
 
@@ -226,8 +231,8 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
       setShowMuxConfirm(false)
       setMuxPreview(null)
     },
-    onError: (error: any) => {
-      setMuxPreviewError(error?.response?.data?.detail || 'Failed to embed subtitle')
+    onError: (error: unknown) => {
+      setMuxPreviewError(errorDetail(error) || 'Failed to embed subtitle')
     }
   })
 
@@ -240,8 +245,8 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
     try {
       const response = await moviesApi.getMuxSubtitlePreview(movieId)
       setMuxPreview(response.data)
-    } catch (error: any) {
-      setMuxPreviewError(error?.response?.data?.detail || 'Failed to get preview')
+    } catch (error: unknown) {
+      setMuxPreviewError(errorDetail(error) || 'Failed to get preview')
     }
   }
 
@@ -250,7 +255,9 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
   }
 
   const handleDeleteClick = (deleteFile: boolean, deleteFolder: boolean) => {
-    const deleteType = deleteFolder ? 'folder' : deleteFile ? 'file' : 'library'
+    let deleteType = 'library'
+    if (deleteFolder) deleteType = 'folder'
+    else if (deleteFile) deleteType = 'file'
     logger.buttonClick(`Delete (${deleteType})`, 'MovieDetail', { movieId, deleteFile, deleteFolder })
     setDeleteOptions({ deleteFile, deleteFolder })
     setShowDeleteConfirm(true)
@@ -262,7 +269,7 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
   }
 
   const handleRetryWithOverrides = () => {
-    const payload: any = {}
+    const payload: Record<string, unknown> = {}
     if (editTitle) payload.title = editTitle
     if (editYear) payload.year = editYear
     logger.buttonClick('Refresh Metadata (override)', 'MovieDetail', { movieId, title: editTitle, year: editYear })
@@ -474,26 +481,30 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
                       <span className="text-xs text-gray-500">IMDB</span>
                     </div>
                   )}
-                  {movie.rotten_tomatoes_score !== undefined && movie.rotten_tomatoes_score !== null && (
-                    <div className="flex items-center gap-1" title="Rotten Tomatoes Tomatometer">
-                      <span className={`text-sm font-bold ${movie.rotten_tomatoes_score >= 60 ? 'text-red-400' : 'text-green-400'}`}>
-                        {movie.rotten_tomatoes_score}%
-                      </span>
-                      <span className="text-xs text-gray-500">RT</span>
-                    </div>
-                  )}
-                  {movie.metacritic_score !== undefined && movie.metacritic_score !== null && (
-                    <div className="flex items-center gap-1" title="Metacritic Metascore">
-                      <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
-                        movie.metacritic_score >= 75 ? 'bg-green-600 text-white' :
-                        movie.metacritic_score >= 50 ? 'bg-yellow-600 text-white' :
-                        'bg-red-600 text-white'
-                      }`}>
-                        {movie.metacritic_score}
-                      </span>
-                      <span className="text-xs text-gray-500">Meta</span>
-                    </div>
-                  )}
+                  {movie.rotten_tomatoes_score !== undefined && movie.rotten_tomatoes_score !== null && (() => {
+                    const rtClass = movie.rotten_tomatoes_score >= 60 ? 'text-red-400' : 'text-green-400'
+                    return (
+                      <div className="flex items-center gap-1" title="Rotten Tomatoes Tomatometer">
+                        <span className={`text-sm font-bold ${rtClass}`}>
+                          {movie.rotten_tomatoes_score}%
+                        </span>
+                        <span className="text-xs text-gray-500">RT</span>
+                      </div>
+                    )
+                  })()}
+                  {movie.metacritic_score !== undefined && movie.metacritic_score !== null && (() => {
+                    let metaClass = 'bg-red-600 text-white'
+                    if (movie.metacritic_score >= 75) metaClass = 'bg-green-600 text-white'
+                    else if (movie.metacritic_score >= 50) metaClass = 'bg-yellow-600 text-white'
+                    return (
+                      <div className="flex items-center gap-1" title="Metacritic Metascore">
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${metaClass}`}>
+                          {movie.metacritic_score}
+                        </span>
+                        <span className="text-xs text-gray-500">Meta</span>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
 
@@ -569,7 +580,11 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
                 <div className="mt-3">
                   <span className="text-xs text-gray-500">Last Watched</span>
                   <div className="text-sm text-gray-900 dark:text-white">
-                    {watchHistory?.history?.[0]?.date ? new Date(watchHistory.history[0].date * 1000).toLocaleString() : movie.last_watched_date ? new Date(movie.last_watched_date).toLocaleString() : 'Never'}
+                    {(() => {
+                      if (watchHistory?.history?.[0]?.date) return new Date(watchHistory.history[0].date * 1000).toLocaleString()
+                      if (movie.last_watched_date) return new Date(movie.last_watched_date).toLocaleString()
+                      return 'Never'
+                    })()}
                   </div>
                 </div>
                 <div className="mt-2">
@@ -646,11 +661,17 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
                     <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-600">
                       <span className="text-gray-500 dark:text-gray-400 text-xs">All tracks:</span>
                       <div className="mt-1 space-y-1">
-                        {audioTracks.map((track: any, idx: number) => (
-                          <div key={idx} className="text-xs text-gray-600 dark:text-gray-300">
-                            {track.codec} {track.channels} {track.language && `(${track.language})`}
-                          </div>
-                        ))}
+                        {audioTracks.map((rawTrack: unknown, idx: number) => {
+                          const track = rawTrack as Record<string, unknown>
+                          const codec = track.codec as string | undefined
+                          const channels = track.channels as string | number | undefined
+                          const language = track.language as string | undefined
+                          return (
+                            <div key={idx} className="text-xs text-gray-600 dark:text-gray-300">
+                              {codec} {channels} {language && `(${language})`}
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
                   )}
@@ -892,10 +913,26 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
               <span className={`w-2 h-2 rounded-full ${movie.scraped ? 'bg-green-400' : 'bg-gray-500'}`} />
               {movie.scraped ? 'Scraped' : 'Not Scraped'}
             </span>
-            <span className={`flex items-center gap-1 ${movie.media_info_failed ? 'text-red-400' : movie.media_info_scanned ? 'text-green-400' : 'text-gray-500'}`}>
-              <span className={`w-2 h-2 rounded-full ${movie.media_info_failed ? 'bg-red-400' : movie.media_info_scanned ? 'bg-green-400' : 'bg-gray-500'}`} />
-              {movie.media_info_failed ? 'Analysis Failed' : movie.media_info_scanned ? 'Analyzed' : 'Not Analyzed'}
-            </span>
+            {(() => {
+              let mediaStatusClass = 'text-gray-500'
+              let mediaDotClass = 'bg-gray-500'
+              let mediaText = 'Not Analyzed'
+              if (movie.media_info_failed) {
+                mediaStatusClass = 'text-red-400'
+                mediaDotClass = 'bg-red-400'
+                mediaText = 'Analysis Failed'
+              } else if (movie.media_info_scanned) {
+                mediaStatusClass = 'text-green-400'
+                mediaDotClass = 'bg-green-400'
+                mediaText = 'Analyzed'
+              }
+              return (
+                <span className={`flex items-center gap-1 ${mediaStatusClass}`}>
+                  <span className={`w-2 h-2 rounded-full ${mediaDotClass}`} />
+                  {mediaText}
+                </span>
+              )
+            })()}
             <span className={`flex items-center gap-1 ${movie.has_nfo ? 'text-green-400' : 'text-gray-500'}`}>
               <span className={`w-2 h-2 rounded-full ${movie.has_nfo ? 'bg-green-400' : 'bg-gray-500'}`} />
               {movie.has_nfo ? 'NFO Present' : 'No NFO'}
@@ -923,26 +960,27 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
           error={modalError}
           onClose={closeSearchEditModal}
           onRetry={handleRetryWithOverrides}
-          isRetrying={(scrapeNowOverrideMutation as any).isLoading}
+          isRetrying={(scrapeNowOverrideMutation as unknown as { isLoading?: boolean }).isLoading ?? false}
         />
       )}
 
       {/* Delete Confirmation Dialog */}
-      <ConfirmDialog
-        isOpen={showDeleteConfirm}
-        title="Delete Movie"
-        message={`Are you sure you want to delete "${movie.title}"?\n\n${
-          deleteOptions.deleteFolder 
-            ? '⚠️ This will permanently delete the entire folder containing this movie from your disk!'
-            : deleteOptions.deleteFile 
-              ? '⚠️ This will permanently delete the media file from your disk!'
-              : 'This will only remove it from the library. The file will remain on disk.'
-        }`}
-        confirmLabel={deleteOptions.deleteFolder || deleteOptions.deleteFile ? 'Delete Files' : 'Remove from Library'}
-        variant={deleteOptions.deleteFolder || deleteOptions.deleteFile ? 'danger' : 'warning'}
-        onConfirm={confirmDelete}
-        onCancel={() => setShowDeleteConfirm(false)}
-      />
+      {(() => {
+        let deleteMessage = 'This will only remove it from the library. The file will remain on disk.'
+        if (deleteOptions.deleteFolder) deleteMessage = '⚠️ This will permanently delete the entire folder containing this movie from your disk!'
+        else if (deleteOptions.deleteFile) deleteMessage = '⚠️ This will permanently delete the media file from your disk!'
+        return (
+          <ConfirmDialog
+            isOpen={showDeleteConfirm}
+            title="Delete Movie"
+            message={`Are you sure you want to delete "${movie.title}"?\n\n${deleteMessage}`}
+            confirmLabel={deleteOptions.deleteFolder || deleteOptions.deleteFile ? 'Delete Files' : 'Remove from Library'}
+            variant={deleteOptions.deleteFolder || deleteOptions.deleteFile ? 'danger' : 'warning'}
+            onConfirm={confirmDelete}
+            onCancel={() => setShowDeleteConfirm(false)}
+          />
+        )
+      })()}
 
       {/* Mux Subtitle Confirmation Dialog */}
       <MuxConfirmDialog
@@ -988,7 +1026,7 @@ function SearchEditModalComponent({
   year: number | null
   setTitle: (t: string) => void
   setYear: (y: number | null) => void
-  tries: any[] | null
+  tries: Record<string, unknown>[] | null
   error: string | null
   onClose: () => void
   onRetry: () => void
@@ -1018,8 +1056,8 @@ function SearchEditModalComponent({
           <div className="mb-4 text-sm text-gray-400">
             <div className="font-medium mb-1">Tried searches:</div>
             <ul className="list-disc list-inside">
-              {tries.map((t: any, idx: number) => (
-                <li key={idx}>{t.method}: {t.title ?? t.imdb_id ?? t.tmdb_id ?? t.path ?? ''} {t.year ? `(${t.year})` : ''}</li>
+              {tries.map((t: Record<string, unknown>, idx: number) => (
+                <li key={idx}>{String(t['method'] ?? '')}: {String(t['title'] ?? t['imdb_id'] ?? t['tmdb_id'] ?? t['path'] ?? '')} {t['year'] ? `(${t['year']})` : ''}</li>
               ))}
             </ul>
           </div>

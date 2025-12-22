@@ -59,4 +59,11 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as e:
+        # Ensure a report file is written on unexpected failures so CI can upload diagnostics
+        with open(REPORT_FILE, 'w') as f:
+            json.dump({'error': str(e)}, f, indent=2)
+        print(f"ERROR: detect-secrets check failed: {e}", file=sys.stderr)
+        sys.exit(2)

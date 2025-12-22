@@ -502,10 +502,10 @@ async def search_tvshow_candidates(
     provider_msg = f" using {provider.upper()}" if provider else " on TMDB or OMDb"
     logger.warning(
         f"[{original_title}] Not found{provider_msg} (search term: '{search_title}')")
-    raise HTTPException(
-        status_code=404,
-        detail=f"TV show not found{provider_msg}. Searched for: '{search_title}'. Please check the show title or try a different provider."
-    )
+    
+    # Return empty results instead of raising an exception
+    # This allows the frontend to handle "no results" gracefully
+    return {'provider': provider or 'tmdb', 'results': []}
 
 
 

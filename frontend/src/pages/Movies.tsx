@@ -12,6 +12,7 @@ import { useToast } from '../contexts/ToastContext'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { moviesApi, libraryApi, Movie } from '../services/api'
 import logger from '../services/logger'
+import { errorDetail } from '../services/errorUtils'
 
 // localStorage keys for persistence
 const STORAGE_KEY_VIEW_MODE = 'mediapruner_movies_view_mode'
@@ -202,12 +203,10 @@ export default function Movies() {
         showToast('Library Up to Date', 'No changes detected in your library.', 'info')
       }
     },
-    onError: (error: any) => {
-      logger.error('Refresh library failed', 'Movies', { 
-        error,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('Refresh Failed', error?.response?.data?.detail || 'Failed to refresh library', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Refresh library failed', 'Movies', { error: err })
+      showToast('Refresh Failed', err || 'Failed to refresh library', 'error')
     }
   })
 
@@ -235,12 +234,10 @@ export default function Movies() {
         data.skipped_count && data.skipped_count > 0 ? 'info' : 'success'
       )
     },
-    onError: (error: any) => {
-      logger.error('Sync watch history failed', 'Movies', { 
-        error,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('Sync Failed', error?.response?.data?.detail || 'Failed to sync watch history. Is Tautulli configured?', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Sync watch history failed', 'Movies', { error: err })
+      showToast('Sync Failed', err || 'Failed to sync watch history. Is Tautulli configured?', 'error')
     }
   })
 
@@ -252,9 +249,10 @@ export default function Movies() {
       await queryClient.refetchQueries({ queryKey: ['movies'] })
       showToast('Sync Complete', `Synced watch history for ${data.synced_count} movies.`, 'success')
     },
-    onError: (error: any) => {
-      logger.error('Sync watch history failed', 'Movies', { error, errorMessage: error?.response?.data?.detail || error?.message })
-      showToast('Sync Failed', error?.response?.data?.detail || 'Failed to sync watch history', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Sync watch history failed', 'Movies', { error: err })
+      showToast('Sync Failed', err || 'Failed to sync watch history', 'error')
     }
   })
 
@@ -270,12 +268,10 @@ export default function Movies() {
         'success'
       )
     },
-    onError: (error: any) => {
-      logger.error('Analyze movies failed', 'Movies', { 
-        error,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('Analysis Failed', error?.response?.data?.detail || 'Failed to analyze movies', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Analyze movies failed', 'Movies', { error: err })
+      showToast('Analysis Failed', err || 'Failed to analyze movies', 'error')
     }
   })
 
@@ -291,12 +287,10 @@ export default function Movies() {
         data.scraped === data.total ? 'success' : 'warning'
       )
     },
-    onError: (error: any) => {
-      logger.error('Metadata refresh failed', 'Movies', { 
-        error,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('Metadata Refresh Failed', error?.response?.data?.detail || 'Failed to refresh metadata', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Metadata refresh failed', 'Movies', { error: err })
+      showToast('Metadata Refresh Failed', err || 'Failed to refresh metadata', 'error')
     }
   })
 
@@ -309,12 +303,10 @@ export default function Movies() {
       await queryClient.refetchQueries({ queryKey: ['movies'] })
       showToast('Fetch Ratings Enqueued', `Task ${data.task_id} enqueued to refresh metadata with ratings.`, 'info')
     },
-    onError: (error: any) => {
-      logger.error('OMDb fetch failed', 'Movies', { 
-        error,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('OMDb Fetch Failed', error?.response?.data?.detail || 'Failed to fetch OMDb ratings', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('OMDb fetch failed', 'Movies', { error: err })
+      showToast('OMDb Fetch Failed', err || 'Failed to fetch OMDb ratings', 'error')
     }
   })
 
@@ -333,12 +325,10 @@ export default function Movies() {
         data.deleted === data.total ? 'success' : 'warning'
       )
     },
-    onError: (error: any) => {
-      logger.error('Delete movies failed', 'Movies', { 
-        error,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('Delete Failed', error?.response?.data?.detail || 'Failed to delete movies', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Delete movies failed', 'Movies', { error: err })
+      showToast('Delete Failed', err || 'Failed to delete movies', 'error')
     }
   })
 
@@ -357,13 +347,10 @@ export default function Movies() {
         data.renamed === data.total ? 'success' : 'warning'
       )
     },
-    onError: (error: any) => {
-      logger.error('Rename files failed', 'Movies', { 
-        error,
-        count: selectedIds.size,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('Rename Failed', error?.response?.data?.detail || 'Failed to rename files', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Rename files failed', 'Movies', { error: err, count: selectedIds.size })
+      showToast('Rename Failed', err || 'Failed to rename files', 'error')
     }
   })
 
@@ -382,13 +369,10 @@ export default function Movies() {
         data.renamed === data.total ? 'success' : 'warning'
       )
     },
-    onError: (error: any) => {
-      logger.error('Rename folders failed', 'Movies', { 
-        error,
-        count: selectedIds.size,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('Rename Failed', error?.response?.data?.detail || 'Failed to rename folders', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Rename folders failed', 'Movies', { error: err, count: selectedIds.size })
+      showToast('Rename Failed', err || 'Failed to rename folders', 'error')
     }
   })
 
@@ -579,8 +563,9 @@ export default function Movies() {
           // For other actions fallback to batch mutation (shouldn't happen here)
           // leave successCount unchanged
         }
-      } catch (err: any) {
-        errors.push(`${id}: ${err?.response?.data?.detail || err?.message || 'Unknown error'}`)
+      } catch (err: unknown) {
+        const message = errorDetail(err)
+        errors.push(`${id}: ${message}`)
       }
     }
 
@@ -645,7 +630,7 @@ export default function Movies() {
 
   // Fetch all matching movie IDs from server for full filtered operations
   const getAllMatchingMovieIds = async () => {
-    const params: any = {}
+    const params: Record<string, unknown> = {}
     if (searchQuery) params.search = searchQuery
     if (filters.watched && filters.watched !== 'all') params.watched = filters.watched === 'yes'
     // Pass client-only filters to server so 'all matching' respects UI filters
@@ -665,7 +650,11 @@ export default function Movies() {
     return resp.data.ids
   }
 
-  const confirmScopeAndRun = async (actionName: string, mutation: any) => {
+  // NOTE: Updated for TypeScript compatibility and CI type-checks:
+  // `confirmScopeAndRun` now accepts an optional array of IDs and callers
+  // pass `ids ?? []` when delegating to react-query `mutation.mutate`.
+  // This prevents TS2345 errors when `mutation.mutate` expects `number[]`.
+  const confirmScopeAndRun = async (actionName: string, mutateFn: (ids?: number[]) => unknown) => {
     try {
       // If the user has explicit selections in edit mode, apply only to those selected IDs
       let ids: number[] = []
@@ -686,13 +675,11 @@ export default function Movies() {
             const allIds = await getAllMatchingMovieIds()
             if (['Refresh Metadata', 'Analyze', 'Sync Watch History', 'Fetch Ratings'].includes(actionName)) {
               // Enqueue a single batch task
-              const resp = actionName === 'Refresh Metadata'
-                ? await moviesApi.refreshMoviesBatch(allIds)
-                : actionName === 'Analyze'
-                  ? await moviesApi.analyzeMoviesBatch(allIds)
-                  : actionName === 'Fetch Ratings'
-                    ? await moviesApi.refreshMoviesBatch(allIds, true)
-                    : await moviesApi.syncWatchHistoryBatch(allIds)
+              let resp
+              if (actionName === 'Refresh Metadata') resp = await moviesApi.refreshMoviesBatch(allIds)
+              else if (actionName === 'Analyze') resp = await moviesApi.analyzeMoviesBatch(allIds)
+              else if (actionName === 'Fetch Ratings') resp = await moviesApi.refreshMoviesBatch(allIds, true)
+              else resp = await moviesApi.syncWatchHistoryBatch(allIds)
               // Use a toast not modal for confirmations
               showToast(`${actionName} Enqueued`, `Task ${resp.data.task_id} enqueued for ${allIds.length} movies.`, 'info')
               setScopeModal(s => ({ ...s, isOpen: false }))
@@ -703,13 +690,11 @@ export default function Movies() {
           },
           onConfirmPage: () => {
             if (['Refresh Metadata', 'Analyze', 'Sync Watch History', 'Fetch Ratings'].includes(actionName)) {
-              const resp = actionName === 'Refresh Metadata'
-                ? moviesApi.refreshMoviesBatch(ids)
-                : actionName === 'Analyze'
-                  ? moviesApi.analyzeMoviesBatch(ids)
-                  : actionName === 'Fetch Ratings'
-                    ? moviesApi.refreshMoviesBatch(ids, true)
-                    : moviesApi.syncWatchHistoryBatch(ids)
+              let resp
+              if (actionName === 'Refresh Metadata') resp = moviesApi.refreshMoviesBatch(ids)
+              else if (actionName === 'Analyze') resp = moviesApi.analyzeMoviesBatch(ids)
+              else if (actionName === 'Fetch Ratings') resp = moviesApi.refreshMoviesBatch(ids, true)
+              else resp = moviesApi.syncWatchHistoryBatch(ids)
               resp.then(r => showToast(`${actionName} Enqueued`, `Task ${r.data.task_id} enqueued for ${ids.length} movies.`, 'info'))
               setScopeModal(s => ({ ...s, isOpen: false }))
               return
@@ -741,11 +726,11 @@ export default function Movies() {
         return
       }
 
-      // Fallback: use existing batch mutation
-      mutation.mutate(ids)
-    } catch (error: any) {
+      // Fallback: use provided mutate function
+      mutateFn(ids)
+    } catch (error: unknown) {
       logger.error(`${actionName} failed to start`, 'Movies', { error })
-      showToast(`${actionName} Failed`, 'Could not start operation', 'error')
+      showToast(`${actionName} Failed`, errorDetail(error) || 'Could not start operation', 'error')
     }
   }
 
@@ -912,7 +897,7 @@ export default function Movies() {
                   value={filters.scraped}
                   onChange={(e) => {
                     logger.filterChange('scraped', e.target.value, 'Movies')
-                    setFilters(f => ({ ...f, scraped: e.target.value as any }))
+                    setFilters(f => ({ ...f, scraped: e.target.value as Filters['scraped'] }))
                   }}
                   className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-gray-900 dark:text-white text-sm transition-colors"
                 >
@@ -929,7 +914,7 @@ export default function Movies() {
                   value={filters.analyzed}
                   onChange={(e) => {
                     logger.filterChange('analyzed', e.target.value, 'Movies')
-                    setFilters(f => ({ ...f, analyzed: e.target.value as any }))
+                    setFilters(f => ({ ...f, analyzed: e.target.value as Filters['analyzed'] }))
                   }}
                   className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-gray-900 dark:text-white text-sm transition-colors"
                 >
@@ -945,7 +930,7 @@ export default function Movies() {
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Has NFO</label>
                 <select
                   value={filters.hasNfo}
-                  onChange={(e) => setFilters(f => ({ ...f, hasNfo: e.target.value as any }))}
+                  onChange={(e) => setFilters(f => ({ ...f, hasNfo: e.target.value as Filters['hasNfo'] }))}
                   className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-gray-900 dark:text-white text-sm transition-colors"
                 >
                   <option value="all">All</option>
@@ -959,7 +944,7 @@ export default function Movies() {
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Watched</label>
                 <select
                   value={filters.watched}
-                  onChange={(e) => setFilters(f => ({ ...f, watched: e.target.value as any }))}
+                  onChange={(e) => setFilters(f => ({ ...f, watched: e.target.value as Filters['watched'] }))}
                   className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-gray-900 dark:text-white text-sm transition-colors"
                 >
                   <option value="all">All</option>
@@ -1159,7 +1144,7 @@ export default function Movies() {
           <button
             onClick={() => {
               logger.buttonClick('Analyze', 'Movies', { count: movies.length })
-              confirmScopeAndRun('Analyze', analyzeMutation)
+              confirmScopeAndRun('Analyze', (ids?: number[]) => analyzeMutation.mutate(ids ?? []))
             }}
             disabled={isAnyProcessRunning || movies.length === 0}
             className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 rounded text-white text-sm transition-colors"
@@ -1173,7 +1158,7 @@ export default function Movies() {
           <button
             onClick={() => {
               logger.buttonClick('Refresh Metadata', 'Movies', { count: movies.length })
-              confirmScopeAndRun('Refresh Metadata', scrapeMutation)
+              confirmScopeAndRun('Refresh Metadata', (ids?: number[]) => scrapeMutation.mutate(ids ?? []))
             }}
             disabled={isAnyProcessRunning || movies.length === 0}
             className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded text-white text-sm transition-colors"
@@ -1204,7 +1189,7 @@ export default function Movies() {
             onClick={() => {
               logger.buttonClick('Sync Watch History', 'Movies')
               // Use confirm scope run to optionally run on all matching movies
-              confirmScopeAndRun('Sync Watch History', syncWatchBatchMutation)
+              confirmScopeAndRun('Sync Watch History', (ids?: number[]) => syncWatchBatchMutation.mutate(ids ?? []))
             }}
             disabled={syncWatchHistoryMutation.isPending}
             className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 rounded text-white text-sm transition-colors"
@@ -1547,13 +1532,11 @@ export default function Movies() {
       <ConfirmDialog
         isOpen={deleteConfirmOpen}
         title="Delete Movies"
-        message={`Are you sure you want to delete ${selectedIds.size} movie${selectedIds.size !== 1 ? 's' : ''}?\n\n${
-          deleteOptions.deleteFolder 
-            ? '⚠️ This will permanently delete the entire folder containing each movie from your disk!'
-            : deleteOptions.deleteFile 
-              ? '⚠️ This will permanently delete the media files from your disk!'
-              : 'This will only remove them from the library. The files will remain on disk.'
-        }`}
+        message={`Are you sure you want to delete ${selectedIds.size} movie${selectedIds.size !== 1 ? 's' : ''}?\n\n${(() => {
+          if (deleteOptions.deleteFolder) return '⚠️ This will permanently delete the entire folder containing each movie from your disk!'
+          if (deleteOptions.deleteFile) return '⚠️ This will permanently delete the media files from your disk!'
+          return 'This will only remove them from the library. The files will remain on disk.'
+        })()}`}
         confirmLabel={deleteOptions.deleteFolder || deleteOptions.deleteFile ? 'Delete Files' : 'Remove from Library'}
         variant={deleteOptions.deleteFolder || deleteOptions.deleteFile ? 'danger' : 'warning'}
         onConfirm={confirmDelete}

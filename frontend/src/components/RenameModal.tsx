@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { X, FileEdit, FolderEdit, Eye, Check, RefreshCw } from 'lucide-react'
 import { moviesApi, Movie } from '../services/api'
 import logger from '../services/logger'
+import { errorDetail } from '../services/errorUtils' 
 
 interface RenameModalProps {
   movie: Movie
@@ -268,7 +269,7 @@ export default function RenameModal({ movie, mode = 'file', onClose }: RenameMod
 
           {renameMutation.isError && (
             <div className="p-3 bg-red-500/20 border border-red-500 rounded-lg text-red-300 text-sm">
-              {(renameMutation.error as any)?.response?.data?.detail || `Failed to rename ${isFolder ? 'folder' : 'file'}`}
+              {errorDetail(renameMutation.error) || `Failed to rename ${isFolder ? 'folder' : 'file'}`}
             </div>
           )}
         </div>
