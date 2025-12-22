@@ -1,0 +1,92 @@
+name: Manual PR merge
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_number:
+        description: 'Pull request number to merge'
+        required: true
+        type: number
+      merge_method:
+        description: 'Merge method: merge (merge commit), squash, rebase'
+        required: false
+        default: 'merge'
+        type: choice
+        options:
+          - merge
+          - squash
+          - rebase
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  manual-merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check trigger actor
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const allowed = 'kronnnnnn';
+            const actor = context.actor;
+            if (actor !== allowed) {
+              core.setFailed(`This workflow can only be run by ${allowed}. Triggering actor: ${actor}`);
+              return;
+            }
+            core.info(`Triggered by allowed user: ${actor}`);
+
+      - name: Get PR and verify checks
+        id: verify
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNum = parseInt(core.getInput('pull_number') || github.context.payload.inputs && github.context.payload.inputs.pull_number, 10);
+            const method = core.getInput('merge_method') || github.context.payload.inputs && github.context.payload.inputs.merge_method || 'merge';
+
+            if (!prNum) throw new Error('pull_number input required');
+
+            const pr = await github.rest.pulls.get({ owner, repo, pull_number: prNum });
+            core.info(`PR #${prNum} state: ${pr.data.state}, draft: ${pr.data.draft}`);
+
+            if (pr.data.state !== 'open') throw new Error(`PR #${prNum} is not open`);
+            if (pr.data.draft) throw new Error(`PR #${prNum} is a draft`);
+
+            const headSha = pr.data.head.sha;
+            core.info(`Head SHA: ${headSha}`);
+
+            // Ensure the mediapruner/auto-approve check run succeeded
+            const checks = await github.rest.checks.listForRef({ owner, repo, ref: headSha });
+            const autoCheck = (checks.data.check_runs || []).find(c => c.name === 'mediapruner/auto-approve');
+            if (!autoCheck) throw new Error('Required check `mediapruner/auto-approve` not found for this commit');
+            if (autoCheck.conclusion !== 'success') throw new Error(`mediapruner/auto-approve check not successful (conclusion=${autoCheck.conclusion})`);
+
+            // Ensure the PR is mergeable
+            if (pr.data.mergeable === false) {
+              throw new Error('PR not mergeable (mergeable=false)');
+            }
+
+            core.info('Verification passed');
+            return { pr: pr.data, method, prNum };
+
+      - name: Merge PR
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNum = parseInt(core.getInput('pull_number') || github.context.payload.inputs && github.context.payload.inputs.pull_number, 10);
+            const method = core.getInput('merge_method') || github.context.payload.inputs && github.context.payload.inputs.merge_method || 'merge';
+            const title = `Merging PR #${prNum} via manual-merge workflow`;
+
+            const mergeResp = await github.rest.pulls.merge({ owner, repo, pull_number: prNum, merge_method: method, commit_title: title });
+            if (!mergeResp.data.merged) throw new Error(`Merge failed: ${JSON.stringify(mergeResp.data)}`);
+            core.info(`Merged PR #${prNum} using method '${method}'`);
+            // Post a comment confirming
+            await github.rest.issues.createComment({ owner, repo, issue_number: prNum, body: `Merged by ${context.actor} via manual merge workflow (method: ${method}).` });
+
+      - name: Output success
+        run: echo "Manual merge job completed"
