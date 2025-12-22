@@ -78,13 +78,13 @@
           console.log(`Created check run '${checkName}' for ${sha}`);
           return { created: true, method: 'checks' };
         } catch (err) {
-          console.log(`Creating check run failed, will fallback to commit status: ${err.message || err}`);
+          console.error('Creating check run failed:', { message: err.message || err, status: err.status || null, data: (err.response && err.response.data) ? err.response.data : null });
           try {
             await octClient.rest.repos.createCommitStatus({ owner, repo, sha, state: 'success', context: checkName, description: 'Automated approval condition met (copilot label + CI).' });
             console.log(`Created commit status '${checkName}' for ${sha}`);
             return { created: true, method: 'status' };
           } catch (e2) {
-            console.error('Fallback commit status creation failed:', e2.message || e2);
+            console.error('Fallback commit status creation failed:', { message: e2.message || e2, status: e2.status || null, data: (e2.response && e2.response.data) ? e2.response.data : null });
             return { created: false, method: 'none' };
           }
         }
