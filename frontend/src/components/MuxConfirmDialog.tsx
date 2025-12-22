@@ -73,6 +73,8 @@ export default function MuxConfirmDialog({
   error,
   progress
 }: MuxConfirmDialogProps) {
+  // `_type` is declared by parent but not used in this component; reference it to satisfy linter
+  void _type;
   if (!isOpen) return null
 
   const isMoviePreview = (p: unknown): p is MovieMuxPreview => {

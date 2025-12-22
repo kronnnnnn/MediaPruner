@@ -62,6 +62,9 @@ export default function MediaList({
   visibleColumns,
   onColumnsChange: _onColumnsChange,
   selectedIds = new Set(),
+}: MediaListProps) {
+  // prevent lint 'defined but never used' for optional callback
+  void _onColumnsChange;
   onSelectionChange,
   editMode = false,
 }: MediaListProps) {
