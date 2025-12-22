@@ -40,8 +40,67 @@
         continue;
       }
 
+      // Get the PR head sha so we can attach a Check Run (preferred) or a commit status (fallback)
+      const prResp = await githubOct.rest.pulls.get({ owner, repo, pull_number: prNumber });
+      const headSha = prResp.data.head.sha;
+
       let oct = githubOct;
       let approverName = 'github-actions[bot]';
+
+      // Create an automated check/status to record that the Copilot-approved + CI condition was met.
+      async function createAutoApproveCheck(octClient, owner, repo, sha) {
+        const checkName = 'mediapruner/auto-approve';
+        try {
+          // Skip if a successful check run already exists for this ref
+          try {
+            const existing = await octClient.rest.checks.listForRef({ owner, repo, ref: sha });
+            if (existing && existing.data && existing.data.check_runs && existing.data.check_runs.some(c => c.name === checkName && c.conclusion === 'success')) {
+              console.log(`Check run '${checkName}' already present and successful for ${sha}; skipping creation.`);
+              return { created: false, method: 'checks' };
+            }
+          } catch (e) {
+            // Non-fatal: listing checks can fail if checks permission is missing
+            console.log('Listing checks failed (non-fatal):', e.message || e);
+          }
+
+          const res = await octClient.rest.checks.create({
+            owner,
+            repo,
+            name: checkName,
+            head_sha: sha,
+            status: 'completed',
+            conclusion: 'success',
+            output: {
+              title: 'Auto-approve check',
+              summary: 'Automated approval condition met: CI passed and Copilot label detected.'
+            }
+          });
+          console.log(`Created check run '${checkName}' for ${sha}`);
+          return { created: true, method: 'checks' };
+        } catch (err) {
+          console.log(`Creating check run failed, will fallback to commit status: ${err.message || err}`);
+          try {
+            await octClient.rest.repos.createCommitStatus({ owner, repo, sha, state: 'success', context: checkName, description: 'Automated approval condition met (copilot label + CI).' });
+            console.log(`Created commit status '${checkName}' for ${sha}`);
+            return { created: true, method: 'status' };
+          } catch (e2) {
+            console.error('Fallback commit status creation failed:', e2.message || e2);
+            return { created: false, method: 'none' };
+          }
+        }
+      }
+
+      // will try to create check/status to signal auto-approval
+      const checkResult = await createAutoApproveCheck(oct, owner, repo, headSha);
+      if (checkResult.created) {
+        try {
+          await githubOct.rest.issues.createComment({ owner, repo, issue_number: prNumber, body: `Automated approval signal created: \
+- check/context: \\`mediapruner/auto-approve\\` (method: ${checkResult.method}).\nIf desired, add this check to branch protection required checks to allow automatic merges.` });
+        } catch (e) {
+          console.log('Failed to create PR comment about auto-approve check:', e.message || e);
+        }
+      }
+
 
       const appId = process.env.AUTO_APPROVE_APP_ID;
       const appPrivateKey = process.env.AUTO_APPROVE_APP_PRIVATE_KEY;
