@@ -94,8 +94,8 @@
       const checkResult = await createAutoApproveCheck(oct, owner, repo, headSha);
       if (checkResult.created) {
         try {
-          await githubOct.rest.issues.createComment({ owner, repo, issue_number: prNumber, body: `Automated approval signal created: \
-- check/context: \\`mediapruner/auto-approve\\` (method: ${checkResult.method}).\nIf desired, add this check to branch protection required checks to allow automatic merges.` });
+          const body = 'Automated approval signal created:\n- check/context: `mediapruner/auto-approve` (method: ' + checkResult.method + ').\nIf desired, add this check to branch protection required checks to allow automatic merges.';
+          await githubOct.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
         } catch (e) {
           console.log('Failed to create PR comment about auto-approve check:', e.message || e);
         }
