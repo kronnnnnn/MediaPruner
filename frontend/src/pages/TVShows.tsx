@@ -7,6 +7,15 @@ import MessageModal, { useMessageModal } from '../components/MessageModal'
 import { useToast } from '../contexts/ToastContext'
 import { tvShowsApi, libraryApi, TVShow } from '../services/api'
 import logger from '../services/logger'
+import { errorDetail } from '../services/errorUtils'
+
+// Helper function to get status badge class
+const getStatusClass = (status: string | undefined | null): string => {
+  if (!status) return 'bg-gray-500/20 text-gray-400'
+  if (status === 'Ended') return 'bg-red-500/20 text-red-400'
+  if (status === 'Returning Series') return 'bg-green-500/20 text-green-400'
+  return 'bg-gray-500/20 text-gray-400'
+}
 
 // localStorage keys for persistence
 const STORAGE_KEY_VIEW_MODE = 'mediapruner_tvshows_view_mode'
@@ -71,12 +80,10 @@ export default function TVShows() {
         showToast('Library Up to Date', 'No changes found in your TV show library.', 'info')
       }
     },
-    onError: (error: any) => {
-      logger.error('Refresh library failed', 'TVShows', { 
-        error,
-        errorMessage: error?.response?.data?.detail || error?.message 
-      })
-      showToast('Refresh Failed', error?.response?.data?.detail || 'Failed to refresh library', 'error')
+    onError: (error: unknown) => {
+      const err = errorDetail(error)
+      logger.error('Refresh library failed', 'TVShows', { error: err })
+      showToast('Refresh Failed', err || 'Failed to refresh library', 'error')
     }
   })
 
@@ -287,31 +294,39 @@ export default function TVShows() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {isLoading ? (
-                  Array.from({ length: 10 }).map((_, i) => (
-                    <tr key={i} className="animate-pulse">
-                      <td className="px-3 py-2"><div className="w-10 h-14 bg-gray-200 dark:bg-gray-700 rounded"></div></td>
-                      <td className="px-3 py-2"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div></td>
-                      <td className="px-3 py-2"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-16"></div></td>
-                      <td className="px-3 py-2"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-12"></div></td>
-                      <td className="px-3 py-2"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-16"></div></td>
-                      <td className="px-3 py-2"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20"></div></td>
-                      <td className="px-3 py-2"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-12"></div></td>
+                {(() => {
+                  if (isLoading) {
+                    return (
+                      <>
+                        {Array.from({ length: 10 }).map((_, i) => (
+                          <tr key={i} className="animate-pulse">
+                            <td className="px-3 py-2"><div className="w-10 h-14 bg-gray-200 dark:bg-gray-700 rounded"></div></td>
+                            <td className="px-3 py-2"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div></td>
+                            <td className="px-3 py-2"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-16"></div></td>
+                            <td className="px-3 py-2"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-12"></div></td>
+                            <td className="px-3 py-2"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-16"></div></td>
+                            <td className="px-3 py-2"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20"></div></td>
+                            <td className="px-3 py-2"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-12"></div></td>
+                          </tr>
+                        ))}
+                      </>
+                    )
+                  }
+                  if (shows.length === 0) return (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-8 text-center text-gray-500 dark:text-gray-400">
+                        No TV shows found
+                      </td>
                     </tr>
-                  ))
-                ) : shows.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-gray-500 dark:text-gray-400">
-                      No TV shows found
-                    </td>
-                  </tr>
-                ) : (
-                  shows.map((show) => (
-                    <tr
-                      key={show.id}
-                      onClick={() => handleShowClick({ id: show.id })}
-                      className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                    >
+                  )
+                  return (
+                    <>
+                      {shows.map((show) => (
+                        <tr
+                          key={show.id}
+                          onClick={() => handleShowClick({ id: show.id })}
+                          className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                        >
                       <td className="px-3 py-2">
                         {show.poster_path ? (
                           <img 
@@ -348,11 +363,7 @@ export default function TVShows() {
                       </td>
                       <td className="px-3 py-2">
                         {show.status && (
-                          <span className={`px-2 py-1 rounded text-xs ${
-                            show.status === 'Ended' ? 'bg-red-500/20 text-red-400' :
-                            show.status === 'Returning Series' ? 'bg-green-500/20 text-green-400' :
-                            'bg-gray-500/20 text-gray-400'
-                          }`}>
+                          <span className={`px-2 py-1 rounded text-xs ${getStatusClass(show.status)}`}>
                             {show.status}
                           </span>
                         )}
@@ -365,8 +376,11 @@ export default function TVShows() {
                         )}
                       </td>
                     </tr>
-                  ))
-                )}
+                  ))}
+                      </>
+                    )
+              })()}
+
               </tbody>
             </table>
           </div>

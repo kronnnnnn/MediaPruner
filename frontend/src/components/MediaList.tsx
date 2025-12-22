@@ -65,6 +65,9 @@ export default function MediaList({
   onSelectionChange,
   editMode = false,
 }: MediaListProps) {
+  // prevent lint 'defined but never used' for optional callbacks
+  void _onColumnsChange;
+  void onSelectionChange;
   
   const handleSelectAll = () => {
     if (!onSelectionChange) return
@@ -198,46 +201,45 @@ export default function MediaList({
           <span className="text-gray-500">-</span>
         )
       
-      case 'rotten_tomatoes_score':
-        return movie.rotten_tomatoes_score !== undefined && movie.rotten_tomatoes_score !== null ? (
-          <span className={`text-sm font-medium ${
-            movie.rotten_tomatoes_score >= 60 ? 'text-red-400' : 'text-green-400'
-          }`}>
+      case 'rotten_tomatoes_score': {
+        if (movie.rotten_tomatoes_score === undefined || movie.rotten_tomatoes_score === null) {
+          return <span className="text-gray-500">-</span>
+        }
+        const rtClass = movie.rotten_tomatoes_score >= 60 ? 'text-red-400' : 'text-green-400'
+        return (
+          <span className={`text-sm font-medium ${rtClass}`}>
             {movie.rotten_tomatoes_score}%
           </span>
-        ) : (
-          <span className="text-gray-500">-</span>
         )
+      }
       
-      case 'metacritic_score':
-        return movie.metacritic_score !== undefined && movie.metacritic_score !== null ? (
-          <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
-            movie.metacritic_score >= 75 ? 'bg-green-600 text-white' :
-            movie.metacritic_score >= 50 ? 'bg-yellow-600 text-white' :
-            'bg-red-600 text-white'
-          }`}>
+      case 'metacritic_score': {
+        if (movie.metacritic_score === undefined || movie.metacritic_score === null) {
+          return <span className="text-gray-500">-</span>
+        }
+        let metaClass = 'bg-red-600 text-white'
+        if (movie.metacritic_score >= 75) metaClass = 'bg-green-600 text-white'
+        else if (movie.metacritic_score >= 50) metaClass = 'bg-yellow-600 text-white'
+        return (
+          <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${metaClass}`}>
             {movie.metacritic_score}
           </span>
-        ) : (
-          <span className="text-gray-500">-</span>
         )
+      }
       
-      case 'video_resolution':
-        return movie.video_resolution ? (
-          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-            movie.video_resolution.includes('2160') || movie.video_resolution.includes('4K') 
-              ? 'bg-purple-600/30 text-purple-300' 
-              : movie.video_resolution.includes('1080') 
-                ? 'bg-blue-600/30 text-blue-300'
-                : movie.video_resolution.includes('720')
-                  ? 'bg-green-600/30 text-green-300'
-                  : 'bg-gray-600/30 text-gray-300'
-          }`}>
-            {movie.video_resolution}
+      case 'video_resolution': {
+        if (!movie.video_resolution) return <span className="text-gray-500">-</span>
+        let resClass = 'bg-gray-600/30 text-gray-300'
+        const res = movie.video_resolution
+        if (res.includes('2160') || res.includes('4K')) resClass = 'bg-purple-600/30 text-purple-300'
+        else if (res.includes('1080')) resClass = 'bg-blue-600/30 text-blue-300'
+        else if (res.includes('720')) resClass = 'bg-green-600/30 text-green-300'
+        return (
+          <span className={`px-2 py-0.5 rounded text-xs font-medium ${resClass}`}>
+            {res}
           </span>
-        ) : (
-          <span className="text-gray-500">-</span>
         )
+      }
       
       case 'video_codec':
         return <span className="text-gray-600 dark:text-gray-300 text-sm">{movie.video_codec || '-'}</span>
@@ -367,23 +369,19 @@ export default function MediaList({
     if (col.id === 'select') {
       const allSelected = movies.length > 0 && selectedIds.size === movies.length
       const someSelected = selectedIds.size > 0 && selectedIds.size < movies.length
+      let content: React.ReactNode = <Square className="w-5 h-5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" />
+      if (allSelected) content = <CheckSquare className="w-5 h-5 text-primary-500" />
+      else if (someSelected) content = (
+        <div className="relative">
+          <Square className="w-5 h-5 text-primary-500" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-2.5 h-0.5 bg-primary-500" />
+          </div>
+        </div>
+      )
       return (
-        <div 
-          onClick={handleSelectAll}
-          className="flex items-center justify-center cursor-pointer"
-        >
-          {allSelected ? (
-            <CheckSquare className="w-5 h-5 text-primary-500" />
-          ) : someSelected ? (
-            <div className="relative">
-              <Square className="w-5 h-5 text-primary-500" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-2.5 h-0.5 bg-primary-500" />
-              </div>
-            </div>
-          ) : (
-            <Square className="w-5 h-5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" />
-          )}
+        <div onClick={handleSelectAll} className="flex items-center justify-center cursor-pointer">
+          {content}
         </div>
       )
     }

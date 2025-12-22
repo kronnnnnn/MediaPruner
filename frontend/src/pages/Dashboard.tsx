@@ -109,55 +109,59 @@ export default function Dashboard() {
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Library Paths</h2>
         </div>
         <div className="p-4">
-          {isLoading ? (
-            <div className="animate-pulse space-y-3">
-              {[1, 2].map((i) => (
-                <div key={i} className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
-              ))}
-            </div>
-          ) : paths && paths.length > 0 ? (
-            <div className="space-y-3">
-              {paths.map((path) => (
-                <div key={path.id} className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded ${path.media_type === 'movie' ? 'bg-blue-500/20 text-blue-500 dark:text-blue-400' : 'bg-purple-500/20 text-purple-500 dark:text-purple-400'}`}>
-                      {path.media_type === 'movie' ? <Film className="w-4 h-4" /> : <Tv className="w-4 h-4" />}
+          {(() => {
+            if (isLoading) return (
+              <div className="animate-pulse space-y-3">
+                {[1, 2].map((i) => (
+                  <div key={i} className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                ))}
+              </div>
+            )
+            if (paths && paths.length > 0) return (
+              <div className="space-y-3">
+                {paths.map((path) => (
+                  <div key={path.id} className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded ${path.media_type === 'movie' ? 'bg-blue-500/20 text-blue-500 dark:text-blue-400' : 'bg-purple-500/20 text-purple-500 dark:text-purple-400'}`}>
+                        {path.media_type === 'movie' ? <Film className="w-4 h-4" /> : <Tv className="w-4 h-4" />}
+                      </div>
+                      <div>
+                        <p className="text-gray-900 dark:text-white font-medium">{path.name}</p>
+                        <p className="text-gray-500 dark:text-gray-400 text-sm">{path.path}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-gray-900 dark:text-white font-medium">{path.name}</p>
-                      <p className="text-gray-500 dark:text-gray-400 text-sm">{path.path}</p>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-gray-900 dark:text-white">{path.file_count} files</p>
+                        <p className={`text-sm ${path.exists ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                          {path.exists ? 'Available' : 'Not found'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => scanPathMutation.mutate(path.id)}
+                        disabled={scanPathMutation.isPending}
+                        className="p-2 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 disabled:bg-gray-200 dark:disabled:bg-gray-700 rounded-lg transition-colors"
+                        title="Scan this path"
+                      >
+                        {scanPathMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 text-gray-900 dark:text-white animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4 text-gray-900 dark:text-white" />
+                        )}
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="text-gray-900 dark:text-white">{path.file_count} files</p>
-                      <p className={`text-sm ${path.exists ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-                        {path.exists ? 'Available' : 'Not found'}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => scanPathMutation.mutate(path.id)}
-                      disabled={scanPathMutation.isPending}
-                      className="p-2 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 disabled:bg-gray-200 dark:disabled:bg-gray-700 rounded-lg transition-colors"
-                      title="Scan this path"
-                    >
-                      {scanPathMutation.isPending ? (
-                        <Loader2 className="w-4 h-4 text-gray-900 dark:text-white animate-spin" />
-                      ) : (
-                        <RefreshCw className="w-4 h-4 text-gray-900 dark:text-white" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              <HardDrive className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>No library paths configured</p>
-              <p className="text-sm mt-1">Go to Settings to add media folders</p>
-            </div>
-          )}
+                ))}
+              </div>
+            )
+            return (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <HardDrive className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No library paths configured</p>
+                <p className="text-sm mt-1">Go to Settings to add media folders</p>
+              </div>
+            )
+          })()}
         </div>
       </div>
 

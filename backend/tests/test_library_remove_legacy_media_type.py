@@ -2,7 +2,6 @@ import sys
 sys.path.insert(0, '.')
 import pytest
 from httpx import AsyncClient, ASGITransport
-from app.database import async_session
 from sqlalchemy import text
 from app.main import app as fastapi_app
 

@@ -80,6 +80,59 @@ export default function FolderBrowser({ isOpen, initialPath, onSelect, onCancel 
     onCancel()
   }
 
+  const directoryContent = (() => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 text-primary-400 animate-spin" />
+          <span className="ml-2 text-gray-400">Loading...</span>
+        </div>
+      )
+    }
+
+    if (isError) {
+      const detail = (error as { response?: { data?: { detail?: string } } } | null)?.response?.data?.detail
+      return (
+        <div className="p-4 text-center text-red-400">
+          <p>Error loading directory</p>
+          <p className="text-sm mt-1">{detail || 'Path not accessible'}</p>
+          <button
+            onClick={() => refetch()}
+            className="mt-2 text-primary-400 hover:text-primary-300"
+          >
+            Try again
+          </button>
+        </div>
+      )
+    }
+
+    if (data?.items.length === 0) {
+      return (
+        <div className="p-4 text-center text-gray-400">
+          <Folder className="w-12 h-12 mx-auto mb-2 opacity-50" />
+          <p>No subfolders found</p>
+          <p className="text-sm mt-1">You can select this folder or go back</p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="divide-y divide-gray-700">
+        {data?.items.map((item) => (
+          <button
+            key={item.path}
+            onClick={() => handleNavigate(item.path)}
+            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50 transition-colors text-left"
+          >
+            <Folder className="w-5 h-5 text-yellow-400 flex-shrink-0" />
+            <span className="text-white truncate">{item.name}</span>
+            <ChevronRight className="w-4 h-4 text-gray-500 ml-auto flex-shrink-0" />
+          </button>
+        ))}
+      </div>
+    )
+  })()
+
   return (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
@@ -140,43 +193,7 @@ export default function FolderBrowser({ isOpen, initialPath, onSelect, onCancel 
 
         {/* Directory Listing */}
         <div className="flex-1 overflow-y-auto min-h-[300px]">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 text-primary-400 animate-spin" />
-              <span className="ml-2 text-gray-400">Loading...</span>
-            </div>
-          ) : isError ? (
-            <div className="p-4 text-center text-red-400">
-              <p>Error loading directory</p>
-              <p className="text-sm mt-1">{(error as any)?.response?.data?.detail || 'Path not accessible'}</p>
-              <button
-                onClick={() => refetch()}
-                className="mt-2 text-primary-400 hover:text-primary-300"
-              >
-                Try again
-              </button>
-            </div>
-          ) : data?.items.length === 0 ? (
-            <div className="p-4 text-center text-gray-400">
-              <Folder className="w-12 h-12 mx-auto mb-2 opacity-50" />
-              <p>No subfolders found</p>
-              <p className="text-sm mt-1">You can select this folder or go back</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-700">
-              {data?.items.map((item) => (
-                <button
-                  key={item.path}
-                  onClick={() => handleNavigate(item.path)}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50 transition-colors text-left"
-                >
-                  <Folder className="w-5 h-5 text-yellow-400 flex-shrink-0" />
-                  <span className="text-white truncate">{item.name}</span>
-                  <ChevronRight className="w-4 h-4 text-gray-500 ml-auto flex-shrink-0" />
-                </button>
-              ))}
-            </div>
-          )}
+          {directoryContent}
         </div>
 
         {/* Footer */}

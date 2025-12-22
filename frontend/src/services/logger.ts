@@ -293,25 +293,26 @@ export function logError(error: string, component?: string, metadata?: Record<st
   
   // If metadata contains an error object, extract useful information
   if (metadata?.error) {
-    const err = metadata.error as any
+    const err: unknown = metadata.error
     if (err instanceof Error) {
       enhancedMetadata.errorName = err.name
       enhancedMetadata.errorMessage = err.message
       enhancedMetadata.stack = err.stack
-    } else if (typeof err === 'object') {
+    } else if (err && typeof err === 'object') {
       // Handle axios or API errors
-      if (err.response) {
-        enhancedMetadata.statusCode = err.response.status
-        enhancedMetadata.statusText = err.response.statusText
-        enhancedMetadata.responseData = err.response.data
-        enhancedMetadata.url = err.config?.url
-        enhancedMetadata.method = err.config?.method
+      const eobj = err as { response?: { status?: number; statusText?: string; data?: unknown }; config?: { url?: string; method?: string }; stack?: string }
+      if (eobj.response) {
+        enhancedMetadata.statusCode = eobj.response.status
+        enhancedMetadata.statusText = eobj.response.statusText
+        enhancedMetadata.responseData = eobj.response.data
+        enhancedMetadata.url = eobj.config?.url
+        enhancedMetadata.method = eobj.config?.method
       }
-      if (err.stack) {
-        enhancedMetadata.stack = err.stack
+      if (eobj.stack) {
+        enhancedMetadata.stack = eobj.stack
       }
       // Capture any other error properties
-      enhancedMetadata.errorDetails = JSON.stringify(err, null, 2).substring(0, 1000)
+      enhancedMetadata.errorDetails = JSON.stringify(eobj, null, 2).substring(0, 1000)
     }
   }
   
@@ -319,8 +320,8 @@ export function logError(error: string, component?: string, metadata?: Record<st
   if (!enhancedMetadata.stack) {
     try {
       throw new Error('Stack trace')
-    } catch (e: any) {
-      enhancedMetadata.stack = e.stack
+    } catch (e: unknown) {
+      if (e && typeof e === 'object') enhancedMetadata.stack = (e as { stack?: string }).stack
     }
   }
   

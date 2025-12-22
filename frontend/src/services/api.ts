@@ -330,9 +330,9 @@ export const tvShowsApi = {
     api.get<Episode[]>(`/tvshows/${showId}/episodes`, { params: { season } }),
   getSeasons: (showId: number) => api.get<Season[]>(`/tvshows/${showId}/seasons`),
   updateTVShow: (id: number, data: Partial<TVShow>) => api.patch<TVShow>(`/tvshows/${id}`, data),
-  scrapeTVShow: (id: number, bodyOrProvider?: any, provider?: 'tmdb' | 'omdb') => {
-    let body = null
-    let params: any = {}
+  scrapeTVShow: (id: number, bodyOrProvider?: unknown, provider?: 'tmdb' | 'omdb') => {
+    let body: unknown = null
+    let params: Record<string, unknown> = {}
     // Backwards compatibility: if second arg is a string provider, treat it as provider
     if (typeof bodyOrProvider === 'string') {
       params = { provider: bodyOrProvider }
@@ -441,7 +441,7 @@ export const settingsApi = {
 
 // Queues API
 export const queuesApi = {
-  listTasks: () => api.get<any[]>('/queues/tasks'),
+  listTasks: () => api.get<unknown[]>('/queues/tasks'),
   getTask: (id: number) => api.get(`/queues/tasks/${id}`),
   cancelTask: (id: number) => api.post(`/queues/tasks/${id}/cancel`),
 }
@@ -489,8 +489,8 @@ export const tautulliApi = {
 // Plex API
 export const plexApi = {
   getRatingKeyByImdb: (imdb_id: string) => api.get<{ rating_key: number | null }>(`/integrations/plex/rating-key`, { params: { imdb_id } }),
-  rawSearch: (query: string) => api.get<{ results: any[] }>(`/integrations/plex/raw-search`, { params: { query } }),
-  getMetadata: (rating_key: number) => api.get<{ metadata: any }>(`/integrations/plex/metadata`, { params: { rating_key } }),
+  rawSearch: (query: string) => api.get<{ results: unknown[] }>(`/integrations/plex/raw-search`, { params: { query } }),
+  getMetadata: (rating_key: number) => api.get<{ metadata: unknown }>(`/integrations/plex/metadata`, { params: { rating_key } }),
 }
 
 export default api

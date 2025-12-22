@@ -50,7 +50,7 @@ interface MuxConfirmDialogProps {
   onConfirm: () => void
   isLoading: boolean
   type: 'movie' | 'tvshow'
-  preview: MovieMuxPreview | TVShowMuxPreview | null
+  preview: unknown | null
   error?: string | null
   progress?: { current: number; total: number } | null
 }
@@ -73,15 +73,20 @@ export default function MuxConfirmDialog({
   error,
   progress
 }: MuxConfirmDialogProps) {
+  // `_type` is declared by parent but not used in this component; reference it to satisfy linter
+  void _type;
   if (!isOpen) return null
 
-  const isMoviePreview = (p: MovieMuxPreview | TVShowMuxPreview): p is MovieMuxPreview => {
-    return 'movie_id' in p
+  const isMoviePreview = (p: unknown): p is MovieMuxPreview => {
+    return typeof p === 'object' && p !== null && 'movie_id' in (p as Record<string, unknown>)
   }
 
-  const isTVShowPreview = (p: MovieMuxPreview | TVShowMuxPreview): p is TVShowMuxPreview => {
-    return 'show_id' in p
+  const isTVShowPreview = (p: unknown): p is TVShowMuxPreview => {
+    return typeof p === 'object' && p !== null && 'show_id' in (p as Record<string, unknown>)
   }
+
+  // Some safety helpers to avoid casting to any in JSX
+  const isTvWithMissingFfmpeg = !!preview && isTVShowPreview(preview) && !((preview as TVShowMuxPreview).ffmpeg_available)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -119,134 +124,138 @@ export default function MuxConfirmDialog({
             </div>
           )}
 
-          {preview && isMoviePreview(preview) && (
-            <div className="space-y-4">
-              <div className="bg-gray-700/50 rounded-lg p-4">
-                <h3 className="text-white font-medium mb-3">
-                  {preview.movie_title} {preview.movie_year && `(${preview.movie_year})`}
-                </h3>
-                
-                <div className="space-y-3">
-                  {/* Video file */}
-                  <div className="flex items-center gap-3">
-                    <FileVideo className="w-5 h-5 text-blue-400" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-gray-300 text-sm truncate">{preview.video_file}</p>
-                      <p className="text-gray-500 text-xs">{formatFileSize(preview.video_size)}</p>
+          {(() => {
+            if (isMoviePreview(preview)) {
+              const p = preview
+              return (
+                <div className="space-y-4">
+                  <div className="bg-gray-700/50 rounded-lg p-4">
+                    <h3 className="text-white font-medium mb-3">
+                      {p.movie_title} {p.movie_year && `(${p.movie_year})`}
+                    </h3>
+                    
+                    <div className="space-y-3">
+                      {/* Video file */}
+                      <div className="flex items-center gap-3">
+                        <FileVideo className="w-5 h-5 text-blue-400" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-gray-300 text-sm truncate">{p.video_file}</p>
+                          <p className="text-gray-500 text-xs">{formatFileSize(p.video_size)}</p>
+                        </div>
+                      </div>
+                      
+                      {/* Plus sign */}
+                      <div className="flex items-center gap-3">
+                        <span className="w-5 text-center text-gray-500">+</span>
+                      </div>
+                      
+                      {/* Subtitle file */}
+                      <div className="flex items-center gap-3">
+                        <FileText className="w-5 h-5 text-yellow-400" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-gray-300 text-sm truncate">{p.subtitle_file}</p>
+                          <p className="text-gray-500 text-xs">
+                            {formatFileSize(p.subtitle_size)}
+                            {p.detected_language && ` • Language: ${p.detected_language.toUpperCase()}`}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Arrow */}
+                      <div className="flex items-center gap-3">
+                        <ArrowRight className="w-5 h-5 text-gray-500" />
+                      </div>
+                      
+                      {/* Output file */}
+                      <div className="flex items-center gap-3">
+                        <FileVideo className="w-5 h-5 text-green-400" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-gray-300 text-sm truncate">{p.output_file}</p>
+                          <p className="text-gray-500 text-xs">MKV container with embedded subtitle</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  
-                  {/* Plus sign */}
-                  <div className="flex items-center gap-3">
-                    <span className="w-5 text-center text-gray-500">+</span>
+
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                    <p className="text-yellow-300 text-sm">
+                      <strong>Warning:</strong> The original video and subtitle files will be deleted after successful embedding.
+                    </p>
                   </div>
-                  
-                  {/* Subtitle file */}
-                  <div className="flex items-center gap-3">
-                    <FileText className="w-5 h-5 text-yellow-400" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-gray-300 text-sm truncate">{preview.subtitle_file}</p>
-                      <p className="text-gray-500 text-xs">
-                        {formatFileSize(preview.subtitle_size)}
-                        {preview.detected_language && ` • Language: ${preview.detected_language.toUpperCase()}`}
-                      </p>
+                </div>
+              )
+            }
+            return null
+          })()}
+
+          {(() => {
+            if (isTVShowPreview(preview)) {
+              const p = preview as TVShowMuxPreview
+              return (
+                <div className="space-y-4">
+                  <div className="bg-gray-700/50 rounded-lg p-4">
+                    <h3 className="text-white font-medium mb-2">{p.show_title}</h3>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-400">Episodes with subtitles:</span>
+                        <span className="text-white ml-2">{p.total_episodes_with_subtitles}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">Ready to mux:</span>
+                        <span className="text-green-400 ml-2">{p.valid_for_muxing}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">Total video size:</span>
+                        <span className="text-white ml-2">{formatFileSize(p.total_video_size)}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">Total subtitle size:</span>
+                        <span className="text-white ml-2">{formatFileSize(p.total_subtitle_size)}</span>
+                      </div>
                     </div>
                   </div>
-                  
-                  {/* Arrow */}
-                  <div className="flex items-center gap-3">
-                    <ArrowRight className="w-5 h-5 text-gray-500" />
-                  </div>
-                  
-                  {/* Output file */}
-                  <div className="flex items-center gap-3">
-                    <FileVideo className="w-5 h-5 text-green-400" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-gray-300 text-sm truncate">{preview.output_file}</p>
-                      <p className="text-gray-500 text-xs">MKV container with embedded subtitle</p>
+
+                  {/* Episode list */}
+                  <div className="bg-gray-700/50 rounded-lg overflow-hidden">
+                    <div className="p-3 border-b border-gray-600">
+                      <h4 className="text-white text-sm font-medium">Episodes to process</h4>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      {p.episodes.map((ep) => (
+                        <div
+                          key={ep.episode_id}
+                          className={`flex items-center gap-3 px-3 py-2 border-b border-gray-600/50 last:border-0 ${
+                            ep.can_mux ? 'bg-gray-700/30' : 'bg-red-500/10'
+                          }`}
+                        >
+                          <span className="text-gray-400 text-sm w-16">
+                            S{ep.season_number.toString().padStart(2, '0')}E{ep.episode_number.toString().padStart(2, '0')}
+                          </span>
+                          <span className="flex-1 text-white text-sm truncate">
+                            {ep.episode_title || `Episode ${ep.episode_number}`}
+                          </span>
+                          {ep.can_mux ? (
+                            <CheckCircle className="w-4 h-4 text-green-400" />
+                          ) : (
+                            <span title="Files missing">
+                              <AlertTriangle className="w-4 h-4 text-red-400" />
+                            </span>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
-              </div>
 
-              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
-                <p className="text-yellow-300 text-sm">
-                  <strong>Warning:</strong> The original video and subtitle files will be deleted after successful embedding.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {preview && isTVShowPreview(preview) && (
-            <div className="space-y-4">
-              <div className="bg-gray-700/50 rounded-lg p-4">
-                <h3 className="text-white font-medium mb-2">{preview.show_title}</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-400">Episodes with subtitles:</span>
-                    <span className="text-white ml-2">{preview.total_episodes_with_subtitles}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Ready to mux:</span>
-                    <span className="text-green-400 ml-2">{preview.valid_for_muxing}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Total video size:</span>
-                    <span className="text-white ml-2">{formatFileSize(preview.total_video_size)}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Total subtitle size:</span>
-                    <span className="text-white ml-2">{formatFileSize(preview.total_subtitle_size)}</span>
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                    <p className="text-yellow-300 text-sm">
+                      <strong>Warning:</strong> Original video and subtitle files will be deleted after successful embedding for each episode.
+                    </p>
                   </div>
                 </div>
-              </div>
-
-              {/* Episode list */}
-              <div className="bg-gray-700/50 rounded-lg overflow-hidden">
-                <div className="p-3 border-b border-gray-600">
-                  <h4 className="text-white text-sm font-medium">Episodes to process</h4>
-                </div>
-                <div className="max-h-48 overflow-y-auto">
-                  {preview.episodes.map((ep) => (
-                    <div
-                      key={ep.episode_id}
-                      className={`flex items-center gap-3 px-3 py-2 border-b border-gray-600/50 last:border-0 ${
-                        ep.can_mux ? 'bg-gray-700/30' : 'bg-red-500/10'
-                      }`}
-                    >
-                      <span className="text-gray-400 text-sm w-16">
-                        S{ep.season_number.toString().padStart(2, '0')}E{ep.episode_number.toString().padStart(2, '0')}
-                      </span>
-                      <span className="flex-1 text-white text-sm truncate">
-                        {ep.episode_title || `Episode ${ep.episode_number}`}
-                      </span>
-                      {ep.can_mux ? (
-                        <CheckCircle className="w-4 h-4 text-green-400" />
-                      ) : (
-                        <span title="Files missing">
-                          <AlertTriangle className="w-4 h-4 text-red-400" />
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
-                <p className="text-yellow-300 text-sm">
-                  <strong>Warning:</strong> Original video and subtitle files will be deleted after successful embedding for each episode.
-                </p>
-              </div>
-
-              {!preview.ffmpeg_available && (
-                <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3">
-                  <p className="text-red-300 text-sm">
-                    <strong>Error:</strong> FFmpeg is not installed on the server. Please install FFmpeg to use this feature.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
+              )
+            }
+            return null
+          })()}
         </div>
 
         {/* Footer */}
@@ -271,7 +280,7 @@ export default function MuxConfirmDialog({
             </button>
             <button
               onClick={onConfirm}
-              disabled={isLoading || !preview || (isTVShowPreview(preview as any) && !(preview as TVShowMuxPreview).ffmpeg_available)}
+              disabled={isLoading || !preview || isTvWithMissingFfmpeg}
               className="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
             >
               {isLoading ? (

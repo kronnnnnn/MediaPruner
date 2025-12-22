@@ -1,4 +1,3 @@
-import asyncio
 import pytest
 from app.services.queue import create_task, QueueWorker
 from app.models import Movie
@@ -33,7 +32,7 @@ async def test_refresh_metadata_includes_ratings(temp_db, monkeypatch):
     monkeypatch.setattr('app.services.omdb.fetch_omdb_ratings', fake_fetch_omdb)
 
     # Enqueue refresh_metadata with include_ratings
-    task = await create_task('refresh_metadata', items=[{'movie_id': movie_id}], meta={'trigger': 'test', 'include_ratings': True})
+    await create_task('refresh_metadata', items=[{'movie_id': movie_id}], meta={'trigger': 'test', 'include_ratings': True})
 
     # Run worker loop to process the task
     worker = QueueWorker()
