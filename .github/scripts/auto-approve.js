@@ -120,6 +120,7 @@
         const appOct = new Octokit({ auth: appAuthentication.token });
         const installationResp = await appOct.rest.apps.getRepoInstallation({ owner, repo });
         console.log('Installation permissions:', JSON.stringify(installationResp.data.permissions || {}));
+        console.log('Installation repository_selection:', installationResp.data.repository_selection || 'unknown');
         const installationId = installationResp.data.id;
         const installationAuthentication = await appAuth({ type: 'installation', installationId });
         oct = new Octokit({ auth: installationAuthentication.token });
