@@ -99,6 +99,14 @@
         } catch (e) {
           console.log('Failed to create PR comment about auto-approve check:', e.message || e);
         }
+      } else {
+        // If we couldn't create a check/status, notify repo admins of required app permissions
+        try {
+          const body = 'Automated approval could not create the repository check/status required for auto-merging.\n\nTo enable this: either grant the GitHub App `Checks` (write) or `Commit statuses` permission and reinstall it, or add a machine PAT as the `AUTO_APPROVE_PAT` repo secret.';
+          await githubOct.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
+        } catch (e) {
+          console.log('Failed to create PR comment about missing permissions:', e.message || e);
+        }
       }
 
 
