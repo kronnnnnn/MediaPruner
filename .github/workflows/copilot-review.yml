@@ -69,6 +69,7 @@ jobs:
           pip install pytest pytest-asyncio
 
       - name: Run backend tests
+        working-directory: ./backend
         run: |
           pytest -q
 
