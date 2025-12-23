@@ -63,9 +63,13 @@ Thank you for your interest in contributing to MediaPruner! This document provid
 
 ## Pull Request Process
 
-1. Create a feature branch from `main`:
+**Required workflow: Target `develop` first, then `main`** ⚠️
+
+We use a develop-first workflow for all changes. Create feature branches from `develop`, open a Pull Request targeting `develop`, and address review/CI there. A follow-up PR from `develop` → `main` will be created by maintainers after checks and any release gating are satisfied. Do not open PRs directly to `main` unless explicitly instructed by maintainers.
+
+1. Create a feature branch from `develop`:
    ```bash
-   git checkout -b feature/your-feature-name
+   git checkout -b feature/your-feature-name develop
    ```
 
 2. Make your changes and commit with clear messages:
@@ -74,11 +78,13 @@ Thank you for your interest in contributing to MediaPruner! This document provid
    git commit -m "fix: resolve issue with..."
    ```
 
-3. Push to your fork and create a Pull Request
+3. Push to your fork and create a Pull Request targeting `develop`
 
-4. Ensure CI checks pass
+4. Ensure CI checks pass on `develop`
 
 5. Wait for review and address any feedback
+
+> Note: Maintainers will merge `develop` into `main` via a separate PR once `develop` is stable and CI checks are green. This ensures nothing lands in `main` directly without passing through `develop`.
 
 ## Commit Message Convention
 
