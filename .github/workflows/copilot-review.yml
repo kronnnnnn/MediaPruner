@@ -121,7 +121,7 @@ jobs:
             }
 
             if (!prs.length) {
-                core.info('No associated pull requests found.');
+                console.log('No associated pull requests found.');
             }
 
             for (const pr of prs) {
@@ -137,7 +137,7 @@ jobs:
 
               // Skip drafts
               if (prDetails.draft) {
-                core.info(`PR #${prNumber} is a draft; skipping label.`);
+                console.log(`PR #${prNumber} is a draft; skipping label.`);
                 continue;
               }
 
@@ -150,7 +150,7 @@ jobs:
               const labels = labelsResp.data.map(l => l.name);
 
               if (labels.includes('copilot-approved')) {
-                core.info(`PR #${prNumber} already labeled copilot-approved.`);
+                console.log(`PR #${prNumber} already labeled copilot-approved.`);
                 continue;
               }
 
@@ -170,5 +170,5 @@ jobs:
                 body: commentBody,
               });
 
-              core.info(`Labeled PR #${prNumber} as copilot-approved`);
+              console.log(`Labeled PR #${prNumber} as copilot-approved`);
             }
