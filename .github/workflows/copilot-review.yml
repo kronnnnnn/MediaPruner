@@ -26,7 +26,7 @@ jobs:
     # Run when CI workflow_run completed successfully for a PR,
     # or when manually dispatched
     if: >-
-      ${{ (github.event_name == 'workflow_run' &&
+      ${{ (github.event_name == 'workflow_run' && github.event.workflow_run != null &&
           github.event.workflow_run.conclusion == 'success' &&
           github.event.workflow_run.event == 'pull_request') ||
           github.event_name == 'workflow_dispatch' }}
@@ -34,7 +34,7 @@ jobs:
     steps:
       - name: Checkout PR head (from workflow_run)
         if: >-
-          ${{ github.event_name == 'workflow_run' &&
+          ${{ github.event_name == 'workflow_run' && github.event.workflow_run != null &&
               github.event.workflow_run.pull_requests &&
               github.event.workflow_run.pull_requests[0] }}
         uses: actions/checkout@v4
@@ -93,7 +93,6 @@ jobs:
           # ensure test runner is available
           pip install pytest pytest-asyncio
 
-<<<<<<< HEAD
       - name: Test Python imports
         run: |
           cd backend
@@ -122,7 +121,7 @@ jobs:
             }
 
             if (!prs.length) {
-                core.info('No associated pull requests found.');
+                console.log('No associated pull requests found.');
             }
 
             for (const pr of prs) {
@@ -138,7 +137,7 @@ jobs:
 
               // Skip drafts
               if (prDetails.draft) {
-                core.info(`PR #${prNumber} is a draft; skipping label.`);
+                console.log(`PR #${prNumber} is a draft; skipping label.`);
                 continue;
               }
 
@@ -151,7 +150,7 @@ jobs:
               const labels = labelsResp.data.map(l => l.name);
 
               if (labels.includes('copilot-approved')) {
-                core.info(`PR #${prNumber} already labeled copilot-approved.`);
+                console.log(`PR #${prNumber} already labeled copilot-approved.`);
                 continue;
               }
 
@@ -171,5 +170,5 @@ jobs:
                 body: commentBody,
               });
 
-              core.info(`Labeled PR #${prNumber} as copilot-approved`);
+              console.log(`Labeled PR #${prNumber} as copilot-approved`);
             }
