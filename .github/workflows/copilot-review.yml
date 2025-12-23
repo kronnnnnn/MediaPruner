@@ -54,6 +54,15 @@ jobs:
           ref: >-
             refs/pull/${{ github.event.inputs.pull_number }}/head
 
+      - name: Checkout repository (manual branch dispatch)
+        if: >-
+          ${{ github.event_name == 'workflow_dispatch' &&
+              (!github.event.inputs || github.event.inputs.pull_number == '') }}
+        uses: actions/checkout@v4
+        with:
+          # Checkout the invoked workflow ref (branch or commit)
+          ref: ${{ github.ref }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
