@@ -87,10 +87,7 @@ jobs:
       - name: Test Python imports
         run: |
           cd backend
-          PYTHONPATH=. python - <<'PY'
-          from app.main import app
-          print('Backend imports OK')
-          PY
+          PYTHONPATH=. python -c "from app.main import app; print('OK')"
 
       - name: Run backend tests
         working-directory: ./backend
