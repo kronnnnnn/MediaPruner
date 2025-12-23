@@ -93,6 +93,7 @@ jobs:
           # ensure test runner is available
           pip install pytest pytest-asyncio
 
+<<<<<<< HEAD
       - name: Test Python imports
         run: |
           cd backend
