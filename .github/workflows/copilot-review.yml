@@ -71,7 +71,7 @@ jobs:
       - name: Run backend tests
         working-directory: ./backend
         run: |
-          pytest -q
+          PYTHONPATH=. pytest -q
 
       - name: Add Copilot approval label if CI and additional checks passed
         uses: actions/github-script@v7
