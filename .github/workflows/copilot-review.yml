@@ -26,7 +26,7 @@ jobs:
     # Run when CI workflow_run completed successfully for a PR,
     # or when manually dispatched
     if: >-
-      ${{ (github.event_name == 'workflow_run' &&
+      ${{ (github.event_name == 'workflow_run' && github.event.workflow_run != null &&
           github.event.workflow_run.conclusion == 'success' &&
           github.event.workflow_run.event == 'pull_request') ||
           github.event_name == 'workflow_dispatch' }}
@@ -34,7 +34,7 @@ jobs:
     steps:
       - name: Checkout PR head (from workflow_run)
         if: >-
-          ${{ github.event_name == 'workflow_run' &&
+          ${{ github.event_name == 'workflow_run' && github.event.workflow_run != null &&
               github.event.workflow_run.pull_requests &&
               github.event.workflow_run.pull_requests[0] }}
         uses: actions/checkout@v4
@@ -93,7 +93,6 @@ jobs:
           # ensure test runner is available
           pip install pytest pytest-asyncio
 
-<<<<<<< HEAD
       - name: Test Python imports
         run: |
           cd backend
