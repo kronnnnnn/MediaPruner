@@ -68,17 +68,10 @@ jobs:
           # ensure test runner is available for this label workflow
           pip install pytest pytest-asyncio
 
-      - name: Debug Python import environment
-        working-directory: ./backend
+      - name: Test Python imports
         run: |
-          echo "CWD: $(pwd)"
-          echo "PYTHONPATH='$PYTHONPATH'"
-          python - <<'PY'
-import sys, os, importlib
-print('sys.path:', sys.path)
-print('cwd listing:', os.listdir('.'))
-print('app spec:', importlib.util.find_spec('app'))
-PY
+          cd backend
+          PYTHONPATH=. python -c "from app.main import app; print('Backend imports OK')"
 
       - name: Run backend tests
         working-directory: ./backend
