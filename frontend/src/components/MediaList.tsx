@@ -68,7 +68,7 @@ export default function MediaList({
   onSelectionChange,
   editMode = false,
 }: MediaListProps) {
-  // prevent lint 'defined but never used' for optional callback
+  // prevent lint 'defined but never used' for optional callbacks
   void _onColumnsChange;
   void onSelectionChange;
   
