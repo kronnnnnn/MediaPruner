@@ -1,7 +1,6 @@
----
 name: Copilot Review (label) on CI success
 
-'on':
+on:
   workflow_run:
     workflows:
       - CI
@@ -42,9 +41,9 @@ jobs:
           script: |
             const run = context.payload.workflow_run || {};
             const prs = run.pull_requests || [];
-            if (!prs.length) return {};
-            const pr = prs[0];
-            return { number: pr.number, head_sha: pr.head.sha };
+            const [pr] = prs;
+            if (!pr) return {};
+            return { number: pr.number, head_sha: pr.head ? pr.head.sha : null };
 
       - name: Checkout PR head (from workflow_run)
         if: >-
