@@ -22,7 +22,7 @@ permissions:
 jobs:
   approve:
     # Run when CI workflow_run completed successfully for a PR, or when the copilot label is added to a PR, or when manually dispatched
-    if: ${{ (github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.event == 'pull_request' || (github.event.workflow_run.pull_requests && github.event.workflow_run.pull_requests.length > 0))) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label && github.event.label.name == 'copilot-approved') || github.event_name == 'workflow_dispatch' }}
+    if: (github.event.workflow_run && github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.event == 'pull_request' || (github.event.workflow_run.pull_requests && toJson(github.event.workflow_run.pull_requests) != '[]'))) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label && github.event.label.name == 'copilot-approved') || (github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - name: Setup Node
@@ -55,7 +55,6 @@ jobs:
 
       - name: Approve PRs after successful CI and Copilot label
         env:
-          AUTO_APPROVE_PAT: ${{ secrets.AUTO_APPROVE_PAT }}
           AUTO_APPROVE_APP_ID: ${{ secrets.AUTO_APPROVE_APP_ID }}
           AUTO_APPROVE_APP_PRIVATE_KEY: ${{ secrets.AUTO_APPROVE_APP_PRIVATE_KEY }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
