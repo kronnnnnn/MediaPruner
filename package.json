@@ -17,10 +17,11 @@
     "start": "npm run dev"
   },
   "devDependencies": {
+    "actionlint": "^2.0.6",
     "concurrently": "^8.2.2",
-    "wait-on": "^7.0.1",
     "rimraf": "^5.0.5",
-    "shx": "^0.3.4"
+    "shx": "^0.3.4",
+    "wait-on": "^7.0.1"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -157,14 +157,19 @@ async def api_queues_stream(request: Request):
     return StreamingResponse(event_generator(), media_type='text/event-stream')
 
 @router.post("/tasks/clear")
-async def api_clear_tasks(older_than_seconds: int | None = None):
+async def api_clear_tasks(scope: str | None = None, older_than_seconds: int | None = None):
     """Clear queued/running tasks (DEBUG only).
 
     Marks matching tasks as DELETED and queued/running items as CANCELED. Only enabled when app is running in debug mode.
+    scope: 'current'|'history'|'all' (default 'current' if not provided)
     """
     if not settings.debug:
         raise HTTPException(status_code=403, detail="Clearing tasks is only allowed in debug mode")
-    res = await clear_queued_tasks(older_than_seconds)
+    # Validate and forward scope to service; default to 'current' if not provided to preserve existing behavior
+    try:
+        res = await clear_queued_tasks(scope=(scope or 'current'), older_than_seconds=older_than_seconds)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return res
 
 

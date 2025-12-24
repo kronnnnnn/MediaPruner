@@ -1,0 +1,13 @@
+﻿{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": ["mediapruner/auto-approve"]
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": null,
+  "restrictions": null,
+  "required_linear_history": { "enabled": false },
+  "required_conversation_resolution": { "enabled": true },
+  "allow_force_pushes": { "enabled": false },
+  "allow_deletions": { "enabled": false }
+}

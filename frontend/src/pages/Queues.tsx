@@ -292,15 +292,15 @@ export default function Queues() {
 
   async function doClearQueues() {
     setIsClearing(true)
-    const scope = activeTab === 'history' ? 'history' : 'current'
     try {
-      const res = await fetch(`/api/queues/tasks/clear?scope=${scope}`, { method: 'POST' })
+      // Always clear ALL tasks regardless of active tab or item status
+      const res = await fetch(`/api/queues/tasks/clear?scope=all`, { method: 'POST' })
       if (!res.ok) {
         const text = await res.text()
         import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Clear failed', message: text || res.statusText, type: 'error' })).catch(() => null)
       } else {
         const data = await res.json().catch(() => null)
-        import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Cleared', message: data ? `${data.tasks_cleared} tasks cleared` : 'Cleared queued tasks', type: 'success' })).catch(() => null)
+        import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Cleared', message: data ? `${data.tasks_cleared} tasks cleared` : 'Cleared all tasks', type: 'success' })).catch(() => null)
         await refresh()
       }
     } catch (e) {
@@ -311,10 +311,12 @@ export default function Queues() {
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold">Queues</h1>
+        <h1 className="text-xl font-semibold flex items-center gap-3">
+          <span>Queues</span>
+          <span className={`text-sm ${connected ? 'text-green-600' : 'text-red-500'}`}>Status: {connected ? 'Connected' : 'Disconnected'}</span>
+        </h1>
         <div className="flex items-center gap-4">
-          <button onClick={doClearQueues} disabled={isClearing} className="px-3 py-1 text-sm rounded border border-red-700 text-red-300 hover:bg-red-700/10">{isClearing ? 'Clearing…' : 'Clear all queues'}</button>
-          <div className={`text-sm ${connected ? 'text-green-600' : 'text-red-500'}`}>{connected ? 'Connected' : 'Disconnected'}</div>
+          <button onClick={doClearQueues} disabled={isClearing} className="px-3 py-1 text-sm rounded border border-red-700 text-red-300 hover:bg-red-700/10">{isClearing ? 'Clearing…' : 'Clear all'}</button>
         </div>
       </div>
 
