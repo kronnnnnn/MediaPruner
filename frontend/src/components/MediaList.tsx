@@ -52,9 +52,9 @@ interface MediaListProps {
   editMode?: boolean
 }
 
-export default function MediaList({ 
-  movies, 
-  onItemClick, 
+export default function MediaList({
+  movies,
+  onItemClick,
   isLoading,
   sortBy,
   sortOrder,
@@ -66,6 +66,7 @@ export default function MediaList({
   editMode = false,
 }: MediaListProps) {
   // prevent lint 'defined but never used' for optional callbacks
+  // NOTE: keep these voids to avoid 'defined but never used' lints when edit mode is off
   void _onColumnsChange;
   void onSelectionChange;
   
