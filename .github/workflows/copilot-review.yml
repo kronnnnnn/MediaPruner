@@ -98,6 +98,7 @@ jobs:
           cd backend
           PYTHONPATH=. python -c "from app.main import app; print('OK')"
 
+
       - name: Run backend tests
         working-directory: ./backend
         run: |
