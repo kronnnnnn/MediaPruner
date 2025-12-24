@@ -6,17 +6,42 @@
 
     let prs = [];
     const run = payload.workflow_run || {};
+    console.log('DEBUG run.event', run.event || null, 'run.pull_requests length', run.pull_requests ? run.pull_requests.length : 0);
     if (run.pull_requests && run.pull_requests.length) {
       prs = run.pull_requests;
-    } else if (payload.action === 'labeled' && payload.label && payload.label.name === 'copilot-approved') {
-      prs = [{ number: payload.pull_request.number }];
     } else if (payload.inputs && payload.inputs.pull_number) {
       prs = [{ number: parseInt(payload.inputs.pull_number, 10) }];
+    } else if (payload.action === 'labeled' && payload.label && payload.label.name === 'copilot-approved') {
+      prs = [{ number: payload.pull_request.number }];
     }
 
     if (!prs.length) {
       console.log('No associated pull requests found for approval run.');
-      process.exit(0);
+      // Fallback: try to find open PRs that match the workflow_run head sha or branch
+      if (run && run.head_sha) {
+        console.log('Attempt fallback lookup for head_sha:', run.head_sha);
+        try {
+          const octFallback = new (require('@octokit/rest').Octokit)({ auth: process.env.GITHUB_TOKEN });
+          const pullsResp = await octFallback.rest.pulls.list({ owner, repo, state: 'open', per_page: 100 });
+          const matches = pullsResp.data.filter(p => p.head && (p.head.sha === run.head_sha || p.head.ref === run.head_branch));
+          if (matches && matches.length) {
+            prs = matches.map(p => ({ number: p.number }));
+            console.log('Found open PRs matching head_sha/head_branch:', prs.map(p => p.number));
+          } else {
+            console.log('No open PRs matched head_sha/head_branch.');
+          }
+        } catch (e) {
+          console.log('Fallback PR lookup failed:', e.message || e);
+        }
+      }
+
+      if (!prs.length) {
+        // Dump more debugging info to help diagnose pipeline-trigger scenarios
+        console.log('Payload event name:', payload.event_name || payload.action || process.env.GITHUB_EVENT_NAME || null);
+        console.log('workflow_run present:', !!payload.workflow_run);
+        console.log('workflow_run.pull_requests:', (payload.workflow_run && payload.workflow_run.pull_requests) ? JSON.stringify((payload.workflow_run.pull_requests || []).map(p => ({ number: p.number, head: p.head && p.head.sha }))) : null);
+        process.exit(0);
+      }
     }
 
     const { Octokit } = await import('@octokit/rest');
