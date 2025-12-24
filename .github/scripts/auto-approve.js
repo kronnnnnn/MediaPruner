@@ -110,7 +110,12 @@
             return { created: true, method: 'status' };
           } catch (e2) {
             console.error('Fallback commit status creation failed:', { message: e2.message || e2, status: e2.status || null, data: (e2.response && e2.response.data) ? e2.response.data : null });
-            return { created: false, method: 'none' };
+            // return error details to help diagnose permission/API issues
+            const errorInfo = {
+              createCheckError: { message: err.message || err, status: err.status || null, data: (err.response && err.response.data) ? err.response.data : null },
+              createStatusError: { message: e2.message || e2, status: e2.status || null, data: (e2.response && e2.response.data) ? e2.response.data : null }
+            };
+            return { created: false, method: 'none', error: errorInfo };
           }
         }
       }
@@ -157,9 +162,15 @@
           console.log('Failed to create PR comment about auto-approve check:', e.message || e);
         }
       } else {
-        // If we couldn't create a check/status, notify repo admins of required app permissions
+        // If we couldn't create a check/status, notify repo admins of required app permissions and include API errors
         try {
-          const body = 'Automated approval could not create the repository check/status required for auto-merging.\n\nTo enable this: either grant the GitHub App `Checks` (write) or `Commit statuses` permission and reinstall it, or add a machine PAT as the `AUTO_APPROVE_PAT` repo secret.';
+          let body = 'Automated approval could not create the repository check/status required for auto-merging.\n\n';
+          if (checkResult.error) {
+            body += 'Error details:\n';
+            body += '* createCheck error: `' + JSON.stringify(checkResult.error.createCheckError) + '`\n';
+            body += '* createStatus error: `' + JSON.stringify(checkResult.error.createStatusError) + '`\n\n';
+          }
+          body += 'To enable this: either grant the GitHub App `Checks` (write) or `Commit statuses` permission and reinstall it, or add a machine PAT as the `AUTO_APPROVE_PAT` repo secret.';
           await githubOct.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
         } catch (e) {
           console.log('Failed to create PR comment about missing permissions:', e.message || e);
