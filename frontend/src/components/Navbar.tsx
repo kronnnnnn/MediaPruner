@@ -13,6 +13,17 @@ export default function Navbar() {
   const dropdownRef = useRef<HTMLDivElement | null>(null)
   const navigate = useNavigate()
 
+  // Submit global search from navbar by pressing Enter (navigates to Movies page with search param)
+  const handleNavbarSearchKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const q = searchQuery.trim()
+      if (q.length > 0) {
+        logger.navigation(`/movies?search=${q}`, 'Navbar Search', 'Navbar')
+        navigate(`/movies?search=${encodeURIComponent(q)}`)
+      }
+    }
+  }
+
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (!dropdownRef.current) return
@@ -40,6 +51,7 @@ export default function Navbar() {
               type="text"
               placeholder="Search movies, TV shows..."
               value={searchQuery}
+              onKeyDown={handleNavbarSearchKey}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
             />
