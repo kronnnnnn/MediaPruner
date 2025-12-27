@@ -25,7 +25,7 @@ export default function Sidebar() {
   
   return (
     <aside className={`${isCollapsed ? 'w-16' : 'w-64'} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300`}>
-      <div className="h-12 px-4 border-b border-gray-200 dark:border-gray-700 flex items-center">
+      <div className="py-4 px-4 border-b border-gray-200 dark:border-gray-700 flex items-center">
         <div className="flex items-center gap-3 w-full">
           <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
             <img src="/MediaPruner.png" alt="MediaPruner" className="w-10 h-10 object-contain" />
