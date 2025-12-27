@@ -309,7 +309,7 @@ export default function Queues() {
     setIsClearing(false)
   }
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-6 px-6 py-6">
+    <div className="w-full max-w-full mx-auto space-y-6 px-4 sm:px-6 lg:px-8 py-6">
       <div className="bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-semibold">
