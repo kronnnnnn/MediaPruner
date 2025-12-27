@@ -311,9 +311,8 @@ export default function Queues() {
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold flex items-center gap-3">
-          <span>Queues</span>
-          <span className={`text-sm ${connected ? 'text-green-600' : 'text-red-500'}`}>Status: {connected ? 'Connected' : 'Disconnected'}</span>
+        <h1 className="text-xl font-semibold">
+          <span className={`${connected ? 'text-green-600' : 'text-red-500'}`}>Status: {connected ? 'Connected' : 'Disconnected'}</span>
         </h1>
         <div className="flex items-center gap-4">
           <button onClick={doClearQueues} disabled={isClearing} className="px-3 py-1 text-sm rounded border border-red-700 text-red-300 hover:bg-red-700/10">{isClearing ? 'Clearing…' : 'Clear all'}</button>
