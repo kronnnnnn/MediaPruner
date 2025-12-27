@@ -161,13 +161,13 @@ async def api_clear_tasks(scope: str | None = None, older_than_seconds: int | No
     """Clear queued/running tasks (DEBUG only).
 
     Marks matching tasks as DELETED and queued/running items as CANCELED. Only enabled when app is running in debug mode.
-    scope: 'current'|'history'|'all' (default 'current' if not provided)
+    scope: 'current'|'history'|'all' (default 'all' if not provided)
     """
     if not settings.debug:
         raise HTTPException(status_code=403, detail="Clearing tasks is only allowed in debug mode")
-    # Validate and forward scope to service; default to 'current' if not provided to preserve existing behavior
+    # Validate and forward scope to service; default to 'all' so UI can call without a scope and purge everything
     try:
-        res = await clear_queued_tasks(scope=(scope or 'current'), older_than_seconds=older_than_seconds)
+        res = await clear_queued_tasks(scope=(scope or 'all'), older_than_seconds=older_than_seconds)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return res
