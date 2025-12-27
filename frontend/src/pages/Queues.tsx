@@ -309,7 +309,8 @@ export default function Queues() {
     setIsClearing(false)
   }
   return (
-    <div className="p-6">
+    <div className="w-full max-w-6xl mx-auto space-y-6 px-6 py-6">
+      <div className="bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-semibold">
           <span className="text-primary-500">Status:</span>
@@ -327,11 +328,14 @@ export default function Queues() {
         </nav>
       </div>
 
-      <div className="space-y-3">
-        {(activeTab === 'current' ? currentTasks : historyTasks).map(t => renderTask(t as unknown as Record<string, unknown>))}
-        { (activeTab === 'current' ? currentTasks : historyTasks).length === 0 && (
-          <div className="text-sm text-gray-500">No tasks</div>
-        )}
+      <div className="p-4">
+        <div className="space-y-3">
+          {(activeTab === 'current' ? currentTasks : historyTasks).map(t => renderTask(t as unknown as Record<string, unknown>))}
+          { (activeTab === 'current' ? currentTasks : historyTasks).length === 0 && (
+            <div className="text-sm text-gray-500">No tasks</div>
+          )}
+        </div>
+      </div>
       </div>
 
       {modalMovieId && (
