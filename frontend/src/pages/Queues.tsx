@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueues } from '../contexts/QueueContext'
-import { Check, X, Clock, Play, Trash2, Copy, Film, ChevronRight, ChevronDown } from 'lucide-react' 
+import { Check, X, Clock, Play, Trash2, Copy, Film, Tv, ChevronRight, ChevronDown } from 'lucide-react' 
 import MovieDetail from '../components/MovieDetail'
 export default function Queues() {
   const { tasks, connected, refresh } = useQueues()
@@ -118,6 +118,15 @@ export default function Queues() {
 
   const taskTitle = (t: Record<string, unknown>) => {
     const typeLabel = String(t.type).replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
+    // Prefer explicit show/movie title from meta_preview or meta
+    try {
+      const meta = t.meta as Record<string, unknown> | undefined
+      const preview = t.meta_preview as Record<string, unknown> | undefined
+      if (preview && preview.show_title) return `${typeLabel} (${String(preview.show_title)})`
+      if (meta && meta.show_id && meta.show_title) return `${typeLabel} (${String(meta.show_title)})`
+    } catch (e) {
+      // ignore
+    }
     const path = taskSourceLabel(t)
     return path ? `${typeLabel} (${path})` : typeLabel
   }
@@ -195,6 +204,7 @@ export default function Queues() {
                               </div>
 
                               {(() => {
+                                // Movie item
                                 if (Boolean(movieTitle) || (payloadParsed && (payloadParsed as Record<string, unknown>).movie_id)) {
                                   return (
                                     <div className="mt-2 text-sm text-gray-300 flex items-center gap-2">
@@ -221,6 +231,23 @@ export default function Queues() {
                                     </div>
                                   )
                                 }
+
+                                // TV show / episode item
+                                if (Boolean(it.episode_label) || Boolean(it.show_title) || (payloadParsed && ((payloadParsed as Record<string, unknown>).episode_id || (payloadParsed as Record<string, unknown>).show_id))) {
+                                  const label = String(it.episode_label ?? it.episode_title ?? it.show_title ?? ((payloadParsed as Record<string, unknown>).show_id ? `#${(payloadParsed as Record<string, unknown>).show_id}` : ''))
+                                  const showUrl = it.show_url as string | undefined
+                                  return (
+                                    <div className="mt-2 text-sm text-gray-300 flex items-center gap-2">
+                                      <Tv className="w-4 h-4 text-gray-400" />
+                                      <div>
+                                        <div className="text-sm font-semibold">
+                                          {showUrl ? <Link className="hover:underline text-primary-400" to={showUrl}>{label}</Link> : label}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                }
+
                                 return null
                               })()}
 
