@@ -19,7 +19,7 @@ os.environ.setdefault('MB_DEBUG', 'true')
 async def main():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--scope', choices=['current', 'history', 'all'], default='current')
+    parser.add_argument('--scope', choices=['current', 'history', 'all'], default='all')
     parser.add_argument('--older-than', type=int, default=None, help='Only clear tasks older than this many seconds')
     args = parser.parse_args()
 
