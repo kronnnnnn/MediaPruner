@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
 
 from app.database import get_db
 from app.models import Movie, TVShow
