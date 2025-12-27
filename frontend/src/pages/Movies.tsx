@@ -77,6 +77,21 @@ export default function Movies() {
         setSearchQuery(q)
         setSearchInput(q)
       }
+
+      const openMovie = params.get('open_movie')
+      if (openMovie) {
+        const id = Number(openMovie)
+        if (id) {
+          ;(async () => {
+            try {
+              const res = await moviesApi.getMovie(id)
+              setSelectedMovie(res.data)
+            } catch (e) {
+              // ignore
+            }
+          })()
+        }
+      }
     } catch (e) {
       // ignore
     }
