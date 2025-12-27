@@ -150,6 +150,119 @@ async def list_tasks(limit: int = 50):
 
             tasks.append(d)
 
+        # Attempt to provide a small preview for tasks by examining the first item's payload
+        try:
+            task_ids = [t['id'] for t in tasks]
+            if task_ids:
+                from sqlalchemy import select
+                from app.models import QueueItem
+
+                # Fetch first item per task (lowest index) and map payload
+                q = await session.execute(
+                    select(QueueItem.task_id, QueueItem.payload, QueueItem.index).where(QueueItem.task_id.in_(task_ids)).order_by(QueueItem.task_id, QueueItem.index)
+                )
+                rows = q.fetchall()
+                first_items = {}
+                seen = set()
+                for row in rows:
+                    task_id = row[0]
+                    if task_id in seen:
+                        continue
+                    seen.add(task_id)
+                    first_items[task_id] = row[1]
+
+                # Gather show_ids and movie_ids to look up titles in batch
+                show_ids = set()
+                movie_ids = set()
+                for t in tasks:
+                    # Also include show/movie ids from explicit task meta
+                    meta_info = t.get('meta')
+                    if isinstance(meta_info, dict):
+                        try:
+                            if meta_info.get('show_id'):
+                                show_ids.add(int(meta_info.get('show_id')))
+                        except Exception:
+                            pass
+                        try:
+                            if meta_info.get('movie_id'):
+                                movie_ids.add(int(meta_info.get('movie_id')))
+                        except Exception:
+                            pass
+
+                    payload = first_items.get(t['id'])
+                    if not payload:
+                        continue
+                    try:
+                        pp = json.loads(payload)
+                        if isinstance(pp, dict):
+                            if pp.get('show_id'):
+                                show_ids.add(int(pp.get('show_id')))
+                            if pp.get('movie_id'):
+                                movie_ids.add(int(pp.get('movie_id')))
+                            # also include path if present for display
+                            if pp.get('path') and not t.get('meta'):
+                                t.setdefault('meta', {})['path'] = pp.get('path')
+                    except Exception:
+                        pass
+
+                # Fetch titles in batch
+                shows_map = {}
+                movies_map = {}
+                if show_ids:
+                    from app.models import TVShow
+                    q = await session.execute(select(TVShow.id, TVShow.title).where(TVShow.id.in_(list(show_ids))))
+                    for r in q.fetchall():
+                        shows_map[r[0]] = r[1]
+                if movie_ids:
+                    from app.models import Movie
+                    q = await session.execute(select(Movie.id, Movie.title).where(Movie.id.in_(list(movie_ids))))
+                    for r in q.fetchall():
+                        movies_map[r[0]] = r[1]
+
+                # Attach previews (from first payload and task meta)
+                for t in tasks:
+                    attached = False
+                    payload = first_items.get(t['id'])
+                    if payload:
+                        try:
+                            pp = json.loads(payload)
+                            if isinstance(pp, dict):
+                                if pp.get('show_id'):
+                                    sid = int(pp.get('show_id'))
+                                    t.setdefault('meta_preview', {})['show_id'] = sid
+                                    if sid in shows_map:
+                                        t.setdefault('meta_preview', {})['show_title'] = shows_map[sid]
+                                        attached = True
+                                if pp.get('movie_id'):
+                                    mid = int(pp.get('movie_id'))
+                                    t.setdefault('meta_preview', {})['movie_id'] = mid
+                                    if mid in movies_map:
+                                        t.setdefault('meta_preview', {})['movie_title'] = movies_map[mid]
+                                        attached = True
+                        except Exception:
+                            pass
+
+                    # Also attach from explicit task meta if not attached yet
+                    if not attached and isinstance(t.get('meta'), dict):
+                        try:
+                            if t['meta'].get('show_id'):
+                                sid = int(t['meta'].get('show_id'))
+                                t.setdefault('meta_preview', {})['show_id'] = sid
+                                if sid in shows_map:
+                                    t.setdefault('meta_preview', {})['show_title'] = shows_map[sid]
+                                    attached = True
+                            if t['meta'].get('movie_id'):
+                                mid = int(t['meta'].get('movie_id'))
+                                t.setdefault('meta_preview', {})['movie_id'] = mid
+                                if mid in movies_map:
+                                    t.setdefault('meta_preview', {})['movie_title'] = movies_map[mid]
+                                    attached = True
+                        except Exception:
+                            pass
+        except Exception:
+            # fail silently - previews are optional
+            pass
+
         return tasks
 
 
@@ -209,6 +322,64 @@ async def get_task(task_id: int):
                         movie_title = mv.title
             except Exception:
                 movie_title = None
+
+            # Enrich with TV show / episode info if present
+            show_title = None
+            show_url = None
+            episode_title = None
+            episode_label = None
+            try:
+                if payload_parsed and isinstance(payload_parsed, dict):
+                    if payload_parsed.get('show_id'):
+                        sid = int(payload_parsed.get('show_id'))
+                        from app.models import TVShow
+                        sv = await session.get(TVShow, sid)
+                        if sv:
+                            show_title = sv.title
+                            show_url = f"/tvshows/{sid}"
+                    if payload_parsed.get('episode_id'):
+                        eid = int(payload_parsed.get('episode_id'))
+                        from app.models import Episode
+                        ep = await session.get(Episode, eid)
+                        if ep:
+                            episode_title = ep.title or ''
+                            season = getattr(ep, 'season_number', None)
+                            number = getattr(ep, 'episode_number', None)
+                            if season is not None and number is not None:
+                                episode_label = f"S{season}E{number} — {episode_title if episode_title else ''}"
+                            else:
+                                episode_label = episode_title
+                            # also include parent show info when possible
+                            try:
+                                sv = await session.get(TVShow, ep.tvshow_id)
+                                if sv:
+                                    show_title = sv.title
+                                    show_url = f"/tvshows/{ep.tvshow_id}"
+                            except Exception:
+                                pass
+                            # fallback: if task meta included a show_id, use that
+                            try:
+                                if not show_title and task.meta:
+                                    if isinstance(task.meta, str):
+                                        try:
+                                            m = json.loads(task.meta)
+                                        except Exception:
+                                            m = None
+                                    else:
+                                        m = task.meta
+                                    if isinstance(m, dict) and m.get('show_id'):
+                                        sid = int(m.get('show_id'))
+                                        sv = await session.get(TVShow, sid)
+                                        if sv:
+                                            show_title = sv.title
+                                            show_url = f"/tvshows/{sid}"
+                            except Exception:
+                                pass
+            except Exception:
+                show_title = None
+                show_url = None
+                episode_title = None
+                episode_label = None
 
             # Parse result JSON if present and prepare a summary for UI
             result_parsed = None
@@ -288,6 +459,10 @@ async def get_task(task_id: int):
                 'movie_title': movie_title,
                 'movie_url': movie_url,
                 'movie_summary': movie_summary,
+                'show_title': show_title,
+                'show_url': show_url,
+                'episode_title': episode_title,
+                'episode_label': episode_label,
                 'result': i.result,
                 'result_parsed': result_parsed,
                 'result_summary': result_summary,
@@ -301,6 +476,25 @@ async def get_task(task_id: int):
                     item_obj['result'] = None
                     item_obj['result_parsed'] = None
                     item_obj['result_summary'] = None
+            except Exception:
+                pass
+
+            # Ensure show_title is filled from task.meta if available (fallback)
+            try:
+                if not item_obj.get('show_title') and data.get('meta'):
+                    m = data.get('meta')
+                    if isinstance(m, str):
+                        try:
+                            m = json.loads(m)
+                        except Exception:
+                            m = None
+                    if isinstance(m, dict) and m.get('show_id'):
+                        sid = int(m.get('show_id'))
+                        from app.models import TVShow
+                        sv = await session.get(TVShow, sid)
+                        if sv:
+                            item_obj['show_title'] = sv.title
+                            item_obj['show_url'] = f"/tvshows/{sid}"
             except Exception:
                 pass
 
