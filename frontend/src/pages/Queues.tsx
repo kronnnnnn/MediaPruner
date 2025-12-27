@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueues } from '../contexts/QueueContext'
-import { Check, X, Clock, Play, Trash2, Copy, Film, ChevronRight, ChevronDown } from 'lucide-react' 
+import { Check, X, Clock, Play, Trash2, Copy, Film, Tv, ChevronRight, ChevronDown } from 'lucide-react' 
 import MovieDetail from '../components/MovieDetail'
 export default function Queues() {
   const { tasks, connected, refresh } = useQueues()
@@ -118,6 +118,15 @@ export default function Queues() {
 
   const taskTitle = (t: Record<string, unknown>) => {
     const typeLabel = String(t.type).replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
+    // Prefer explicit show/movie title from meta_preview or meta
+    try {
+      const meta = t.meta as Record<string, unknown> | undefined
+      const preview = t.meta_preview as Record<string, unknown> | undefined
+      if (preview && preview.show_title) return `${typeLabel} (${String(preview.show_title)})`
+      if (meta && meta.show_id && meta.show_title) return `${typeLabel} (${String(meta.show_title)})`
+    } catch (e) {
+      // ignore
+    }
     const path = taskSourceLabel(t)
     return path ? `${typeLabel} (${path})` : typeLabel
   }
@@ -195,6 +204,7 @@ export default function Queues() {
                               </div>
 
                               {(() => {
+                                // Movie item
                                 if (Boolean(movieTitle) || (payloadParsed && (payloadParsed as Record<string, unknown>).movie_id)) {
                                   return (
                                     <div className="mt-2 text-sm text-gray-300 flex items-center gap-2">
@@ -221,6 +231,23 @@ export default function Queues() {
                                     </div>
                                   )
                                 }
+
+                                // TV show / episode item
+                                if (Boolean(it.episode_label) || Boolean(it.show_title) || (payloadParsed && ((payloadParsed as Record<string, unknown>).episode_id || (payloadParsed as Record<string, unknown>).show_id))) {
+                                  const label = String(it.episode_label ?? it.episode_title ?? it.show_title ?? ((payloadParsed as Record<string, unknown>).show_id ? `#${(payloadParsed as Record<string, unknown>).show_id}` : ''))
+                                  const showUrl = it.show_url as string | undefined
+                                  return (
+                                    <div className="mt-2 text-sm text-gray-300 flex items-center gap-2">
+                                      <Tv className="w-4 h-4 text-gray-400" />
+                                      <div>
+                                        <div className="text-sm font-semibold">
+                                          {showUrl ? <Link className="hover:underline text-primary-400" to={showUrl}>{label}</Link> : label}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                }
+
                                 return null
                               })()}
 
@@ -292,15 +319,15 @@ export default function Queues() {
 
   async function doClearQueues() {
     setIsClearing(true)
-    const scope = activeTab === 'history' ? 'history' : 'current'
     try {
-      const res = await fetch(`/api/queues/tasks/clear?scope=${scope}`, { method: 'POST' })
+      // Always clear ALL tasks regardless of active tab or item status
+      const res = await fetch(`/api/queues/tasks/clear?scope=all`, { method: 'POST' })
       if (!res.ok) {
         const text = await res.text()
         import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Clear failed', message: text || res.statusText, type: 'error' })).catch(() => null)
       } else {
         const data = await res.json().catch(() => null)
-        import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Cleared', message: data ? `${data.tasks_cleared} tasks cleared` : 'Cleared queued tasks', type: 'success' })).catch(() => null)
+        import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Cleared', message: data ? `${data.tasks_cleared} tasks cleared` : 'Cleared all tasks', type: 'success' })).catch(() => null)
         await refresh()
       }
     } catch (e) {
@@ -309,12 +336,15 @@ export default function Queues() {
     setIsClearing(false)
   }
   return (
-    <div className="p-6">
+    <div className="w-full max-w-full mx-auto space-y-6 px-4 sm:px-6 lg:px-8 py-6">
+      <div className="bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold">Queues</h1>
+        <h1 className="text-xl font-semibold">
+          <span className="text-primary-500">Status:</span>
+          <span className={`ml-2 ${connected ? 'text-green-600' : 'text-red-500'}`}>{connected ? 'Connected' : 'Disconnected'}</span>
+        </h1>
         <div className="flex items-center gap-4">
-          <button onClick={doClearQueues} disabled={isClearing} className="px-3 py-1 text-sm rounded border border-red-700 text-red-300 hover:bg-red-700/10">{isClearing ? 'Clearing…' : 'Clear all queues'}</button>
-          <div className={`text-sm ${connected ? 'text-green-600' : 'text-red-500'}`}>{connected ? 'Connected' : 'Disconnected'}</div>
+          <button onClick={doClearQueues} disabled={isClearing} className="px-3 py-1 text-sm rounded border border-red-700 text-red-300 hover:bg-red-700/10">{isClearing ? 'Clearing…' : 'Clear all'}</button>
         </div>
       </div>
 
@@ -325,11 +355,14 @@ export default function Queues() {
         </nav>
       </div>
 
-      <div className="space-y-3">
-        {(activeTab === 'current' ? currentTasks : historyTasks).map(t => renderTask(t as unknown as Record<string, unknown>))}
-        { (activeTab === 'current' ? currentTasks : historyTasks).length === 0 && (
-          <div className="text-sm text-gray-500">No tasks</div>
-        )}
+      <div className="p-4">
+        <div className="space-y-3">
+          {(activeTab === 'current' ? currentTasks : historyTasks).map(t => renderTask(t as unknown as Record<string, unknown>))}
+          { (activeTab === 'current' ? currentTasks : historyTasks).length === 0 && (
+            <div className="text-sm text-gray-500">No tasks</div>
+          )}
+        </div>
+      </div>
       </div>
 
       {modalMovieId && (
