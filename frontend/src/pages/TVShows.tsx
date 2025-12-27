@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Filter, SortAsc, SortDesc, Search, RefreshCw, LayoutGrid, List, Star, Check, X, Tv as TvIcon } from 'lucide-react'
 import MediaGrid from '../components/MediaGrid'
