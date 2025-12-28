@@ -490,7 +490,7 @@ export default function TVShowDetailPage() {
         <div className="bg-gray-800 rounded-lg p-4 mb-6">
           <h3 className="text-white font-medium mb-3">Actions</h3>
           <div className="flex flex-wrap gap-3 items-center">
-            {/* Provider selector + Refresh button group */}
+            {/* Provider selector + Analyze + Refresh button group */}
             <div className="flex items-stretch">
               <select
                 value={metadataProvider}
@@ -502,6 +502,16 @@ export default function TVShowDetailPage() {
                 <option value="tmdb">TMDB</option>
                 <option value="omdb">OMDb</option>
               </select>
+
+              <button
+                onClick={handleAnalyzeAll}
+                disabled={isProcessing}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 text-white transition-colors"
+              >
+                <HardDrive className={`w-4 h-4 ${analyzeAllMutation.isPending ? 'animate-spin' : ''}`} />
+                {analyzeAllMutation.isPending ? 'Analyzing...' : 'Analyze All Episodes'}
+              </button>
+
               <button
                 onClick={handleScrapeShow}
                 disabled={isProcessing}
@@ -511,15 +521,6 @@ export default function TVShowDetailPage() {
                 {scrapeMutation.isPending ? 'Refreshing...' : 'Refresh Metadata'}
               </button>
             </div>
-
-            <button
-              onClick={handleAnalyzeAll}
-              disabled={isProcessing}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
-            >
-              <HardDrive className={`w-4 h-4 ${analyzeAllMutation.isPending ? 'animate-spin' : ''}`} />
-              {analyzeAllMutation.isPending ? 'Analyzing...' : 'Analyze All Episodes'}
-            </button>
 
             <button
               onClick={handleRenameEpisodes}
