@@ -275,7 +275,10 @@ export default function Queues() {
                                             {parsed.shows.map((s: any, idx: number) => (
                                               <div key={idx} className="p-2 bg-gray-900/30 rounded flex items-center justify-between">
                                                 <div>
-                                                  <div className="text-sm font-semibold text-gray-100">{s.title}{s.added ? ' (added)' : ''}</div>
+                                                  <div className="text-sm font-semibold text-gray-100">
+                                                    {s.show_id ? <Link className="hover:underline text-primary-400" to={`/tvshows/${s.show_id}`}>{s.title}</Link> : s.title}
+                                                    {s.added ? <span className="ml-2 inline-block px-2 py-0.5 rounded text-xs bg-green-600/20 text-green-300">Added</span> : null}
+                                                  </div>
                                                   <div className="text-xs text-gray-400">{s.folder_path}{s.new_episodes ? ` • ${s.new_episodes} new episode${s.new_episodes !== 1 ? 's' : ''}` : ''}</div>
                                                 </div>
                                                 {s.show_id ? (

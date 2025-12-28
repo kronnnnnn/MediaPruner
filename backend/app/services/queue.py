@@ -702,25 +702,53 @@ class QueueWorker:
                                 exist_q = await session.execute(select(TVShow).where(TVShow.folder_path == parsed_show.folder_path))
                                 show = exist_q.scalar_one_or_none()
                                 added_show = False
+
+                                # If show does not exist, try to find a matching library_path (longest prefix) to attach it to
+                                lib_id = None
                                 if not show:
-                                    show = TVShow(
-                                        library_path_id=None,
-                                        folder_path=parsed_show.folder_path,
-                                        folder_name=parsed_show.folder_name,
-                                        title=parsed_show.title,
-                                        episode_count=len(parsed_show.episodes),
-                                        season_count=len(set(e.season_number for e in parsed_show.episodes))
-                                    )
-                                    session.add(show)
-                                    await session.flush()
-                                    added_show = True
-                                    new_show_ids.append(show.id)
+                                    from app.models import LibraryPath, MediaType
+                                    lib_q = await session.execute(select(LibraryPath).where(LibraryPath.media_type == MediaType.TV))
+                                    libs = lib_q.scalars().all()
+                                    if libs:
+                                        # Find longest matching prefix
+                                        libs.sort(key=lambda l: len(l.path), reverse=True)
+                                        for lp in libs:
+                                            try:
+                                                if str(parsed_show.folder_path).startswith(lp.path):
+                                                    lib_id = lp.id
+                                                    break
+                                            except Exception:
+                                                continue
+                                        # If no prefix match, fall back to first TV library path
+                                        if lib_id is None:
+                                            lib_id = libs[0].id
+
+                                    # If we have a library id, create the TVShow
+                                    if lib_id is not None:
+                                        show = TVShow(
+                                            library_path_id=lib_id,
+                                            folder_path=parsed_show.folder_path,
+                                            folder_name=parsed_show.folder_name,
+                                            title=parsed_show.title,
+                                            episode_count=len(parsed_show.episodes),
+                                            season_count=len(set(e.season_number for e in parsed_show.episodes))
+                                        )
+                                        session.add(show)
+                                        await session.flush()
+                                        added_show = True
+                                        new_show_ids.append(show.id)
+                                    else:
+                                        # Could not determine library path - skip creating show
+                                        logger.debug(f"Skipping creation of TVShow for {parsed_show.folder_path} - no TV library path available")
 
                                 # Check and add episodes
                                 added_eps = 0
                                 for parsed_ep in parsed_show.episodes:
                                     ep_exists_q = await session.execute(select(Episode).where(Episode.file_path == parsed_ep.file_path))
                                     if not ep_exists_q.scalar_one_or_none():
+                                        # If show was created above but for some reason show is still None, skip
+                                        if not show:
+                                            continue
                                         episode = Episode(
                                             tvshow_id=show.id,
                                             file_path=parsed_ep.file_path,
@@ -747,16 +775,39 @@ class QueueWorker:
                             # Commit DB changes so created shows/episodes are persisted
                             await session.commit()
 
-                            # Enqueue post-scan tasks: analyze episodes first, then refresh metadata for shows
+                            # Determine analyze and refresh tasks to enqueue
+                            analyze_episode_ids: list[int] = list(new_episode_ids)
+                            refresh_show_ids: list[int] = list(new_show_ids)
+
                             try:
-                                if new_episode_ids:
-                                    # enqueue analyze for new episodes
-                                    analyze_items = [{'episode_id': eid} for eid in new_episode_ids]
+                                # For each parsed show that exists, check for episodes needing analysis
+                                for s in found_shows:
+                                    sid = s.get('show_id')
+                                    if sid and int(sid) not in refresh_show_ids:
+                                        # include existing show in refresh list so metadata can be refreshed
+                                        refresh_show_ids.append(int(sid))
+
+                                    # Query episodes for this show that haven't been analyzed
+                                    if sid:
+                                        from app.models import Episode as EpModel
+                                        ep_q = await session.execute(select(EpModel.id).where(EpModel.tvshow_id == int(sid)).where(EpModel.media_info_scanned.is_(False)))
+                                        missing_eps = [r[0] for r in ep_q.fetchall()]
+                                        analyze_episode_ids.extend(missing_eps)
+
+                                # Deduplicate
+                                analyze_episode_ids = list(dict.fromkeys(analyze_episode_ids))
+                                refresh_show_ids = list(dict.fromkeys(refresh_show_ids))
+
+                                # Enqueue analyze for episodes first
+                                if analyze_episode_ids:
+                                    analyze_items = [{'episode_id': eid} for eid in analyze_episode_ids]
                                     analyze_task = await create_task('analyze', analyze_items, meta={'path': path})
-                                if new_show_ids:
-                                    # enqueue refresh_metadata for new shows
-                                    refresh_items = [{'show_id': sid} for sid in new_show_ids]
+
+                                # Then enqueue refresh_metadata for shows
+                                if refresh_show_ids:
+                                    refresh_items = [{'show_id': sid} for sid in refresh_show_ids]
                                     refresh_task = await create_task('refresh_metadata', refresh_items, meta={'path': path})
+
                             except Exception:
                                 logger.exception('Failed to enqueue post-scan tasks')
 
