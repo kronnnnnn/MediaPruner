@@ -210,9 +210,19 @@ async def list_tasks(limit: int = 50):
                 movies_map = {}
                 if show_ids:
                     from app.models import TVShow
-                    q = await session.execute(select(TVShow.id, TVShow.title).where(TVShow.id.in_(list(show_ids))))
+                    shows_folder_map: dict[int, str] = {}
+                    q = await session.execute(select(TVShow.id, TVShow.title, TVShow.folder_path).where(TVShow.id.in_(list(show_ids))))
                     for r in q.fetchall():
+                        # r = (id, title, folder_path)
                         shows_map[r[0]] = r[1]
+                        try:
+                            folder_path = r[2] or ''
+                            folder_name = str(folder_path).rstrip('/\\').split('/').pop().split('\\').pop()
+                        except Exception:
+                            folder_name = ''
+                        shows_folder_map[r[0]] = folder_name
+                else:
+                    shows_folder_map = {}
                 if movie_ids:
                     from app.models import Movie
                     q = await session.execute(select(Movie.id, Movie.title).where(Movie.id.in_(list(movie_ids))))
@@ -285,9 +295,36 @@ async def list_tasks(limit: int = 50):
                         if ids['show_ids']:
                             # Map to titles and include count
                             titles = [shows_map.get(s, f"#{s}") for s in ids['show_ids']]
+                            # derive folder names from shows_folder_map if available
+                            folder_names = [shows_folder_map.get(s, '') if 'shows_folder_map' in locals() else '' for s in ids['show_ids']]
                             t.setdefault('meta_preview', {})['show_titles'] = titles[:3]
+                            t.setdefault('meta_preview', {})['show_folder_names'] = folder_names[:3]
                             t.setdefault('meta_preview', {})['show_count'] = len(ids['show_ids'])
                             t.setdefault('meta_preview', {})['show_ids'] = ids['show_ids'][:3]
+                            # Backwards-compatible singular fields
+                            if titles:
+                                t.setdefault('meta_preview', {})['show_title'] = titles[0]
+                                t.setdefault('meta_preview', {})['show_folder_name'] = folder_names[0] if folder_names else ''
+                        else:
+                            # Fall back to task meta show_id/movie_id
+                            if isinstance(t.get('meta'), dict):
+                                try:
+                                    if t['meta'].get('show_id'):
+                                        sid = int(t['meta'].get('show_id'))
+                                        t.setdefault('meta_preview', {})['show_ids'] = [sid]
+                                        t.setdefault('meta_preview', {})['show_titles'] = [shows_map.get(sid, f"#{sid}")]
+                                        t.setdefault('meta_preview', {})['show_folder_names'] = [shows_folder_map.get(sid, '') if 'shows_folder_map' in locals() else '']
+                                        t.setdefault('meta_preview', {})['show_count'] = 1
+                                        # Backwards-compatible singular fields
+                                        t.setdefault('meta_preview', {})['show_title'] = shows_map.get(sid, f"#{sid}")
+                                        t.setdefault('meta_preview', {})['show_folder_name'] = shows_folder_map.get(sid, '') if 'shows_folder_map' in locals() else ''
+                                    elif t['meta'].get('movie_id'):
+                                        mid = int(t['meta'].get('movie_id'))
+                                        t.setdefault('meta_preview', {})['movie_ids'] = [mid]
+                                        t.setdefault('meta_preview', {})['movie_titles'] = [movies_map.get(mid, f"#{mid}")]
+                                        t.setdefault('meta_preview', {})['movie_count'] = 1
+                                except Exception:
+                                    pass
                         if ids['movie_ids'] and not t.get('meta_preview'):
                             titles = [movies_map.get(m, f"#{m}") for m in ids['movie_ids']]
                             t.setdefault('meta_preview', {})['movie_titles'] = titles[:3]
