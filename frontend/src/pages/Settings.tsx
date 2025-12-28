@@ -561,18 +561,18 @@ export default function Settings() {
   }
 
   return (
-    <div className="w-[80%] max-w-6xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-white">Settings</h1>
+    <div className="w-full max-w-full mx-auto space-y-6 px-4 sm:px-6 lg:px-8">
+
 
       {/* Tabs Navigation */}
       <div className="border-b border-gray-700">
-        <nav className="flex gap-4">
+        <nav className="flex gap-4 w-full">
           <button
             onClick={() => {
               logger.tabChange('Library', 'Settings')
               setActiveTab('library')
             }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex-1 text-center px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'library'
                 ? 'border-primary-500 text-primary-400'
                 : 'border-transparent text-gray-400 hover:text-white hover:border-gray-500'
@@ -588,7 +588,7 @@ export default function Settings() {
               logger.tabChange('API Keys', 'Settings')
               setActiveTab('api')
             }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex-1 text-center px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'api'
                 ? 'border-primary-500 text-primary-400'
                 : 'border-transparent text-gray-400 hover:text-white hover:border-gray-500'
@@ -604,7 +604,7 @@ export default function Settings() {
               logger.tabChange('Logs', 'Settings')
               setActiveTab('logs')
             }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex-1 text-center px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'logs'
                 ? 'border-primary-500 text-primary-400'
                 : 'border-transparent text-gray-400 hover:text-white hover:border-gray-500'

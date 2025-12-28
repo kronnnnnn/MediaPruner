@@ -409,6 +409,10 @@ export interface LogStats {
   total: number
 }
 
+export const searchApi = {
+  suggestions: (q: string) => api.get('/search', { params: { q } }),
+}
+
 export const settingsApi = {
   getStatus: () => api.get<SettingsStatus>('/settings'),
   // TMDB

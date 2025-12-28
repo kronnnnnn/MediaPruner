@@ -872,6 +872,8 @@ async def refresh_library(db: AsyncSession = Depends(get_db)):
                 # Scan for new shows/episodes
                 scanned_shows = scan_tvshow_directory(path)
 
+                new_show_ids = []
+                new_episode_ids = []
                 for parsed_show in scanned_shows:
                     existing_show = await db.execute(
                         select(TVShow).where(TVShow.folder_path == parsed_show.folder_path)
@@ -890,6 +892,7 @@ async def refresh_library(db: AsyncSession = Depends(get_db)):
                         db.add(show)
                         await db.flush()
                         added_shows += 1
+                        new_show_ids.append(show.id)
 
                     # Check for new episodes
                     for parsed_ep in parsed_show.episodes:
@@ -909,6 +912,7 @@ async def refresh_library(db: AsyncSession = Depends(get_db)):
                                 has_subtitle=parsed_ep.subtitle_path is not None)
                             db.add(episode)
                             added_episodes += 1
+                            new_episode_ids.append(episode.id)
 
         except Exception as e:
             errors.append(f"Error refreshing {lib_path.path}: {str(e)}")
@@ -922,6 +926,13 @@ async def refresh_library(db: AsyncSession = Depends(get_db)):
             refresh_task = await create_task('refresh_metadata', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
             sync_task = await create_task('sync_watch_history', [{'movie_id': mid} for mid in new_movie_ids], meta={'path': lib_path.path})
             logger.info(f"Enqueued post-refresh tasks for {len(new_movie_ids)} movies: analyze={analyze_task.id}, refresh={refresh_task.id}, sync={sync_task.id}")
+
+        # Enqueue post-scan tasks for new TV shows/episodes: analyze episodes first, then refresh metadata for shows
+        if new_episode_ids:
+            analyze_task = await create_task('analyze', [{'episode_id': eid} for eid in new_episode_ids], meta={'path': lib_path.path})
+        if new_show_ids:
+            refresh_task = await create_task('refresh_metadata', [{'show_id': sid} for sid in new_show_ids], meta={'path': lib_path.path})
+            logger.info(f"Enqueued post-refresh tasks for {len(new_show_ids)} shows: analyze={analyze_task.id if (new_episode_ids) else 'N/A'}, refresh={refresh_task.id}")
     except Exception:
         pass
     return {

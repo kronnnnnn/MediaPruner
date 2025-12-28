@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueues } from '../contexts/QueueContext'
-import { Check, X, Clock, Play, Trash2, Copy, Film, ChevronRight, ChevronDown } from 'lucide-react' 
+import { Check, X, Clock, Play, Trash2, Copy, Film, Tv, ChevronRight, ChevronDown } from 'lucide-react' 
 import MovieDetail from '../components/MovieDetail'
+import ConfirmDialog from '../components/ConfirmDialog'
 export default function Queues() {
   const { tasks, connected, refresh } = useQueues()
   const [activeTab, setActiveTab] = useState<'current'|'history'>('current')
@@ -11,6 +12,8 @@ export default function Queues() {
   const [loadingItems, setLoadingItems] = useState<Record<number, boolean>>({})
   const [taskDetails, setTaskDetails] = useState<Record<number, Record<string, unknown>>>({})
   const [modalMovieId, setModalMovieId] = useState<number | null>(null)
+  const [cancelConfirm, setCancelConfirm] = useState<{ isOpen: boolean; taskId?: number; taskTitle?: string }>({ isOpen: false })
+  const [canceling, setCanceling] = useState<Record<number, boolean>>({})
 
   const [isClearing, setIsClearing] = useState(false)
 
@@ -60,13 +63,13 @@ export default function Queues() {
     const hasFailed = Array.isArray(t.items) && t.items.some((i) => String((i as unknown as Record<string, unknown>).status).toLowerCase() === 'failed')
     // Treat a completed task with any failed items as history
     if (s === 'completed' && hasFailed) return false
-    return !['completed', 'deleted'].includes(s)
+    return !['completed', 'deleted', 'canceled'].includes(s)
   })
 
   const historyTasks = tasks.filter(t => {
     const s = String(t.status).toLowerCase()
     const hasFailed = Array.isArray(t.items) && t.items.some((i) => String((i as unknown as Record<string, unknown>).status).toLowerCase() === 'failed')
-    return ['completed', 'deleted', 'failed'].includes(s) || (s === 'completed' && hasFailed)
+    return ['completed', 'deleted', 'failed', 'canceled'].includes(s) || (s === 'completed' && hasFailed)
   })
 
   const statusOrder = ['running', 'queued', 'completed', 'failed', 'canceled']
@@ -118,6 +121,27 @@ export default function Queues() {
 
   const taskTitle = (t: Record<string, unknown>) => {
     const typeLabel = String(t.type).replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
+    // Prefer explicit show/movie title from meta_preview or meta
+    try {
+      const meta = t.meta as Record<string, unknown> | undefined
+      const preview = t.meta_preview as Record<string, unknown> | undefined
+      if (preview && preview.show_title) return `${typeLabel} (${String(preview.show_title)})`
+      if (meta && meta.show_id && meta.show_title) return `${typeLabel} (${String(meta.show_title)})`
+    } catch (e) {
+      // ignore
+    }
+
+    // For scans, prefer folder name
+    try {
+      const p = taskSourceLabel(t)
+      if (String(t.type).toLowerCase() === 'scan' && p) {
+        const name = p.split(/[\\\/]/).filter(Boolean).pop() || p
+        return `${typeLabel} (${name})`
+      }
+    } catch (e) {
+      // ignore
+    }
+
     const path = taskSourceLabel(t)
     return path ? `${typeLabel} (${path})` : typeLabel
   }
@@ -135,6 +159,30 @@ export default function Queues() {
               <span className="cursor-pointer text-gray-400">{isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</span>
               <span className="ml-2">— {taskTitle(t)}</span>
             </div>
+            {(() => {
+              const preview = t.meta_preview as Record<string, any> | undefined
+              if (!preview || !preview.show_titles) return null
+              const titles: string[] = preview.show_titles || []
+              const ids: number[] = preview.show_ids || []
+              const count: number = preview.show_count || titles.length
+              return (
+                <div className="text-xs text-gray-400 mt-1">
+                  {titles.map((s: string, i: number) => (
+                    <span key={i} className="mr-1">
+                      {ids && ids[i] ? (
+                        <Link className="text-primary-400 hover:underline" to={`/tvshows/${ids[i]}`}>{s}</Link>
+                      ) : (
+                        <span className="text-gray-300">{s}</span>
+                      )}
+                      {i < (titles.length - 1) && <span className="text-gray-400">,</span>}
+                    </span>
+                  ))}
+                  {(count && count > titles.length) && (
+                    <span className="ml-1 text-xs text-gray-400">+{count - titles.length} more</span>
+                  )}
+                </div>
+              )
+            })()}
             <div className="text-xs text-gray-500 mt-1">Items: {String(t.total_items)} • Processed: {String(t.completed_items)}</div>
           </div>
           <div className="flex items-center gap-4">
@@ -195,6 +243,7 @@ export default function Queues() {
                               </div>
 
                               {(() => {
+                                // Movie item
                                 if (Boolean(movieTitle) || (payloadParsed && (payloadParsed as Record<string, unknown>).movie_id)) {
                                   return (
                                     <div className="mt-2 text-sm text-gray-300 flex items-center gap-2">
@@ -221,6 +270,28 @@ export default function Queues() {
                                     </div>
                                   )
                                 }
+
+                                // TV show / episode item
+                                if (Boolean(it.episode_label) || Boolean(it.show_title) || (payloadParsed && ((payloadParsed as Record<string, unknown>).episode_id || (payloadParsed as Record<string, unknown>).show_id))) {
+                                  const episodeLabel = String(it.episode_label ?? it.episode_title ?? '')
+                                  const showTitle = String(it.show_title ?? (payloadParsed && (payloadParsed as Record<string, unknown>).show_title) ?? '')
+                                  return (
+                                    <div className="mt-2 text-sm text-gray-300 flex items-center gap-2">
+                                      <Tv className="w-4 h-4 text-gray-400" />
+                                      <div>
+                                        <div className="text-sm font-semibold">
+                                          {episodeLabel}
+                                          {showTitle ? (
+                                            <span className="ml-2 text-xs text-gray-400">(
+                                              {it.show_url ? <Link className="text-primary-400 hover:underline" to={String(it.show_url)}>{showTitle}</Link> : showTitle}
+                                            )</span>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                }
+
                                 return null
                               })()}
 
@@ -232,7 +303,38 @@ export default function Queues() {
                                     </div>
                                   )
                                 }
+
+                                // If result is JSON with structured scan info, render shows list
                                 if (result) {
+                                  try {
+                                    const parsed = typeof result === 'string' ? JSON.parse(result) : result
+                                    if (parsed && parsed.shows && Array.isArray(parsed.shows)) {
+                                      return (
+                                        <div className="mt-2 text-sm">
+                                          <div className="text-xs text-gray-400 mb-2">Found Shows</div>
+                                          <div className="space-y-2">
+                                            {parsed.shows.map((s: any, idx: number) => (
+                                              <div key={idx} className="p-2 bg-gray-900/30 rounded flex items-center justify-between">
+                                                <div>
+                                                  <div className="text-sm font-semibold text-gray-100">
+                                                    {s.show_id ? <Link className="hover:underline text-primary-400" to={`/tvshows/${s.show_id}`}>{s.title}</Link> : s.title}
+                                                    {s.added ? <span className="ml-2 inline-block px-2 py-0.5 rounded text-xs bg-green-600/20 text-green-300">Added</span> : null}
+                                                  </div>
+                                                  <div className="text-xs text-gray-400">{s.folder_path}{s.new_episodes ? ` • ${s.new_episodes} new episode${s.new_episodes !== 1 ? 's' : ''}` : ''}</div>
+                                                </div>
+                                                {s.show_id ? (
+                                                  <div className="text-xs text-gray-400">#{s.show_id}</div>
+                                                ) : null}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )
+                                    }
+                                  } catch (e) {
+                                    // fall back to raw display
+                                  }
+
                                   return (
                                     <div className="mt-1 text-xs text-gray-500">Result: <code className="break-words">{String(typeof result === 'string' ? result : JSON.stringify(result))}</code></div>
                                   )
@@ -252,10 +354,31 @@ export default function Queues() {
                         )
                       })}
 
+
+
                     </div>
                   )
                 })
               })() }
+            </div>
+
+            <div className="flex justify-end mt-3">
+              {(() => {
+                const s = String(t.status).toLowerCase()
+                const taskId = Number(t.id)
+                if (['running', 'queued'].includes(s)) {
+                  return (
+                    <button
+                      onClick={() => setCancelConfirm({ isOpen: true, taskId: taskId, taskTitle: taskTitle(t) })}
+                      disabled={Boolean(canceling[taskId])}
+                      className="px-3 py-1 text-sm rounded border border-red-700 text-red-300 hover:bg-red-700/10"
+                    >
+                      {canceling[taskId] ? 'Canceling…' : 'Cancel Task'}
+                    </button>
+                  )
+                }
+                return null
+              })()}
             </div>
           </div>
         )}
@@ -292,15 +415,15 @@ export default function Queues() {
 
   async function doClearQueues() {
     setIsClearing(true)
-    const scope = activeTab === 'history' ? 'history' : 'current'
     try {
-      const res = await fetch(`/api/queues/tasks/clear?scope=${scope}`, { method: 'POST' })
+      // Always clear ALL tasks regardless of active tab or item status
+      const res = await fetch(`/api/queues/tasks/clear?scope=all`, { method: 'POST' })
       if (!res.ok) {
         const text = await res.text()
         import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Clear failed', message: text || res.statusText, type: 'error' })).catch(() => null)
       } else {
         const data = await res.json().catch(() => null)
-        import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Cleared', message: data ? `${data.tasks_cleared} tasks cleared` : 'Cleared queued tasks', type: 'success' })).catch(() => null)
+        import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Cleared', message: data ? `${data.tasks_cleared} tasks cleared` : 'Cleared all tasks', type: 'success' })).catch(() => null)
         await refresh()
       }
     } catch (e) {
@@ -308,13 +431,39 @@ export default function Queues() {
     }
     setIsClearing(false)
   }
+
+  // Perform the cancel operation after user confirms via ConfirmDialog
+  async function performCancel() {
+    const taskId = cancelConfirm.taskId
+    if (!taskId) return
+    setCancelConfirm({ isOpen: false })
+    try {
+      setCanceling(prev => ({ ...prev, [taskId]: true }))
+      const res = await fetch(`/api/queues/tasks/${taskId}/cancel`, { method: 'POST' })
+      if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText)
+        import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Cancel failed', message: text || res.statusText, type: 'error' })).catch(() => null)
+      } else {
+        import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Canceled', message: `Task #${taskId} canceled`, type: 'success' })).catch(() => null)
+        await refresh()
+      }
+    } catch (e) {
+      import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Cancel failed', message: String(e), type: 'error' })).catch(() => null)
+    } finally {
+      setCanceling(prev => ({ ...prev, [taskId]: false }))
+    }
+  }
+
   return (
-    <div className="p-6">
+    <div className="w-full max-w-full mx-auto space-y-6 px-4 sm:px-6 lg:px-8 py-6">
+      <div className="bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold">Queues</h1>
+        <h1 className="text-xl font-semibold">
+          <span className="text-primary-500">Status:</span>
+          <span className={`ml-2 ${connected ? 'text-green-600' : 'text-red-500'}`}>{connected ? 'Connected' : 'Disconnected'}</span>
+        </h1>
         <div className="flex items-center gap-4">
-          <button onClick={doClearQueues} disabled={isClearing} className="px-3 py-1 text-sm rounded border border-red-700 text-red-300 hover:bg-red-700/10">{isClearing ? 'Clearing…' : 'Clear all queues'}</button>
-          <div className={`text-sm ${connected ? 'text-green-600' : 'text-red-500'}`}>{connected ? 'Connected' : 'Disconnected'}</div>
+          <button onClick={doClearQueues} disabled={isClearing} className="px-3 py-1 text-sm rounded border border-red-700 text-red-300 hover:bg-red-700/10">{isClearing ? 'Clearing…' : 'Clear all'}</button>
         </div>
       </div>
 
@@ -325,17 +474,29 @@ export default function Queues() {
         </nav>
       </div>
 
-      <div className="space-y-3">
-        {(activeTab === 'current' ? currentTasks : historyTasks).map(t => renderTask(t as unknown as Record<string, unknown>))}
-        { (activeTab === 'current' ? currentTasks : historyTasks).length === 0 && (
-          <div className="text-sm text-gray-500">No tasks</div>
-        )}
+      <div className="p-4">
+        <div className="space-y-3">
+          {(activeTab === 'current' ? currentTasks : historyTasks).map(t => renderTask(t as unknown as Record<string, unknown>))}
+          { (activeTab === 'current' ? currentTasks : historyTasks).length === 0 && (
+            <div className="text-sm text-gray-500">No tasks</div>
+          )}
+        </div>
+      </div>
       </div>
 
       {modalMovieId && (
         <MovieDetail movieId={modalMovieId} onClose={handleCloseModal} />
       )}
 
+      <ConfirmDialog
+        isOpen={cancelConfirm.isOpen}
+        title="Cancel Task"
+        message={`Are you sure you want to cancel task #${cancelConfirm.taskId}? This will cancel all queued/running items in the task.`}
+        confirmLabel="Cancel Task"
+        variant="danger"
+        onConfirm={async () => { await performCancel() }}
+        onCancel={() => setCancelConfirm({ isOpen: false })}
+      />
 
     </div>
   )

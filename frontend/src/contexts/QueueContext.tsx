@@ -114,8 +114,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         try {
           console.debug('[queues] Received init event')
           const payload = (ev as MessageEvent).data as string
-          const data = JSON.parse(payload)
-          setTasks(data as QueueTask[])
+          const data = JSON.parse(payload) as QueueTask[]
+          // Sort tasks by numeric id so UI shows tasks in consistent order (#2, #3, #4...)
+          data.sort((a, b) => Number(a.id) - Number(b.id))
+          setTasks(data)
         } catch (e) {
           console.debug('[queues] Failed to parse init payload', e)
         }
@@ -129,7 +131,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           setTasks((prev) => {
             const prevTask = prev.find(t => t.id === data.id)
             const other = prev.filter(t => t.id !== data.id)
-            const newList = [data, ...other].sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+            // Maintain a stable order sorted by numeric task id (ascending)
+            const newList = [data, ...other].sort((a, b) => Number(a.id) - Number(b.id))
 
             // Notify on status changes to completed/failed
             try {

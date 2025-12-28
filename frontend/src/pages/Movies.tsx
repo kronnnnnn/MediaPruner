@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
   Filter, SortAsc, SortDesc, Search, HardDrive, Loader2, RefreshCw, 
@@ -66,6 +67,38 @@ export default function Movies() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchInput, setSearchInput] = useState('')
+
+  // Initialize search from URL query param (so global navbar searches navigate here)
+  const location = useLocation()
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(location.search)
+      const q = params.get('search') || ''
+      if (q !== searchQuery) {
+        setSearchQuery(q)
+        setSearchInput(q)
+      }
+
+      // Allow opening a movie by either query param or navigation state so
+      // the modal will open reliably when coming from the navbar search
+      const openMovie = params.get('open_movie') || (location.state as any)?.open_movie
+      if (openMovie) {
+        const id = Number(openMovie)
+        if (id) {
+          ;(async () => {
+            try {
+              const res = await moviesApi.getMovie(id)
+              setSelectedMovie(res.data)
+            } catch (e) {
+              // ignore
+            }
+          })()
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [location])
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null)
   const [showColumnSettings, setShowColumnSettings] = useState(false)
   const columnSettingsRef = useRef<HTMLDivElement>(null)
