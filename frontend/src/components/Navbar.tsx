@@ -108,7 +108,7 @@ export default function Navbar() {
                         <ul>
                           {suggestions.movies.map(m => (
                             <li key={`m-${m.id}`}>
-                              <button onClick={() => { logger.navigation(`/movies?open_movie=${m.id}`, 'Navbar search select movie', 'Navbar'); navigate(`/movies?open_movie=${m.id}`, { state: { open_movie: m.id } }); setShowSuggestions(false); }} className="w-full text-left px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">{m.title}</button>
+                              <button onClick={() => { logger.navigation(`/movies?open_movie=${m.id}`, 'Navbar search select movie', 'Navbar'); navigate(`/movies?open_movie=${m.id}`, { state: { open_movie: m.id } }); setSearchQuery(''); setSuggestions(null); setShowSuggestions(false); }} className="w-full text-left px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">{m.title}</button>
                             </li>
                           ))}
                         </ul>
@@ -118,7 +118,7 @@ export default function Navbar() {
                         <ul>
                           {suggestions.tvshows.map(s => (
                             <li key={`s-${s.id}`}>
-                              <button onClick={() => { logger.navigation(`/tvshows/${s.id}`, 'Navbar search select tvshow', 'Navbar'); navigate(`/tvshows/${s.id}`); setShowSuggestions(false); }} className="w-full text-left px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">{s.title}</button>
+                              <button onClick={() => { logger.navigation(`/tvshows/${s.id}`, 'Navbar search select tvshow', 'Navbar'); navigate(`/tvshows/${s.id}`); setSearchQuery(''); setSuggestions(null); setShowSuggestions(false); }} className="w-full text-left px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">{s.title}</button>
                             </li>
                           ))}
                         </ul>
