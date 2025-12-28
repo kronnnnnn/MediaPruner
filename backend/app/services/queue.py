@@ -686,9 +686,82 @@ class QueueWorker:
                         media_type = payload.get('media_type', 'movie')
                         if media_type == 'movie':
                             results = await asyncio.to_thread(scan_movie_directory, Path(path))
+                            # For movies we currently only return the count
+                            item.result = json.dumps({'found': len(results)})
                         else:
+                            # For TV shows we want to persist discovered shows/episodes and return a detailed result
                             results = await asyncio.to_thread(scan_tvshow_directory, Path(path))
-                        item.result = json.dumps({'found': len(results)})
+                            from app.models import TVShow, Episode
+
+                            found_shows = []
+                            new_show_ids: list[int] = []
+                            new_episode_ids: list[int] = []
+
+                            for parsed_show in results:
+                                # Check if show exists by folder_path
+                                exist_q = await session.execute(select(TVShow).where(TVShow.folder_path == parsed_show.folder_path))
+                                show = exist_q.scalar_one_or_none()
+                                added_show = False
+                                if not show:
+                                    show = TVShow(
+                                        library_path_id=None,
+                                        folder_path=parsed_show.folder_path,
+                                        folder_name=parsed_show.folder_name,
+                                        title=parsed_show.title,
+                                        episode_count=len(parsed_show.episodes),
+                                        season_count=len(set(e.season_number for e in parsed_show.episodes))
+                                    )
+                                    session.add(show)
+                                    await session.flush()
+                                    added_show = True
+                                    new_show_ids.append(show.id)
+
+                                # Check and add episodes
+                                added_eps = 0
+                                for parsed_ep in parsed_show.episodes:
+                                    ep_exists_q = await session.execute(select(Episode).where(Episode.file_path == parsed_ep.file_path))
+                                    if not ep_exists_q.scalar_one_or_none():
+                                        episode = Episode(
+                                            tvshow_id=show.id,
+                                            file_path=parsed_ep.file_path,
+                                            file_name=parsed_ep.file_name,
+                                            file_size=parsed_ep.file_size,
+                                            season_number=parsed_ep.season_number,
+                                            episode_number=parsed_ep.episode_number,
+                                            title=parsed_ep.episode_title,
+                                            subtitle_path=parsed_ep.subtitle_path,
+                                            has_subtitle=parsed_ep.subtitle_path is not None)
+                                        session.add(episode)
+                                        await session.flush()
+                                        new_episode_ids.append(episode.id)
+                                        added_eps += 1
+
+                                found_shows.append({
+                                    'title': parsed_show.title,
+                                    'folder_path': parsed_show.folder_path,
+                                    'added': added_show,
+                                    'new_episodes': added_eps,
+                                    'show_id': show.id
+                                })
+
+                            # Commit DB changes so created shows/episodes are persisted
+                            await session.commit()
+
+                            # Enqueue post-scan tasks: analyze episodes first, then refresh metadata for shows
+                            try:
+                                if new_episode_ids:
+                                    # enqueue analyze for new episodes
+                                    analyze_items = [{'episode_id': eid} for eid in new_episode_ids]
+                                    analyze_task = await create_task('analyze', analyze_items, meta={'path': path})
+                                if new_show_ids:
+                                    # enqueue refresh_metadata for new shows
+                                    refresh_items = [{'show_id': sid} for sid in new_show_ids]
+                                    refresh_task = await create_task('refresh_metadata', refresh_items, meta={'path': path})
+                            except Exception:
+                                logger.exception('Failed to enqueue post-scan tasks')
+
+                            item.result = json.dumps({'found': len(results), 'shows': found_shows})
+
                         item.status = QueueStatus.COMPLETED
                         task.completed_items = (task.completed_items or 0) + 1
 

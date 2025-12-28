@@ -262,7 +262,35 @@ export default function Queues() {
                                     </div>
                                   )
                                 }
+
+                                // If result is JSON with structured scan info, render shows list
                                 if (result) {
+                                  try {
+                                    const parsed = typeof result === 'string' ? JSON.parse(result) : result
+                                    if (parsed && parsed.shows && Array.isArray(parsed.shows)) {
+                                      return (
+                                        <div className="mt-2 text-sm">
+                                          <div className="text-xs text-gray-400 mb-2">Found Shows</div>
+                                          <div className="space-y-2">
+                                            {parsed.shows.map((s: any, idx: number) => (
+                                              <div key={idx} className="p-2 bg-gray-900/30 rounded flex items-center justify-between">
+                                                <div>
+                                                  <div className="text-sm font-semibold text-gray-100">{s.title}{s.added ? ' (added)' : ''}</div>
+                                                  <div className="text-xs text-gray-400">{s.folder_path}{s.new_episodes ? ` • ${s.new_episodes} new episode${s.new_episodes !== 1 ? 's' : ''}` : ''}</div>
+                                                </div>
+                                                {s.show_id ? (
+                                                  <div className="text-xs text-gray-400">#{s.show_id}</div>
+                                                ) : null}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )
+                                    }
+                                  } catch (e) {
+                                    // fall back to raw display
+                                  }
+
                                   return (
                                     <div className="mt-1 text-xs text-gray-500">Result: <code className="break-words">{String(typeof result === 'string' ? result : JSON.stringify(result))}</code></div>
                                   )
