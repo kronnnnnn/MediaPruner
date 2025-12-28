@@ -1,4 +1,4 @@
-import { Search, RefreshCw, Bell, Sun, Moon } from 'lucide-react'
+import { Search, RefreshCw, Bell, Sun, Moon, X } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useTheme } from '../contexts/ThemeContext'
 import logger from '../services/logger'
@@ -15,6 +15,7 @@ export default function Navbar() {
   const { notifications, markRead, clearAll } = useNotifications()
   const [showNotifications, setShowNotifications] = useState(false)
   const dropdownRef = useRef<HTMLDivElement | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
   const navigate = useNavigate()
 
   // Submit global search from navbar by pressing Enter (navigates to Movies page with search param)
@@ -87,14 +88,32 @@ export default function Navbar() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <div className="relative">
             <input
+              ref={inputRef}
               type="text"
               placeholder="Search movies, TV shows..."
               value={searchQuery}
               onKeyDown={handleNavbarSearchKey}
               onChange={(e) => setSearchQuery(e.target.value)}
               onFocus={() => { if (suggestions) setShowSuggestions(true) }}
-              className="w-full pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
+              className="w-full pl-10 pr-10 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
             />
+
+            {searchQuery && searchQuery.trim().length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('')
+                  setSuggestions(null)
+                  setShowSuggestions(false)
+                  if (inputRef.current) inputRef.current.focus()
+                }}
+                aria-label="Clear search"
+                title="Clear"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 flex items-center justify-center text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
 
             {showSuggestions && suggestions && (
               <div className="absolute left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50" ref={dropdownRef}>
