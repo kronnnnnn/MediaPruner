@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQueues } from '../contexts/QueueContext'
 import { Check, X, Clock, Play, Trash2, Copy, Film, Tv, ChevronRight, ChevronDown } from 'lucide-react' 
 import MovieDetail from '../components/MovieDetail'
+import ConfirmDialog from '../components/ConfirmDialog'
 export default function Queues() {
   const { tasks, connected, refresh } = useQueues()
   const [activeTab, setActiveTab] = useState<'current'|'history'>('current')
@@ -11,6 +12,7 @@ export default function Queues() {
   const [loadingItems, setLoadingItems] = useState<Record<number, boolean>>({})
   const [taskDetails, setTaskDetails] = useState<Record<number, Record<string, unknown>>>({})
   const [modalMovieId, setModalMovieId] = useState<number | null>(null)
+  const [cancelConfirm, setCancelConfirm] = useState<{ isOpen: boolean; taskId?: number; taskTitle?: string }>({ isOpen: false })
   const [canceling, setCanceling] = useState<Record<number, boolean>>({})
 
   const [isClearing, setIsClearing] = useState(false)
@@ -61,13 +63,13 @@ export default function Queues() {
     const hasFailed = Array.isArray(t.items) && t.items.some((i) => String((i as unknown as Record<string, unknown>).status).toLowerCase() === 'failed')
     // Treat a completed task with any failed items as history
     if (s === 'completed' && hasFailed) return false
-    return !['completed', 'deleted'].includes(s)
+    return !['completed', 'deleted', 'canceled'].includes(s)
   })
 
   const historyTasks = tasks.filter(t => {
     const s = String(t.status).toLowerCase()
     const hasFailed = Array.isArray(t.items) && t.items.some((i) => String((i as unknown as Record<string, unknown>).status).toLowerCase() === 'failed')
-    return ['completed', 'deleted', 'failed'].includes(s) || (s === 'completed' && hasFailed)
+    return ['completed', 'deleted', 'failed', 'canceled'].includes(s) || (s === 'completed' && hasFailed)
   })
 
   const statusOrder = ['running', 'queued', 'completed', 'failed', 'canceled']
@@ -280,47 +282,31 @@ export default function Queues() {
                         )
                       })}
 
-                      {/* Cancel/Delete button for the whole task detail area */}
-                      <div className="flex justify-end mt-3">
-                        {(() => {
-                          const s = String(t.status).toLowerCase()
-                          const taskId = Number(t.id)
-                          if (['running', 'queued'].includes(s)) {
-                            return (
-                              <button
-                                onClick={async () => {
-                                  if (!confirm(`Cancel task #${taskId}? This will mark it as canceled.`)) return
-                                  try {
-                                    setCanceling(prev => ({ ...prev, [taskId]: true }))
-                                    const res = await fetch(`/api/queues/tasks/${taskId}/cancel`, { method: 'POST' })
-                                    if (!res.ok) {
-                                      const text = await res.text().catch(() => res.statusText)
-                                      import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Cancel failed', message: text || res.statusText, type: 'error' })).catch(() => null)
-                                    } else {
-                                      import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Canceled', message: `Task #${taskId} canceled`, type: 'success' })).catch(() => null)
-                                      await refresh()
-                                    }
-                                  } catch (e) {
-                                    import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Cancel failed', message: String(e), type: 'error' })).catch(() => null)
-                                  } finally {
-                                    setCanceling(prev => ({ ...prev, [taskId]: false }))
-                                  }
-                                }}
-                                disabled={Boolean(canceling[Number(t.id)])}
-                                className="px-3 py-1 text-sm rounded border border-red-700 text-red-300 hover:bg-red-700/10"
-                              >
-                                {canceling[taskId] ? 'Canceling…' : 'Delete'}
-                              </button>
-                            )
-                          }
-                          return null
-                        })()}
-                      </div>
+
 
                     </div>
                   )
                 })
               })() }
+            </div>
+
+            <div className="flex justify-end mt-3">
+              {(() => {
+                const s = String(t.status).toLowerCase()
+                const taskId = Number(t.id)
+                if (['running', 'queued'].includes(s)) {
+                  return (
+                    <button
+                      onClick={() => setCancelConfirm({ isOpen: true, taskId: taskId, taskTitle: taskTitle(t) })}
+                      disabled={Boolean(canceling[taskId])}
+                      className="px-3 py-1 text-sm rounded border border-red-700 text-red-300 hover:bg-red-700/10"
+                    >
+                      {canceling[taskId] ? 'Canceling…' : 'Cancel Task'}
+                    </button>
+                  )
+                }
+                return null
+              })()}
             </div>
           </div>
         )}
@@ -373,6 +359,29 @@ export default function Queues() {
     }
     setIsClearing(false)
   }
+
+  // Perform the cancel operation after user confirms via ConfirmDialog
+  async function performCancel() {
+    const taskId = cancelConfirm.taskId
+    if (!taskId) return
+    setCancelConfirm({ isOpen: false })
+    try {
+      setCanceling(prev => ({ ...prev, [taskId]: true }))
+      const res = await fetch(`/api/queues/tasks/${taskId}/cancel`, { method: 'POST' })
+      if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText)
+        import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Cancel failed', message: text || res.statusText, type: 'error' })).catch(() => null)
+      } else {
+        import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Canceled', message: `Task #${taskId} canceled`, type: 'success' })).catch(() => null)
+        await refresh()
+      }
+    } catch (e) {
+      import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Cancel failed', message: String(e), type: 'error' })).catch(() => null)
+    } finally {
+      setCanceling(prev => ({ ...prev, [taskId]: false }))
+    }
+  }
+
   return (
     <div className="w-full max-w-full mx-auto space-y-6 px-4 sm:px-6 lg:px-8 py-6">
       <div className="bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
@@ -407,6 +416,15 @@ export default function Queues() {
         <MovieDetail movieId={modalMovieId} onClose={handleCloseModal} />
       )}
 
+      <ConfirmDialog
+        isOpen={cancelConfirm.isOpen}
+        title="Cancel Task"
+        message={`Are you sure you want to cancel task #${cancelConfirm.taskId}? This will cancel all queued/running items in the task.`}
+        confirmLabel="Cancel Task"
+        variant="danger"
+        onConfirm={async () => { await performCancel() }}
+        onCancel={() => setCancelConfirm({ isOpen: false })}
+      />
 
     </div>
   )
