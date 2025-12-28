@@ -273,14 +273,19 @@ export default function Queues() {
 
                                 // TV show / episode item
                                 if (Boolean(it.episode_label) || Boolean(it.show_title) || (payloadParsed && ((payloadParsed as Record<string, unknown>).episode_id || (payloadParsed as Record<string, unknown>).show_id))) {
-                                  const label = String(it.episode_label ?? it.episode_title ?? it.show_title ?? ((payloadParsed as Record<string, unknown>).show_id ? `#${(payloadParsed as Record<string, unknown>).show_id}` : ''))
-                                  const showUrl = it.show_url as string | undefined
+                                  const episodeLabel = String(it.episode_label ?? it.episode_title ?? '')
+                                  const showTitle = String(it.show_title ?? (payloadParsed && (payloadParsed as Record<string, unknown>).show_title) ?? '')
                                   return (
                                     <div className="mt-2 text-sm text-gray-300 flex items-center gap-2">
                                       <Tv className="w-4 h-4 text-gray-400" />
                                       <div>
                                         <div className="text-sm font-semibold">
-                                          {showUrl ? <Link className="hover:underline text-primary-400" to={showUrl}>{label}</Link> : label}
+                                          {episodeLabel}
+                                          {showTitle ? (
+                                            <span className="ml-2 text-xs text-gray-400">(
+                                              {it.show_url ? <Link className="text-primary-400 hover:underline" to={String(it.show_url)}>{showTitle}</Link> : showTitle}
+                                            )</span>
+                                          ) : null}
                                         </div>
                                       </div>
                                     </div>
