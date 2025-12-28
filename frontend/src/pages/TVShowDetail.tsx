@@ -56,9 +56,9 @@ export default function TVShowDetailPage() {
   const [muxPreviewError, setMuxPreviewError] = useState<string | null>(null)
   const [muxProgress, setMuxProgress] = useState<{ current: number; total: number } | null>(null)
   const [isMuxing, setIsMuxing] = useState(false)
-  const [metadataProvider, setMetadataProvider] = useState<'auto' | 'tmdb' | 'omdb'>('auto')
   const [searching, setSearching] = useState(false)
   const [searchResults, setSearchResults] = useState<Record<string, unknown>[] | null>(null)
+  // Which provider supplied the current search results (TMDB preferred, fallback to OMDB)
   const [searchProvider, setSearchProvider] = useState<'tmdb' | 'omdb' | null>(null)
   const [showSearchModal, setShowSearchModal] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<Record<string, unknown> | null>(null)
@@ -240,44 +240,101 @@ export default function TVShowDetailPage() {
     navigate('/tvshows')
   }
 
-  const handleScrapeShow = () => {
-    logger.buttonClick('Scrape Show', 'TVShowDetail', { provider: metadataProvider })
-    const provider = metadataProvider === 'auto' ? undefined : metadataProvider
+  const handleScrapeShow = async () => {
+    logger.buttonClick('Scrape Show', 'TVShowDetail')
 
-    // Preflight search at provider to surface candidates before enqueuing
     setSearching(true)
     setSearchResults(null)
-    setSearchProvider((provider as 'tmdb' | 'omdb') || 'tmdb')
-    tvShowsApi.searchTVShow(showId, provider as 'tmdb' | 'omdb' | undefined).then(res => {
+
+    try {
+      // Try TMDB first
+      setSearchProvider('tmdb')
+      const res = await tvShowsApi.searchTVShow(showId, 'tmdb')
       const data = (res as unknown as Record<string, unknown>)?.data as Record<string, unknown> | undefined
       const results = (data?.results as unknown[] | undefined) ?? []
-      setSearchResults(results as Record<string, unknown>[])
-      setShowSearchModal(true)
-    }).catch((err: unknown) => {
-      const e = err as Record<string, unknown>
-      // If search fails, fall back to enqueuing and show error toast
-      showToast('Search Failed', (e?.response as Record<string, unknown> | undefined)?.data as string | undefined || 'Search failed, enqueuing anyway', 'warning')
-      scrapeMutation.mutate(provider)
-    }).finally(() => setSearching(false))
+      if (results.length > 0) {
+        setSearchResults(results as Record<string, unknown>[])
+        setShowSearchModal(true)
+        return
+      }
+
+      // If TMDB returned no results, try OMDB
+      setSearchProvider('omdb')
+      const res2 = await tvShowsApi.searchTVShow(showId, 'omdb')
+      const data2 = (res2 as unknown as Record<string, unknown>)?.data as Record<string, unknown> | undefined
+      const results2 = (data2?.results as unknown[] | undefined) ?? []
+      if (results2.length > 0) {
+        setSearchResults(results2 as Record<string, unknown>[])
+        setShowSearchModal(true)
+        return
+      }
+
+      // No candidates found; enqueue a scrape with TMDB first, fallback to OMDB on error
+      try {
+        await scrapeMutation.mutateAsync('tmdb')
+        // mutateAsync handled success toast via onSuccess; nothing else to do
+      } catch (errTmdb) {
+        // If TMDB scrape errors, try OMDB
+        try {
+          await scrapeMutation.mutateAsync('omdb')
+        } catch (errOmdb) {
+          const e = errOmdb as Record<string, unknown>
+          showToast('Scrape Failed', (e?.response as Record<string, unknown> | undefined)?.data as string | undefined || 'Failed to enqueue scrape', 'error')
+        }
+      }
+    } catch (err: unknown) {
+      // Network or unexpected error during search; attempt a TMDB scrape before failing over
+      try {
+        await scrapeMutation.mutateAsync('tmdb')
+      } catch (errTmdb: unknown) {
+        try {
+          await scrapeMutation.mutateAsync('omdb')
+        } catch (errOmdb: unknown) {
+          const e = errOmdb as Record<string, unknown>
+          showToast('Scrape Failed', (e?.response as Record<string, unknown> | undefined)?.data as string | undefined || 'Failed to enqueue scrape', 'error')
+        }
+      }
+    } finally {
+      setSearching(false)
+    }
   }
 
   const handleConfirmSearch = async () => {
-    // If a candidate selected, enqueue with tmdb_id/imdb_id override
-    const provider = metadataProvider === 'auto' ? undefined : metadataProvider
+    // Determine the provider to use: prefer the one that supplied search results, otherwise try TMDB first and fallback to OMDB on error
+    const preferredProvider = searchProvider ?? 'tmdb'
+
     try {
       let res: unknown = null
       if (selectedCandidate) {
         const body: Record<string, unknown> = {}
         if (selectedCandidate.tmdb_id) body.tmdb_id = selectedCandidate.tmdb_id
         if (selectedCandidate.imdb_id) body.imdb_id = selectedCandidate.imdb_id
-        res = await tvShowsApi.scrapeTVShow(showId, body, provider as 'tmdb' | 'omdb' | undefined)
+
+        // Try preferred provider first, then fallback on error
+        try {
+          res = await tvShowsApi.scrapeTVShow(showId, body, preferredProvider)
+        } catch (errPref) {
+          // Try the other provider
+          const other = preferredProvider === 'tmdb' ? 'omdb' : 'tmdb'
+          res = await tvShowsApi.scrapeTVShow(showId, body, other)
+        }
       } else if (manualTitle) {
         const body: Record<string, unknown> = { title: manualTitle }
         if (manualYear) body.year = parseInt(manualYear)
-        res = await tvShowsApi.scrapeTVShow(showId, body, provider as 'tmdb' | 'omdb' | undefined)
+        try {
+          res = await tvShowsApi.scrapeTVShow(showId, body, preferredProvider)
+        } catch (errPref) {
+          const other = preferredProvider === 'tmdb' ? 'omdb' : 'tmdb'
+          res = await tvShowsApi.scrapeTVShow(showId, body, other)
+        }
       } else {
-        // No selection - enqueue normally
-        res = await tvShowsApi.scrapeTVShow(showId, undefined, provider as 'tmdb' | 'omdb' | undefined)
+        // No selection - enqueue normally, preferring TMDB first, then OMDB on error
+        try {
+          res = await tvShowsApi.scrapeTVShow(showId, undefined, preferredProvider)
+        } catch (errPref) {
+          const other = preferredProvider === 'tmdb' ? 'omdb' : 'tmdb'
+          res = await tvShowsApi.scrapeTVShow(showId, undefined, other)
+        }
       }
 
       const data = (res as Record<string, unknown>)?.data as Record<string, unknown> | undefined
@@ -490,19 +547,8 @@ export default function TVShowDetailPage() {
         <div className="bg-gray-800 rounded-lg p-4 mb-6">
           <h3 className="text-white font-medium mb-3">Actions</h3>
           <div className="flex flex-wrap gap-3 items-center">
-            {/* Provider selector + Analyze + Refresh button group */}
+            {/* Analyze + Refresh button group (provider selection removed; TMDB is attempted first, then fallback to OMDB) */}
             <div className="flex items-stretch">
-              <select
-                value={metadataProvider}
-                onChange={(e) => setMetadataProvider(e.target.value as 'auto' | 'tmdb' | 'omdb')}
-                disabled={isProcessing}
-                className="px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-600 text-white rounded-l-lg border-r border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer"
-              >
-                <option value="auto">Auto</option>
-                <option value="tmdb">TMDB</option>
-                <option value="omdb">OMDb</option>
-              </select>
-
               <button
                 onClick={handleAnalyzeAll}
                 disabled={isProcessing}
@@ -512,10 +558,10 @@ export default function TVShowDetailPage() {
                 {analyzeAllMutation.isPending ? 'Analyzing...' : 'Analyze All Episodes'}
               </button>
 
-              <button
+n              <button
                 onClick={handleScrapeShow}
                 disabled={isProcessing}
-                className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-600 text-white rounded-r-lg transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
               >
                 <RefreshCw className={`w-4 h-4 ${scrapeMutation.isPending ? 'animate-spin' : ''}`} />
                 {scrapeMutation.isPending ? 'Refreshing...' : 'Refresh Metadata'}
