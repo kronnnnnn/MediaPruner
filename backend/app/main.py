@@ -74,6 +74,10 @@ app.include_router(
     settings_router.router,
     prefix="/api/settings",
     tags=["Settings"])
+
+# Simple search endpoint for combined movie/TV suggestions
+from app.routers import search as search_router
+app.include_router(search_router.router, prefix="/api")
 app.include_router(
     tautulli.router,
     prefix="/api/integrations/tautulli",
