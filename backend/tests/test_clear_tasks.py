@@ -1,5 +1,4 @@
 import pytest
-import pytest_asyncio
 from sqlalchemy import select, update, func
 from fastapi import HTTPException
 
@@ -12,9 +11,8 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_clear_all_scope_purges_every_status(temp_db):
-    # Create a queued task
-    t1 = await create_task('scan', [{'path': '/tmp/one'}])
-    # Create another task and mark it completed
+    # Create queued tasks
+    await create_task('scan', [{'path': '/tmp/one'}])
     t2 = await create_task('refresh_metadata', [{'movie_id': 1}])
 
     async with database.async_session() as session:
@@ -34,8 +32,8 @@ async def test_clear_all_scope_purges_every_status(temp_db):
 
 async def test_default_api_clear_uses_all(temp_db):
     # Create tasks in different statuses
-    t1 = await create_task('scan', [{'path': '/tmp/a'}])
-    t2 = await create_task('scan', [{'path': '/tmp/b'}])
+    await create_task('scan', [{'path': '/tmp/a'}])
+    await create_task('scan', [{'path': '/tmp/b'}])
 
     # Call the router function without providing scope (should default to 'all')
     # Since api_clear_tasks raises HTTPException on error, calling it should return a dict

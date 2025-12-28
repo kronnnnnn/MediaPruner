@@ -1,8 +1,6 @@
 import pytest
-import pytest_asyncio
 
 from app.routers.search import api_search
-from app.services.queue import create_task
 import app.database as database
 from app.models import Movie, TVShow
 

@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.database import init_db
-from app.routers import movies, tvshows, library, health, settings as settings_router, tautulli
+from app.routers import movies, tvshows, library, health, search, settings as settings_router, tautulli
 from app.routers import plex
 from app.routers import queues as queues_router
 from app.services.logging_service import setup_database_logging
@@ -75,9 +75,8 @@ app.include_router(
     prefix="/api/settings",
     tags=["Settings"])
 
-# Simple search endpoint for combined movie/TV suggestions
-from app.routers import search as search_router
-app.include_router(search_router.router, prefix="/api")
+# Search endpoint
+app.include_router(search.router, prefix="/api")
 app.include_router(
     tautulli.router,
     prefix="/api/integrations/tautulli",

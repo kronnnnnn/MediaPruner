@@ -786,7 +786,7 @@ class QueueWorker:
                                     libs = lib_q.scalars().all()
                                     if libs:
                                         # Find longest matching prefix
-                                        libs.sort(key=lambda l: len(l.path), reverse=True)
+                                        libs.sort(key=lambda lib: len(lib.path), reverse=True)
                                         for lp in libs:
                                             try:
                                                 if str(parsed_show.folder_path).startswith(lp.path):
@@ -876,12 +876,12 @@ class QueueWorker:
                                 # Enqueue analyze for episodes first
                                 if analyze_episode_ids:
                                     analyze_items = [{'episode_id': eid} for eid in analyze_episode_ids]
-                                    analyze_task = await create_task('analyze', analyze_items, meta={'path': path})
+                                    await create_task('analyze', analyze_items, meta={'path': path})
 
                                 # Then enqueue refresh_metadata for shows
                                 if refresh_show_ids:
                                     refresh_items = [{'show_id': sid} for sid in refresh_show_ids]
-                                    refresh_task = await create_task('refresh_metadata', refresh_items, meta={'path': path})
+                                    await create_task('refresh_metadata', refresh_items, meta={'path': path})
 
                             except Exception:
                                 logger.exception('Failed to enqueue post-scan tasks')
