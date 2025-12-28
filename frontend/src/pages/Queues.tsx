@@ -11,6 +11,7 @@ export default function Queues() {
   const [loadingItems, setLoadingItems] = useState<Record<number, boolean>>({})
   const [taskDetails, setTaskDetails] = useState<Record<number, Record<string, unknown>>>({})
   const [modalMovieId, setModalMovieId] = useState<number | null>(null)
+  const [canceling, setCanceling] = useState<Record<number, boolean>>({})
 
   const [isClearing, setIsClearing] = useState(false)
 
@@ -278,6 +279,43 @@ export default function Queues() {
                           </div>
                         )
                       })}
+
+                      {/* Cancel/Delete button for the whole task detail area */}
+                      <div className="flex justify-end mt-3">
+                        {(() => {
+                          const s = String(t.status).toLowerCase()
+                          const taskId = Number(t.id)
+                          if (['running', 'queued'].includes(s)) {
+                            return (
+                              <button
+                                onClick={async () => {
+                                  if (!confirm(`Cancel task #${taskId}? This will mark it as canceled.`)) return
+                                  try {
+                                    setCanceling(prev => ({ ...prev, [taskId]: true }))
+                                    const res = await fetch(`/api/queues/tasks/${taskId}/cancel`, { method: 'POST' })
+                                    if (!res.ok) {
+                                      const text = await res.text().catch(() => res.statusText)
+                                      import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Cancel failed', message: text || res.statusText, type: 'error' })).catch(() => null)
+                                    } else {
+                                      import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Canceled', message: `Task #${taskId} canceled`, type: 'success' })).catch(() => null)
+                                      await refresh()
+                                    }
+                                  } catch (e) {
+                                    import('../services/notifications').then(mod => mod.addNotificationToStore({ title: 'Cancel failed', message: String(e), type: 'error' })).catch(() => null)
+                                  } finally {
+                                    setCanceling(prev => ({ ...prev, [taskId]: false }))
+                                  }
+                                }}
+                                disabled={Boolean(canceling[Number(t.id)])}
+                                className="px-3 py-1 text-sm rounded border border-red-700 text-red-300 hover:bg-red-700/10"
+                              >
+                                {canceling[taskId] ? 'Canceling…' : 'Delete'}
+                              </button>
+                            )
+                          }
+                          return null
+                        })()}
+                      </div>
 
                     </div>
                   )
