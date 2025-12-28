@@ -43,8 +43,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       console.debug('[queues] Fetching initial snapshot via HTTP /api/queues/tasks', { limit })
       const res = await fetch(`/api/queues/tasks?limit=${limit}`)
       if (res.ok) {
-        const data = await res.json()
-        setTasks(data as QueueTask[])
+        const data = await res.json() as QueueTask[]
+        // Ensure tasks are sorted by numeric id ascending (oldest first)
+        data.sort((a, b) => Number(a.id) - Number(b.id))
+        setTasks(data)
         console.debug('[queues] Loaded initial snapshot via HTTP', data.length)
       } else {
         console.debug('[queues] Failed to fetch initial snapshot', res.status)

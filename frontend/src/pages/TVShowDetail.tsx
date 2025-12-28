@@ -552,7 +552,7 @@ export default function TVShowDetailPage() {
               <button
                 onClick={handleAnalyzeAll}
                 disabled={isProcessing}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 text-white transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
               >
                 <HardDrive className={`w-4 h-4 ${analyzeAllMutation.isPending ? 'animate-spin' : ''}`} />
                 {analyzeAllMutation.isPending ? 'Analyzing...' : 'Analyze All Episodes'}
@@ -813,7 +813,7 @@ n              <button
                             return (
                               <>
                                 <div className="text-white font-medium">{title} {year ? `(${String(year)})` : ''}</div>
-                                {typeof overview === 'string' && <div className="text-sm text-gray-400 truncate">{overview}</div>}
+                                {typeof overview === 'string' && <div className="text-sm text-gray-400 max-h-20 overflow-auto break-words whitespace-normal">{overview}</div>}
                               </>
                             )
                           })()}
@@ -826,7 +826,7 @@ n              <button
             </div>
             <div className="flex items-center justify-end p-4 border-t border-gray-700 gap-3">
               <button onClick={closeSearchModal} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded">Cancel</button>
-              <button onClick={handleConfirmSearch} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded">Enqueue Scrape</button>
+              <button onClick={handleConfirmSearch} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded">Download Metadata</button>
             </div>
           </div>
         </div>
