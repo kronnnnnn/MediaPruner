@@ -219,46 +219,84 @@ async def list_tasks(limit: int = 50):
                     for r in q.fetchall():
                         movies_map[r[0]] = r[1]
 
-                # Attach previews (from first payload and task meta)
+                # For richer previews, inspect up to a chunk of item payloads per task and gather show/movie ids
+                task_preview_ids: dict[int, dict] = {}
                 for t in tasks:
-                    attached = False
-                    payload = first_items.get(t['id'])
-                    if payload:
-                        try:
-                            pp = json.loads(payload)
-                            if isinstance(pp, dict):
-                                if pp.get('show_id'):
-                                    sid = int(pp.get('show_id'))
-                                    t.setdefault('meta_preview', {})['show_id'] = sid
-                                    if sid in shows_map:
-                                        t.setdefault('meta_preview', {})['show_title'] = shows_map[sid]
-                                        attached = True
-                                if pp.get('movie_id'):
-                                    mid = int(pp.get('movie_id'))
-                                    t.setdefault('meta_preview', {})['movie_id'] = mid
-                                    if mid in movies_map:
-                                        t.setdefault('meta_preview', {})['movie_title'] = movies_map[mid]
-                                        attached = True
-                        except Exception:
-                            pass
+                    task_preview_ids[t['id']] = {'show_ids': [], 'movie_ids': [], 'path': None}
 
-                    # Also attach from explicit task meta if not attached yet
-                    if not attached and isinstance(t.get('meta'), dict):
-                        try:
-                            if t['meta'].get('show_id'):
-                                sid = int(t['meta'].get('show_id'))
-                                t.setdefault('meta_preview', {})['show_id'] = sid
-                                if sid in shows_map:
-                                    t.setdefault('meta_preview', {})['show_title'] = shows_map[sid]
-                                    attached = True
-                            if t['meta'].get('movie_id'):
-                                mid = int(t['meta'].get('movie_id'))
-                                t.setdefault('meta_preview', {})['movie_id'] = mid
-                                if mid in movies_map:
-                                    t.setdefault('meta_preview', {})['movie_title'] = movies_map[mid]
-                                    attached = True
-                        except Exception:
-                            pass
+                from app.models import QueueItem
+                for t in tasks:
+                    try:
+                        q = await session.execute(
+                            select(QueueItem.payload).where(QueueItem.task_id == t['id']).order_by(QueueItem.index).limit(50)
+                        )
+                        rows = q.fetchall()
+                        seen_shows = set()
+                        seen_movies = set()
+                        for r in rows:
+                            payload = r[0]
+                            if not payload:
+                                continue
+                            try:
+                                pp = json.loads(payload)
+                                if isinstance(pp, dict):
+                                    if pp.get('show_id'):
+                                        sid = int(pp.get('show_id'))
+                                        if sid not in seen_shows:
+                                            task_preview_ids[t['id']]['show_ids'].append(sid)
+                                            seen_shows.add(sid)
+                                    if pp.get('movie_id'):
+                                        mid = int(pp.get('movie_id'))
+                                        if mid not in seen_movies:
+                                            task_preview_ids[t['id']]['movie_ids'].append(mid)
+                                            seen_movies.add(mid)
+                                    if pp.get('path') and not task_preview_ids[t['id']]['path']:
+                                        task_preview_ids[t['id']]['path'] = pp.get('path')
+                            except Exception:
+                                continue
+                    except Exception:
+                        continue
+
+                # Merge show/movie ids to global sets for batch lookup
+                extra_show_ids = set()
+                extra_movie_ids = set()
+                for tid, ids in task_preview_ids.items():
+                    for s in ids['show_ids']:
+                        extra_show_ids.add(s)
+                    for m in ids['movie_ids']:
+                        extra_movie_ids.add(m)
+
+                # Fetch titles for all discovered show/movie ids
+                if extra_show_ids:
+                    from app.models import TVShow
+                    q = await session.execute(select(TVShow.id, TVShow.title).where(TVShow.id.in_(list(extra_show_ids))))
+                    for r in q.fetchall():
+                        shows_map[r[0]] = r[1]
+                if extra_movie_ids:
+                    from app.models import Movie
+                    q = await session.execute(select(Movie.id, Movie.title).where(Movie.id.in_(list(extra_movie_ids))))
+                    for r in q.fetchall():
+                        movies_map[r[0]] = r[1]
+
+                # Attach previews (titles list and counts) to tasks
+                for t in tasks:
+                    try:
+                        ids = task_preview_ids[t['id']]
+                        if ids['show_ids']:
+                            # Map to titles and include count
+                            titles = [shows_map.get(s, f"#{s}") for s in ids['show_ids']]
+                            t.setdefault('meta_preview', {})['show_titles'] = titles[:3]
+                            t.setdefault('meta_preview', {})['show_count'] = len(ids['show_ids'])
+                            t.setdefault('meta_preview', {})['show_ids'] = ids['show_ids'][:3]
+                        if ids['movie_ids'] and not t.get('meta_preview'):
+                            titles = [movies_map.get(m, f"#{m}") for m in ids['movie_ids']]
+                            t.setdefault('meta_preview', {})['movie_titles'] = titles[:3]
+                            t.setdefault('meta_preview', {})['movie_count'] = len(ids['movie_ids'])
+                            t.setdefault('meta_preview', {})['movie_ids'] = ids['movie_ids'][:3]
+                        if ids.get('path') and (not t.get('meta') or not isinstance(t.get('meta'), dict) or not t['meta'].get('path')):
+                            t.setdefault('meta', {})['path'] = ids['path']
+                    except Exception:
+                        pass
         except Exception:
             # fail silently - previews are optional
             pass

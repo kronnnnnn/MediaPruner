@@ -130,6 +130,18 @@ export default function Queues() {
     } catch (e) {
       // ignore
     }
+
+    // For scans, prefer folder name
+    try {
+      const p = taskSourceLabel(t)
+      if (String(t.type).toLowerCase() === 'scan' && p) {
+        const name = p.split(/[\\\/]/).filter(Boolean).pop() || p
+        return `${typeLabel} (${name})`
+      }
+    } catch (e) {
+      // ignore
+    }
+
     const path = taskSourceLabel(t)
     return path ? `${typeLabel} (${path})` : typeLabel
   }
@@ -147,6 +159,30 @@ export default function Queues() {
               <span className="cursor-pointer text-gray-400">{isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</span>
               <span className="ml-2">— {taskTitle(t)}</span>
             </div>
+            {(() => {
+              const preview = t.meta_preview as Record<string, any> | undefined
+              if (!preview || !preview.show_titles) return null
+              const titles: string[] = preview.show_titles || []
+              const ids: number[] = preview.show_ids || []
+              const count: number = preview.show_count || titles.length
+              return (
+                <div className="text-xs text-gray-400 mt-1">
+                  {titles.map((s: string, i: number) => (
+                    <span key={i} className="mr-1">
+                      {ids && ids[i] ? (
+                        <Link className="text-primary-400 hover:underline" to={`/tvshows/${ids[i]}`}>{s}</Link>
+                      ) : (
+                        <span className="text-gray-300">{s}</span>
+                      )}
+                      {i < (titles.length - 1) && <span className="text-gray-400">,</span>}
+                    </span>
+                  ))}
+                  {(count && count > titles.length) && (
+                    <span className="ml-1 text-xs text-gray-400">+{count - titles.length} more</span>
+                  )}
+                </div>
+              )
+            })()}
             <div className="text-xs text-gray-500 mt-1">Items: {String(t.total_items)} • Processed: {String(t.completed_items)}</div>
           </div>
           <div className="flex items-center gap-4">
