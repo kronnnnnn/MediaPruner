@@ -150,6 +150,194 @@ async def list_tasks(limit: int = 50):
 
             tasks.append(d)
 
+        # Attempt to provide a small preview for tasks by examining the first item's payload
+        try:
+            task_ids = [t['id'] for t in tasks]
+            if task_ids:
+                from sqlalchemy import select
+                from app.models import QueueItem
+
+                # Fetch first item per task (lowest index) and map payload
+                q = await session.execute(
+                    select(QueueItem.task_id, QueueItem.payload, QueueItem.index).where(QueueItem.task_id.in_(task_ids)).order_by(QueueItem.task_id, QueueItem.index)
+                )
+                rows = q.fetchall()
+                first_items = {}
+                seen = set()
+                for row in rows:
+                    task_id = row[0]
+                    if task_id in seen:
+                        continue
+                    seen.add(task_id)
+                    first_items[task_id] = row[1]
+
+                # Gather show_ids and movie_ids to look up titles in batch
+                show_ids = set()
+                movie_ids = set()
+                for t in tasks:
+                    # Also include show/movie ids from explicit task meta
+                    meta_info = t.get('meta')
+                    if isinstance(meta_info, dict):
+                        try:
+                            if meta_info.get('show_id'):
+                                show_ids.add(int(meta_info.get('show_id')))
+                        except Exception:
+                            pass
+                        try:
+                            if meta_info.get('movie_id'):
+                                movie_ids.add(int(meta_info.get('movie_id')))
+                        except Exception:
+                            pass
+
+                    payload = first_items.get(t['id'])
+                    if not payload:
+                        continue
+                    try:
+                        pp = json.loads(payload)
+                        if isinstance(pp, dict):
+                            if pp.get('show_id'):
+                                show_ids.add(int(pp.get('show_id')))
+                            if pp.get('movie_id'):
+                                movie_ids.add(int(pp.get('movie_id')))
+                            # also include path if present for display
+                            if pp.get('path') and not t.get('meta'):
+                                t.setdefault('meta', {})['path'] = pp.get('path')
+                    except Exception:
+                        pass
+
+                # Fetch titles in batch
+                shows_map = {}
+                movies_map = {}
+                if show_ids:
+                    from app.models import TVShow
+                    shows_folder_map: dict[int, str] = {}
+                    q = await session.execute(select(TVShow.id, TVShow.title, TVShow.folder_path).where(TVShow.id.in_(list(show_ids))))
+                    for r in q.fetchall():
+                        # r = (id, title, folder_path)
+                        shows_map[r[0]] = r[1]
+                        try:
+                            folder_path = r[2] or ''
+                            folder_name = str(folder_path).rstrip('/\\').split('/').pop().split('\\').pop()
+                        except Exception:
+                            folder_name = ''
+                        shows_folder_map[r[0]] = folder_name
+                else:
+                    shows_folder_map = {}
+                if movie_ids:
+                    from app.models import Movie
+                    q = await session.execute(select(Movie.id, Movie.title).where(Movie.id.in_(list(movie_ids))))
+                    for r in q.fetchall():
+                        movies_map[r[0]] = r[1]
+
+                # For richer previews, inspect up to a chunk of item payloads per task and gather show/movie ids
+                task_preview_ids: dict[int, dict] = {}
+                for t in tasks:
+                    task_preview_ids[t['id']] = {'show_ids': [], 'movie_ids': [], 'path': None}
+
+                from app.models import QueueItem
+                for t in tasks:
+                    try:
+                        q = await session.execute(
+                            select(QueueItem.payload).where(QueueItem.task_id == t['id']).order_by(QueueItem.index).limit(50)
+                        )
+                        rows = q.fetchall()
+                        seen_shows = set()
+                        seen_movies = set()
+                        for r in rows:
+                            payload = r[0]
+                            if not payload:
+                                continue
+                            try:
+                                pp = json.loads(payload)
+                                if isinstance(pp, dict):
+                                    if pp.get('show_id'):
+                                        sid = int(pp.get('show_id'))
+                                        if sid not in seen_shows:
+                                            task_preview_ids[t['id']]['show_ids'].append(sid)
+                                            seen_shows.add(sid)
+                                    if pp.get('movie_id'):
+                                        mid = int(pp.get('movie_id'))
+                                        if mid not in seen_movies:
+                                            task_preview_ids[t['id']]['movie_ids'].append(mid)
+                                            seen_movies.add(mid)
+                                    if pp.get('path') and not task_preview_ids[t['id']]['path']:
+                                        task_preview_ids[t['id']]['path'] = pp.get('path')
+                            except Exception:
+                                continue
+                    except Exception:
+                        continue
+
+                # Merge show/movie ids to global sets for batch lookup
+                extra_show_ids = set()
+                extra_movie_ids = set()
+                for tid, ids in task_preview_ids.items():
+                    for s in ids['show_ids']:
+                        extra_show_ids.add(s)
+                    for m in ids['movie_ids']:
+                        extra_movie_ids.add(m)
+
+                # Fetch titles for all discovered show/movie ids
+                if extra_show_ids:
+                    from app.models import TVShow
+                    q = await session.execute(select(TVShow.id, TVShow.title).where(TVShow.id.in_(list(extra_show_ids))))
+                    for r in q.fetchall():
+                        shows_map[r[0]] = r[1]
+                if extra_movie_ids:
+                    from app.models import Movie
+                    q = await session.execute(select(Movie.id, Movie.title).where(Movie.id.in_(list(extra_movie_ids))))
+                    for r in q.fetchall():
+                        movies_map[r[0]] = r[1]
+
+                # Attach previews (titles list and counts) to tasks
+                for t in tasks:
+                    try:
+                        ids = task_preview_ids[t['id']]
+                        if ids['show_ids']:
+                            # Map to titles and include count
+                            titles = [shows_map.get(s, f"#{s}") for s in ids['show_ids']]
+                            # derive folder names from shows_folder_map if available
+                            folder_names = [shows_folder_map.get(s, '') if 'shows_folder_map' in locals() else '' for s in ids['show_ids']]
+                            t.setdefault('meta_preview', {})['show_titles'] = titles[:3]
+                            t.setdefault('meta_preview', {})['show_folder_names'] = folder_names[:3]
+                            t.setdefault('meta_preview', {})['show_count'] = len(ids['show_ids'])
+                            t.setdefault('meta_preview', {})['show_ids'] = ids['show_ids'][:3]
+                            # Backwards-compatible singular fields
+                            if titles:
+                                t.setdefault('meta_preview', {})['show_title'] = titles[0]
+                                t.setdefault('meta_preview', {})['show_folder_name'] = folder_names[0] if folder_names else ''
+                        else:
+                            # Fall back to task meta show_id/movie_id
+                            if isinstance(t.get('meta'), dict):
+                                try:
+                                    if t['meta'].get('show_id'):
+                                        sid = int(t['meta'].get('show_id'))
+                                        t.setdefault('meta_preview', {})['show_ids'] = [sid]
+                                        t.setdefault('meta_preview', {})['show_titles'] = [shows_map.get(sid, f"#{sid}")]
+                                        t.setdefault('meta_preview', {})['show_folder_names'] = [shows_folder_map.get(sid, '') if 'shows_folder_map' in locals() else '']
+                                        t.setdefault('meta_preview', {})['show_count'] = 1
+                                        # Backwards-compatible singular fields
+                                        t.setdefault('meta_preview', {})['show_title'] = shows_map.get(sid, f"#{sid}")
+                                        t.setdefault('meta_preview', {})['show_folder_name'] = shows_folder_map.get(sid, '') if 'shows_folder_map' in locals() else ''
+                                    elif t['meta'].get('movie_id'):
+                                        mid = int(t['meta'].get('movie_id'))
+                                        t.setdefault('meta_preview', {})['movie_ids'] = [mid]
+                                        t.setdefault('meta_preview', {})['movie_titles'] = [movies_map.get(mid, f"#{mid}")]
+                                        t.setdefault('meta_preview', {})['movie_count'] = 1
+                                except Exception:
+                                    pass
+                        if ids['movie_ids'] and not t.get('meta_preview'):
+                            titles = [movies_map.get(m, f"#{m}") for m in ids['movie_ids']]
+                            t.setdefault('meta_preview', {})['movie_titles'] = titles[:3]
+                            t.setdefault('meta_preview', {})['movie_count'] = len(ids['movie_ids'])
+                            t.setdefault('meta_preview', {})['movie_ids'] = ids['movie_ids'][:3]
+                        if ids.get('path') and (not t.get('meta') or not isinstance(t.get('meta'), dict) or not t['meta'].get('path')):
+                            t.setdefault('meta', {})['path'] = ids['path']
+                    except Exception:
+                        pass
+        except Exception:
+            # fail silently - previews are optional
+            pass
+
         return tasks
 
 
@@ -209,6 +397,64 @@ async def get_task(task_id: int):
                         movie_title = mv.title
             except Exception:
                 movie_title = None
+
+            # Enrich with TV show / episode info if present
+            show_title = None
+            show_url = None
+            episode_title = None
+            episode_label = None
+            try:
+                if payload_parsed and isinstance(payload_parsed, dict):
+                    if payload_parsed.get('show_id'):
+                        sid = int(payload_parsed.get('show_id'))
+                        from app.models import TVShow
+                        sv = await session.get(TVShow, sid)
+                        if sv:
+                            show_title = sv.title
+                            show_url = f"/tvshows/{sid}"
+                    if payload_parsed.get('episode_id'):
+                        eid = int(payload_parsed.get('episode_id'))
+                        from app.models import Episode
+                        ep = await session.get(Episode, eid)
+                        if ep:
+                            episode_title = ep.title or ''
+                            season = getattr(ep, 'season_number', None)
+                            number = getattr(ep, 'episode_number', None)
+                            if season is not None and number is not None:
+                                episode_label = f"S{season}E{number} — {episode_title if episode_title else ''}"
+                            else:
+                                episode_label = episode_title
+                            # also include parent show info when possible
+                            try:
+                                sv = await session.get(TVShow, ep.tvshow_id)
+                                if sv:
+                                    show_title = sv.title
+                                    show_url = f"/tvshows/{ep.tvshow_id}"
+                            except Exception:
+                                pass
+                            # fallback: if task meta included a show_id, use that
+                            try:
+                                if not show_title and task.meta:
+                                    if isinstance(task.meta, str):
+                                        try:
+                                            m = json.loads(task.meta)
+                                        except Exception:
+                                            m = None
+                                    else:
+                                        m = task.meta
+                                    if isinstance(m, dict) and m.get('show_id'):
+                                        sid = int(m.get('show_id'))
+                                        sv = await session.get(TVShow, sid)
+                                        if sv:
+                                            show_title = sv.title
+                                            show_url = f"/tvshows/{sid}"
+                            except Exception:
+                                pass
+            except Exception:
+                show_title = None
+                show_url = None
+                episode_title = None
+                episode_label = None
 
             # Parse result JSON if present and prepare a summary for UI
             result_parsed = None
@@ -288,6 +534,10 @@ async def get_task(task_id: int):
                 'movie_title': movie_title,
                 'movie_url': movie_url,
                 'movie_summary': movie_summary,
+                'show_title': show_title,
+                'show_url': show_url,
+                'episode_title': episode_title,
+                'episode_label': episode_label,
                 'result': i.result,
                 'result_parsed': result_parsed,
                 'result_summary': result_summary,
@@ -301,6 +551,25 @@ async def get_task(task_id: int):
                     item_obj['result'] = None
                     item_obj['result_parsed'] = None
                     item_obj['result_summary'] = None
+            except Exception:
+                pass
+
+            # Ensure show_title is filled from task.meta if available (fallback)
+            try:
+                if not item_obj.get('show_title') and data.get('meta'):
+                    m = data.get('meta')
+                    if isinstance(m, str):
+                        try:
+                            m = json.loads(m)
+                        except Exception:
+                            m = None
+                    if isinstance(m, dict) and m.get('show_id'):
+                        sid = int(m.get('show_id'))
+                        from app.models import TVShow
+                        sv = await session.get(TVShow, sid)
+                        if sv:
+                            item_obj['show_title'] = sv.title
+                            item_obj['show_url'] = f"/tvshows/{sid}"
             except Exception:
                 pass
 
@@ -492,9 +761,133 @@ class QueueWorker:
                         media_type = payload.get('media_type', 'movie')
                         if media_type == 'movie':
                             results = await asyncio.to_thread(scan_movie_directory, Path(path))
+                            # For movies we currently only return the count
+                            item.result = json.dumps({'found': len(results)})
                         else:
+                            # For TV shows we want to persist discovered shows/episodes and return a detailed result
                             results = await asyncio.to_thread(scan_tvshow_directory, Path(path))
-                        item.result = json.dumps({'found': len(results)})
+                            from app.models import TVShow, Episode
+
+                            found_shows = []
+                            new_show_ids: list[int] = []
+                            new_episode_ids: list[int] = []
+
+                            for parsed_show in results:
+                                # Check if show exists by folder_path
+                                exist_q = await session.execute(select(TVShow).where(TVShow.folder_path == parsed_show.folder_path))
+                                show = exist_q.scalar_one_or_none()
+                                added_show = False
+
+                                # If show does not exist, try to find a matching library_path (longest prefix) to attach it to
+                                lib_id = None
+                                if not show:
+                                    from app.models import LibraryPath, MediaType
+                                    lib_q = await session.execute(select(LibraryPath).where(LibraryPath.media_type == MediaType.TV))
+                                    libs = lib_q.scalars().all()
+                                    if libs:
+                                        # Find longest matching prefix
+                                        libs.sort(key=lambda lib: len(lib.path), reverse=True)
+                                        for lp in libs:
+                                            try:
+                                                if str(parsed_show.folder_path).startswith(lp.path):
+                                                    lib_id = lp.id
+                                                    break
+                                            except Exception:
+                                                continue
+                                        # If no prefix match, fall back to first TV library path
+                                        if lib_id is None:
+                                            lib_id = libs[0].id
+
+                                    # If we have a library id, create the TVShow
+                                    if lib_id is not None:
+                                        show = TVShow(
+                                            library_path_id=lib_id,
+                                            folder_path=parsed_show.folder_path,
+                                            folder_name=parsed_show.folder_name,
+                                            title=parsed_show.title,
+                                            episode_count=len(parsed_show.episodes),
+                                            season_count=len(set(e.season_number for e in parsed_show.episodes))
+                                        )
+                                        session.add(show)
+                                        await session.flush()
+                                        added_show = True
+                                        new_show_ids.append(show.id)
+                                    else:
+                                        # Could not determine library path - skip creating show
+                                        logger.debug(f"Skipping creation of TVShow for {parsed_show.folder_path} - no TV library path available")
+
+                                # Check and add episodes
+                                added_eps = 0
+                                for parsed_ep in parsed_show.episodes:
+                                    ep_exists_q = await session.execute(select(Episode).where(Episode.file_path == parsed_ep.file_path))
+                                    if not ep_exists_q.scalar_one_or_none():
+                                        # If show was created above but for some reason show is still None, skip
+                                        if not show:
+                                            continue
+                                        episode = Episode(
+                                            tvshow_id=show.id,
+                                            file_path=parsed_ep.file_path,
+                                            file_name=parsed_ep.file_name,
+                                            file_size=parsed_ep.file_size,
+                                            season_number=parsed_ep.season_number,
+                                            episode_number=parsed_ep.episode_number,
+                                            title=parsed_ep.episode_title,
+                                            subtitle_path=parsed_ep.subtitle_path,
+                                            has_subtitle=parsed_ep.subtitle_path is not None)
+                                        session.add(episode)
+                                        await session.flush()
+                                        new_episode_ids.append(episode.id)
+                                        added_eps += 1
+
+                                found_shows.append({
+                                    'title': parsed_show.title,
+                                    'folder_path': parsed_show.folder_path,
+                                    'added': added_show,
+                                    'new_episodes': added_eps,
+                                    'show_id': show.id
+                                })
+
+                            # Commit DB changes so created shows/episodes are persisted
+                            await session.commit()
+
+                            # Determine analyze and refresh tasks to enqueue
+                            analyze_episode_ids: list[int] = list(new_episode_ids)
+                            refresh_show_ids: list[int] = list(new_show_ids)
+
+                            try:
+                                # For each parsed show that exists, check for episodes needing analysis
+                                for s in found_shows:
+                                    sid = s.get('show_id')
+                                    if sid and int(sid) not in refresh_show_ids:
+                                        # include existing show in refresh list so metadata can be refreshed
+                                        refresh_show_ids.append(int(sid))
+
+                                    # Query episodes for this show that haven't been analyzed
+                                    if sid:
+                                        from app.models import Episode as EpModel
+                                        ep_q = await session.execute(select(EpModel.id).where(EpModel.tvshow_id == int(sid)).where(EpModel.media_info_scanned.is_(False)))
+                                        missing_eps = [r[0] for r in ep_q.fetchall()]
+                                        analyze_episode_ids.extend(missing_eps)
+
+                                # Deduplicate
+                                analyze_episode_ids = list(dict.fromkeys(analyze_episode_ids))
+                                refresh_show_ids = list(dict.fromkeys(refresh_show_ids))
+
+                                # Enqueue analyze for episodes first
+                                if analyze_episode_ids:
+                                    analyze_items = [{'episode_id': eid} for eid in analyze_episode_ids]
+                                    await create_task('analyze', analyze_items, meta={'path': path})
+
+                                # Then enqueue refresh_metadata for shows
+                                if refresh_show_ids:
+                                    refresh_items = [{'show_id': sid} for sid in refresh_show_ids]
+                                    await create_task('refresh_metadata', refresh_items, meta={'path': path})
+
+                            except Exception:
+                                logger.exception('Failed to enqueue post-scan tasks')
+
+                            item.result = json.dumps({'found': len(results), 'shows': found_shows})
+
                         item.status = QueueStatus.COMPLETED
                         task.completed_items = (task.completed_items or 0) + 1
 

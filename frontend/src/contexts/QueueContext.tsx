@@ -43,8 +43,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       console.debug('[queues] Fetching initial snapshot via HTTP /api/queues/tasks', { limit })
       const res = await fetch(`/api/queues/tasks?limit=${limit}`)
       if (res.ok) {
-        const data = await res.json()
-        setTasks(data as QueueTask[])
+        const data = await res.json() as QueueTask[]
+        // Ensure tasks are sorted by numeric id ascending (oldest first)
+        data.sort((a, b) => Number(a.id) - Number(b.id))
+        setTasks(data)
         console.debug('[queues] Loaded initial snapshot via HTTP', data.length)
       } else {
         console.debug('[queues] Failed to fetch initial snapshot', res.status)
@@ -114,8 +116,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         try {
           console.debug('[queues] Received init event')
           const payload = (ev as MessageEvent).data as string
-          const data = JSON.parse(payload)
-          setTasks(data as QueueTask[])
+          const data = JSON.parse(payload) as QueueTask[]
+          // Sort tasks by numeric id so UI shows tasks in consistent order (#2, #3, #4...)
+          data.sort((a, b) => Number(a.id) - Number(b.id))
+          setTasks(data)
         } catch (e) {
           console.debug('[queues] Failed to parse init payload', e)
         }
@@ -129,7 +133,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           setTasks((prev) => {
             const prevTask = prev.find(t => t.id === data.id)
             const other = prev.filter(t => t.id !== data.id)
-            const newList = [data, ...other].sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+            // Maintain a stable order sorted by numeric task id (ascending)
+            const newList = [data, ...other].sort((a, b) => Number(a.id) - Number(b.id))
 
             // Notify on status changes to completed/failed
             try {
@@ -144,6 +149,22 @@ export function QueueProvider({ children }: { children: ReactNode }) {
                   const msg = pathVal && typeof pathVal === 'string' ? String(pathVal) : `${data.total_items} items`;
                   mod.addNotificationToStore({ title, message: msg, type: newStatus === 'failed' ? 'error' : 'success', meta })
                 }).catch(e => console.debug('[queues] Notification import failed', e))
+
+                // If completed for a TV show, emit an event so pages (e.g., TVShowDetail) can refresh relevant queries
+                try {
+                  const metaRec = data.meta as Record<string, unknown> | undefined
+                  const showId = metaRec && metaRec['show_id'] ? Number(metaRec['show_id']) : undefined
+                  if (newStatus === 'completed' && showId) {
+                    // Dispatch a custom event with the task payload
+                    try {
+                      window.dispatchEvent(new CustomEvent('queue:task_completed', { detail: { task: data, timestamp: Date.now() } }))
+                    } catch (e) {
+                      console.debug('[queues] Failed to dispatch queue:task_completed event', e)
+                    }
+                  }
+                } catch (e) {
+                  console.debug('[queues] Failed to evaluate meta for task completion', e)
+                }
               }
             } catch (e) {
               console.debug('[queues] Notification handler error', e)

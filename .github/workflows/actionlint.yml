@@ -1,0 +1,27 @@
+name: Actionlint (workflow lint)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+  push:
+    branches:
+      - develop
+      - main
+      - fix/ci-workflows
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: Run actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run actionlint
+        uses: rhysd/actionlint-action@v1
+        with:
+          args: .github/workflows

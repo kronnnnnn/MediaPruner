@@ -25,15 +25,15 @@ export default function Sidebar() {
   
   return (
     <aside className={`${isCollapsed ? 'w-16' : 'w-64'} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300`}>
-      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-3">
+      <div className="py-4 px-4 border-b border-gray-200 dark:border-gray-700 flex items-center">
+        <div className="flex items-center gap-3 w-full">
           <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
             <img src="/MediaPruner.png" alt="MediaPruner" className="w-10 h-10 object-contain" />
           </div>
           {!isCollapsed && (
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">MediaPruner</h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Media Manager</p>
+            <div className="leading-tight">
+              <h1 className="text-lg font-bold text-gray-900 dark:text-white leading-5">MediaPruner</h1>
+              <p className="text-xxs text-gray-500 dark:text-gray-400 leading-4">Media Manager</p>
             </div>
           )}
         </div>
@@ -48,7 +48,7 @@ export default function Sidebar() {
                 title={isCollapsed ? item.label : undefined}
                 onClick={() => handleNavClick(item.label, item.path)}
                 className={({ isActive }) =>
-                  `flex items-center ${isCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  `h-12 flex items-center ${isCollapsed ? 'justify-center' : ''} gap-3 px-4 rounded-lg transition-colors whitespace-nowrap ${
                     isActive
                       ? 'bg-primary-600 text-white'
                       : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
@@ -56,7 +56,7 @@ export default function Sidebar() {
                 }
               >
                 <item.icon className="w-5 h-5 flex-shrink-0" />
-                {!isCollapsed && <span>{item.label}</span>}
+                {!isCollapsed && <span className="truncate max-w-[10rem]">{item.label}</span>}
               </NavLink>
             </li>
           ))}
@@ -66,7 +66,7 @@ export default function Sidebar() {
       <div className="p-4 border-t border-gray-200 dark:border-gray-700">
         <button
           onClick={handleToggleSidebar}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          className="w-full h-12 flex items-center justify-center gap-2 px-3 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
           title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}

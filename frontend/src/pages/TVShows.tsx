@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Filter, SortAsc, SortDesc, Search, RefreshCw, LayoutGrid, List, Star, Check, X, Tv as TvIcon } from 'lucide-react'
 import MediaGrid from '../components/MediaGrid'
@@ -38,6 +38,21 @@ export default function TVShows() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchInput, setSearchInput] = useState('')
+
+  // Initialize search from URL query param (so global navbar searches navigate here)
+  const location = useLocation()
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(location.search)
+      const q = params.get('search') || ''
+      if (q !== searchQuery) {
+        setSearchQuery(q)
+        setSearchInput(q)
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [location.search])
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_VIEW_MODE)
     return (saved === 'grid' || saved === 'list') ? saved : 'grid'
