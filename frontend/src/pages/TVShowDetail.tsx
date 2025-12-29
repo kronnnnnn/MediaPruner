@@ -798,7 +798,7 @@ export default function TVShowDetailPage() {
               )}
               {!searching && searchResults && searchResults.length > 0 && (
                 <div className="space-y-2">
-                  <div className="text-sm text-gray-400">Select the best match to use for scraping (or leave none to enqueue as-is):</div>
+                  <div className="text-sm text-gray-400">Select the best match to use (or leave none to search as-is):</div>
                   <div className="mt-3 space-y-2">
                     {searchResults.map((r, idx) => (
                       <label key={idx} className={`flex items-center gap-3 p-2 rounded ${selectedCandidate === r ? 'bg-gray-700 border border-gray-600' : 'hover:bg-gray-700/20'}`}>
