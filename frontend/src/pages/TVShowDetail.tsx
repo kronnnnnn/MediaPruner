@@ -557,7 +557,7 @@ export default function TVShowDetailPage() {
                 <HardDrive className={`w-4 h-4 ${analyzeAllMutation.isPending ? 'animate-spin' : ''}`} />
                 {analyzeAllMutation.isPending ? 'Analyzing...' : 'Analyze All Episodes'}
               </button>
-n              <button
+              <button
                 onClick={handleScrapeShow}
                 disabled={isProcessing}
                 className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
