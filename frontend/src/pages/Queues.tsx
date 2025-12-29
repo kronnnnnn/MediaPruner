@@ -135,7 +135,8 @@ export default function Queues() {
     try {
       const p = taskSourceLabel(t)
       if (String(t.type).toLowerCase() === 'scan' && p) {
-        const name = p.split(/[\\\/]/).filter(Boolean).pop() || p
+        // split on either forward or back slashes without unnecessary escaping
+        const name = p.split(/[/\\]/).filter(Boolean).pop() || p
         return `${typeLabel} (${name})`
       }
     } catch (e) {
@@ -160,11 +161,11 @@ export default function Queues() {
               <span className="ml-2">— {taskTitle(t)}</span>
             </div>
             {(() => {
-              const preview = t.meta_preview as Record<string, any> | undefined
+              const preview = t.meta_preview as Record<string, unknown> | undefined
               if (!preview || !preview.show_titles) return null
-              const titles: string[] = preview.show_titles || []
-              const ids: number[] = preview.show_ids || []
-              const count: number = preview.show_count || titles.length
+              const titles: string[] = (preview.show_titles as string[]) || []
+              const ids: number[] = (preview.show_ids as number[]) || []
+              const count: number = (preview.show_count as number) || titles.length
               return (
                 <div className="text-xs text-gray-400 mt-1">
                   {titles.map((s: string, i: number) => (
@@ -313,7 +314,7 @@ export default function Queues() {
                                         <div className="mt-2 text-sm">
                                           <div className="text-xs text-gray-400 mb-2">Found Shows</div>
                                           <div className="space-y-2">
-                                            {parsed.shows.map((s: any, idx: number) => (
+                                            {parsed.shows.map((s: { show_id?: number; title: string; added?: boolean; folder_path?: string; new_episodes?: number }, idx: number) => (
                                               <div key={idx} className="p-2 bg-gray-900/30 rounded flex items-center justify-between">
                                                 <div>
                                                   <div className="text-sm font-semibold text-gray-100">

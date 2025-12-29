@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, RefreshCw, Edit2, FileText, Star, ChevronDown, ChevronUp,
-  HardDrive, Tv, Loader2, Check, X, Subtitles, FileVideo
+  HardDrive, Tv, Loader2, Check, X, Subtitles, FileVideo, Copy
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { tvShowsApi, Episode } from '../services/api'
@@ -47,7 +47,40 @@ export default function TVShowDetailPage() {
     if (showId) {
       logger.pageView('TVShowDetail', `Show ID: ${showId}`)
     }
-  }, [showId])
+
+    // Listen for queue task completion events and refresh this show's data when a matching task completes
+    const handler = async (ev: Event) => {
+      try {
+        const ce = ev as CustomEvent<{ task: Record<string, unknown>; timestamp: number }>
+        const task = ce.detail?.task
+        const ts = ce.detail?.timestamp ?? Date.now()
+        const meta = (task?.meta ?? {}) as Record<string, unknown>
+        const targetShowId = meta && meta.show_id ? Number(meta.show_id) : undefined
+        if (targetShowId && targetShowId === showId) {
+          // Fetch and update the show's data immediately; measure elapsed time from task completion
+          const start = Date.now()
+          console.debug('[tvshow] queue task completed for this show, refreshing data', { task_id: task?.id, showId, event_ts: ts })
+          try {
+            // Use queryClient to refetch the tvshow query directly
+            const data = await queryClient.fetchQuery({ queryKey: ['tvshow', showId], queryFn: () => tvShowsApi.getTVShow(showId).then(res => res.data) })
+            const elapsed = Date.now() - start
+            console.debug(`[tvshow] refreshed show ${showId} after queue task completion (refresh time ${elapsed}ms)`, data)            // Notify user and include elapsed time in debug/notification
+            try {
+              showToast('Metadata Updated', `Show metadata refreshed (${elapsed}ms)`, 'success')
+            } catch (e) {
+              /* ignore if toast unavailable */
+            }          } catch (e) {
+            console.debug('[tvshow] failed to refresh show after queue task completion', e)
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    window.addEventListener('queue:task_completed', handler)
+    return () => window.removeEventListener('queue:task_completed', handler)
+  }, [showId, queryClient])
 
   const [expandedSeason, setExpandedSeason] = useState<number | null>(null)
   const [renameModalOpen, setRenameModalOpen] = useState(false)
@@ -56,9 +89,9 @@ export default function TVShowDetailPage() {
   const [muxPreviewError, setMuxPreviewError] = useState<string | null>(null)
   const [muxProgress, setMuxProgress] = useState<{ current: number; total: number } | null>(null)
   const [isMuxing, setIsMuxing] = useState(false)
-  const [metadataProvider, setMetadataProvider] = useState<'auto' | 'tmdb' | 'omdb'>('auto')
   const [searching, setSearching] = useState(false)
   const [searchResults, setSearchResults] = useState<Record<string, unknown>[] | null>(null)
+  // Which provider supplied the current search results (TMDB preferred, fallback to OMDB)
   const [searchProvider, setSearchProvider] = useState<'tmdb' | 'omdb' | null>(null)
   const [showSearchModal, setShowSearchModal] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<Record<string, unknown> | null>(null)
@@ -240,44 +273,153 @@ export default function TVShowDetailPage() {
     navigate('/tvshows')
   }
 
-  const handleScrapeShow = () => {
-    logger.buttonClick('Scrape Show', 'TVShowDetail', { provider: metadataProvider })
-    const provider = metadataProvider === 'auto' ? undefined : metadataProvider
+  // Convert a filesystem path to a file:// URL. Handles UNC (\\server\share), Windows drive paths, and POSIX paths.
+  const toFileUrl = (p?: string) => {
+    if (!p) return ''
+    // Normalize slashes for processing
+    if (p.startsWith('\\')) {
+      // UNC path: \\server\share\path -> file:////server/share/path
+      const without = p.replace(/^\\+/, '').replace(/\\/g, '/')
+      return encodeURI('file:////' + without)
+    }
+    if (/^[A-Za-z]:\\/.test(p)) {
+      // Windows drive letter: C:\path -> file:///C:/path
+      const replaced = p.replace(/\\/g, '/')
+      return encodeURI('file:///' + replaced)
+    }
+    if (p.startsWith('/')) {
+      // POSIX absolute path
+      return encodeURI('file://' + p)
+    }
+    // Fallback - convert backslashes to slashes
+    return encodeURI('file://' + p.replace(/\\/g, '/'))
+  }
 
-    // Preflight search at provider to surface candidates before enqueuing
+  const openFolder = (p?: string) => {
+    if (!p) return
+    const url = toFileUrl(p)
+    try {
+      // Attempt to open file:// URL in a new tab/window. On some browsers this may be blocked.
+      const newWin = window.open(url, '_blank')
+      if (!newWin) {
+        throw new Error('Popup blocked')
+      }
+    } catch (e) {
+      // Fallback: copy path to clipboard and notify user
+      try {
+        navigator.clipboard?.writeText(p)
+        showToast('Open Folder', 'Could not open directly — path copied to clipboard', 'info')
+      } catch (err) {
+        showToast('Open Folder', 'Could not open or copy path to clipboard', 'error')
+      }
+    }
+  }
+
+  const copyPath = async (p?: string) => {
+    if (!p) return
+    try {
+      await navigator.clipboard.writeText(p)
+      showToast('Copied', 'Folder path copied to clipboard', 'success')
+    } catch (e) {
+      showToast('Copy Failed', 'Could not copy path to clipboard', 'error')
+    }
+  }
+
+  const handleScrapeShow = async () => {
+    logger.buttonClick('Scrape Show', 'TVShowDetail')
+
     setSearching(true)
     setSearchResults(null)
-    setSearchProvider((provider as 'tmdb' | 'omdb') || 'tmdb')
-    tvShowsApi.searchTVShow(showId, provider as 'tmdb' | 'omdb' | undefined).then(res => {
+
+    try {
+      // Try TMDB first
+      setSearchProvider('tmdb')
+      const res = await tvShowsApi.searchTVShow(showId, 'tmdb')
       const data = (res as unknown as Record<string, unknown>)?.data as Record<string, unknown> | undefined
       const results = (data?.results as unknown[] | undefined) ?? []
-      setSearchResults(results as Record<string, unknown>[])
-      setShowSearchModal(true)
-    }).catch((err: unknown) => {
-      const e = err as Record<string, unknown>
-      // If search fails, fall back to enqueuing and show error toast
-      showToast('Search Failed', (e?.response as Record<string, unknown> | undefined)?.data as string | undefined || 'Search failed, enqueuing anyway', 'warning')
-      scrapeMutation.mutate(provider)
-    }).finally(() => setSearching(false))
+      if (results.length > 0) {
+        setSearchResults(results as Record<string, unknown>[])
+        setShowSearchModal(true)
+        return
+      }
+
+      // If TMDB returned no results, try OMDB
+      setSearchProvider('omdb')
+      const res2 = await tvShowsApi.searchTVShow(showId, 'omdb')
+      const data2 = (res2 as unknown as Record<string, unknown>)?.data as Record<string, unknown> | undefined
+      const results2 = (data2?.results as unknown[] | undefined) ?? []
+      if (results2.length > 0) {
+        setSearchResults(results2 as Record<string, unknown>[])
+        setShowSearchModal(true)
+        return
+      }
+
+      // No candidates found; enqueue a scrape with TMDB first, fallback to OMDB on error
+      try {
+        await scrapeMutation.mutateAsync('tmdb')
+        // mutateAsync handled success toast via onSuccess; nothing else to do
+      } catch (errTmdb) {
+        // If TMDB scrape errors, try OMDB
+        try {
+          await scrapeMutation.mutateAsync('omdb')
+        } catch (errOmdb) {
+          const e = errOmdb as Record<string, unknown>
+          showToast('Scrape Failed', (e?.response as Record<string, unknown> | undefined)?.data as string | undefined || 'Failed to enqueue scrape', 'error')
+        }
+      }
+    } catch (err: unknown) {
+      // Network or unexpected error during search; attempt a TMDB scrape before failing over
+      try {
+        await scrapeMutation.mutateAsync('tmdb')
+      } catch (errTmdb: unknown) {
+        try {
+          await scrapeMutation.mutateAsync('omdb')
+        } catch (errOmdb: unknown) {
+          const e = errOmdb as Record<string, unknown>
+          showToast('Scrape Failed', (e?.response as Record<string, unknown> | undefined)?.data as string | undefined || 'Failed to enqueue scrape', 'error')
+        }
+      }
+    } finally {
+      setSearching(false)
+    }
   }
 
   const handleConfirmSearch = async () => {
-    // If a candidate selected, enqueue with tmdb_id/imdb_id override
-    const provider = metadataProvider === 'auto' ? undefined : metadataProvider
+    // Determine the provider to use: prefer the one that supplied search results, otherwise try TMDB first and fallback to OMDB on error
+    const preferredProvider = searchProvider ?? 'tmdb'
+
     try {
       let res: unknown = null
       if (selectedCandidate) {
         const body: Record<string, unknown> = {}
         if (selectedCandidate.tmdb_id) body.tmdb_id = selectedCandidate.tmdb_id
         if (selectedCandidate.imdb_id) body.imdb_id = selectedCandidate.imdb_id
-        res = await tvShowsApi.scrapeTVShow(showId, body, provider as 'tmdb' | 'omdb' | undefined)
+
+        // Try preferred provider first, then fallback on error
+        try {
+          res = await tvShowsApi.scrapeTVShow(showId, body, preferredProvider)
+        } catch (errPref) {
+          // Try the other provider
+          const other = preferredProvider === 'tmdb' ? 'omdb' : 'tmdb'
+          res = await tvShowsApi.scrapeTVShow(showId, body, other)
+        }
       } else if (manualTitle) {
         const body: Record<string, unknown> = { title: manualTitle }
         if (manualYear) body.year = parseInt(manualYear)
-        res = await tvShowsApi.scrapeTVShow(showId, body, provider as 'tmdb' | 'omdb' | undefined)
+        try {
+          res = await tvShowsApi.scrapeTVShow(showId, body, preferredProvider)
+        } catch (errPref) {
+          const other = preferredProvider === 'tmdb' ? 'omdb' : 'tmdb'
+          res = await tvShowsApi.scrapeTVShow(showId, body, other)
+        }
       } else {
-        // No selection - enqueue normally
-        res = await tvShowsApi.scrapeTVShow(showId, undefined, provider as 'tmdb' | 'omdb' | undefined)
+        // No selection - enqueue normally, preferring TMDB first, then OMDB on error
+        try {
+          res = await tvShowsApi.scrapeTVShow(showId, undefined, preferredProvider)
+        } catch (errPref) {
+          const other = preferredProvider === 'tmdb' ? 'omdb' : 'tmdb'
+          res = await tvShowsApi.scrapeTVShow(showId, undefined, other)
+        }
       }
 
       const data = (res as Record<string, unknown>)?.data as Record<string, unknown> | undefined
@@ -477,12 +619,35 @@ export default function TVShowDetailPage() {
             </div>
 
             {/* Status indicators */}
-            <div className="flex gap-4 mt-4 text-sm">
+            <div className="flex items-center gap-4 mt-4 text-sm">
+              <span className="font-medium text-gray-300">Metadata: </span>
               <span className={`flex items-center gap-1 ${show.scraped ? 'text-green-400' : 'text-gray-500'}`}>
                 <span className={`w-2 h-2 rounded-full ${show.scraped ? 'bg-green-400' : 'bg-gray-500'}`} />
                 {show.scraped ? 'Scraped' : 'Not Scraped'}
               </span>
             </div>
+
+            {/* Location (root folder path) with open/copy actions */}
+            {show.folder_path && (
+              <div className="mt-2 text-sm text-gray-400 flex items-start gap-2">
+                <span className="font-medium text-gray-300">Location: </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openFolder(show.folder_path)}
+                    className="text-gray-200 hover:underline text-left break-all"
+                  >
+                    <span className="break-all">{show.folder_path}</span>
+                  </button>
+                  <button
+                    onClick={() => copyPath(show.folder_path)}
+                    className="ml-2 p-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300"
+                    title="Copy folder path"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -490,36 +655,25 @@ export default function TVShowDetailPage() {
         <div className="bg-gray-800 rounded-lg p-4 mb-6">
           <h3 className="text-white font-medium mb-3">Actions</h3>
           <div className="flex flex-wrap gap-3 items-center">
-            {/* Provider selector + Refresh button group */}
-            <div className="flex items-stretch">
-              <select
-                value={metadataProvider}
-                onChange={(e) => setMetadataProvider(e.target.value as 'auto' | 'tmdb' | 'omdb')}
+            {/* Analyze + Refresh button group (provider selection removed; TMDB is attempted first, then fallback to OMDB) */}
+            <div className="flex items-stretch gap-3">
+              <button
+                onClick={handleAnalyzeAll}
                 disabled={isProcessing}
-                className="px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-600 text-white rounded-l-lg border-r border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer"
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
               >
-                <option value="auto">Auto</option>
-                <option value="tmdb">TMDB</option>
-                <option value="omdb">OMDb</option>
-              </select>
+                <HardDrive className={`w-4 h-4 ${analyzeAllMutation.isPending ? 'animate-spin' : ''}`} />
+                {analyzeAllMutation.isPending ? 'Analyzing...' : 'Analyze All Episodes'}
+              </button>
               <button
                 onClick={handleScrapeShow}
                 disabled={isProcessing}
-                className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-600 text-white rounded-r-lg transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
               >
                 <RefreshCw className={`w-4 h-4 ${scrapeMutation.isPending ? 'animate-spin' : ''}`} />
                 {scrapeMutation.isPending ? 'Refreshing...' : 'Refresh Metadata'}
               </button>
             </div>
-
-            <button
-              onClick={handleAnalyzeAll}
-              disabled={isProcessing}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
-            >
-              <HardDrive className={`w-4 h-4 ${analyzeAllMutation.isPending ? 'animate-spin' : ''}`} />
-              {analyzeAllMutation.isPending ? 'Analyzing...' : 'Analyze All Episodes'}
-            </button>
 
             <button
               onClick={handleRenameEpisodes}
@@ -752,7 +906,7 @@ export default function TVShowDetailPage() {
               )}
               {!searching && searchResults && searchResults.length > 0 && (
                 <div className="space-y-2">
-                  <div className="text-sm text-gray-400">Select the best match to use for scraping (or leave none to enqueue as-is):</div>
+                  <div className="text-sm text-gray-400">Select the best match to use for searching (or leave none to search as-is):</div>
                   <div className="mt-3 space-y-2">
                     {searchResults.map((r, idx) => (
                       <label key={idx} className={`flex items-center gap-3 p-2 rounded ${selectedCandidate === r ? 'bg-gray-700 border border-gray-600' : 'hover:bg-gray-700/20'}`}>
@@ -766,7 +920,7 @@ export default function TVShowDetailPage() {
                             return (
                               <>
                                 <div className="text-white font-medium">{title} {year ? `(${String(year)})` : ''}</div>
-                                {typeof overview === 'string' && <div className="text-sm text-gray-400 truncate">{overview}</div>}
+                                {typeof overview === 'string' && <div className="text-sm text-gray-400 max-h-20 overflow-auto break-words whitespace-normal">{overview}</div>}
                               </>
                             )
                           })()}
@@ -779,7 +933,7 @@ export default function TVShowDetailPage() {
             </div>
             <div className="flex items-center justify-end p-4 border-t border-gray-700 gap-3">
               <button onClick={closeSearchModal} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded">Cancel</button>
-              <button onClick={handleConfirmSearch} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded">Enqueue Scrape</button>
+              <button onClick={handleConfirmSearch} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded">Download Metadata</button>
             </div>
           </div>
         </div>

@@ -81,11 +81,11 @@ export default function Movies() {
 
       // Allow opening a movie by either query param or navigation state so
       // the modal will open reliably when coming from the navbar search
-      const openMovie = params.get('open_movie') || (location.state as any)?.open_movie
+      const openMovie = params.get('open_movie') || (location.state as unknown as { open_movie?: number | string } )?.open_movie
       if (openMovie) {
         const id = Number(openMovie)
         if (id) {
-          ;(async () => {
+          (async () => {
             try {
               const res = await moviesApi.getMovie(id)
               setSelectedMovie(res.data)
