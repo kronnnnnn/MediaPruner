@@ -557,7 +557,6 @@ export default function TVShowDetailPage() {
                 <HardDrive className={`w-4 h-4 ${analyzeAllMutation.isPending ? 'animate-spin' : ''}`} />
                 {analyzeAllMutation.isPending ? 'Analyzing...' : 'Analyze All Episodes'}
               </button>
-
 n              <button
                 onClick={handleScrapeShow}
                 disabled={isProcessing}
