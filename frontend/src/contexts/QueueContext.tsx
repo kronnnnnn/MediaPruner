@@ -149,6 +149,22 @@ export function QueueProvider({ children }: { children: ReactNode }) {
                   const msg = pathVal && typeof pathVal === 'string' ? String(pathVal) : `${data.total_items} items`;
                   mod.addNotificationToStore({ title, message: msg, type: newStatus === 'failed' ? 'error' : 'success', meta })
                 }).catch(e => console.debug('[queues] Notification import failed', e))
+
+                // If completed for a TV show, emit an event so pages (e.g., TVShowDetail) can refresh relevant queries
+                try {
+                  const metaRec = data.meta as Record<string, unknown> | undefined
+                  const showId = metaRec && metaRec['show_id'] ? Number(metaRec['show_id']) : undefined
+                  if (newStatus === 'completed' && showId) {
+                    // Dispatch a custom event with the task payload
+                    try {
+                      window.dispatchEvent(new CustomEvent('queue:task_completed', { detail: { task: data, timestamp: Date.now() } }))
+                    } catch (e) {
+                      console.debug('[queues] Failed to dispatch queue:task_completed event', e)
+                    }
+                  }
+                } catch (e) {
+                  console.debug('[queues] Failed to evaluate meta for task completion', e)
+                }
               }
             } catch (e) {
               console.debug('[queues] Notification handler error', e)

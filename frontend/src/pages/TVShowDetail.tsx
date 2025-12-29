@@ -47,7 +47,40 @@ export default function TVShowDetailPage() {
     if (showId) {
       logger.pageView('TVShowDetail', `Show ID: ${showId}`)
     }
-  }, [showId])
+
+    // Listen for queue task completion events and refresh this show's data when a matching task completes
+    const handler = async (ev: Event) => {
+      try {
+        const ce = ev as CustomEvent<{ task: Record<string, unknown>; timestamp: number }>
+        const task = ce.detail?.task
+        const ts = ce.detail?.timestamp ?? Date.now()
+        const meta = (task?.meta ?? {}) as Record<string, unknown>
+        const targetShowId = meta && meta.show_id ? Number(meta.show_id) : undefined
+        if (targetShowId && targetShowId === showId) {
+          // Fetch and update the show's data immediately; measure elapsed time from task completion
+          const start = Date.now()
+          console.debug('[tvshow] queue task completed for this show, refreshing data', { task_id: task?.id, showId, event_ts: ts })
+          try {
+            // Use queryClient to refetch the tvshow query directly
+            const data = await queryClient.fetchQuery({ queryKey: ['tvshow', showId], queryFn: () => tvShowsApi.getTVShow(showId).then(res => res.data) })
+            const elapsed = Date.now() - start
+            console.debug(`[tvshow] refreshed show ${showId} after queue task completion (refresh time ${elapsed}ms)`, data)            // Notify user and include elapsed time in debug/notification
+            try {
+              showToast('Metadata Updated', `Show metadata refreshed (${elapsed}ms)`, 'success')
+            } catch (e) {
+              /* ignore if toast unavailable */
+            }          } catch (e) {
+            console.debug('[tvshow] failed to refresh show after queue task completion', e)
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    window.addEventListener('queue:task_completed', handler)
+    return () => window.removeEventListener('queue:task_completed', handler)
+  }, [showId, queryClient])
 
   const [expandedSeason, setExpandedSeason] = useState<number | null>(null)
   const [renameModalOpen, setRenameModalOpen] = useState(false)
@@ -540,6 +573,14 @@ export default function TVShowDetailPage() {
                 {show.scraped ? 'Scraped' : 'Not Scraped'}
               </span>
             </div>
+
+            {/* Location (root folder path) */}
+            {show.folder_path && (
+              <div className="mt-2 text-sm text-gray-400">
+                <span className="font-medium text-gray-300">Location: </span>
+                <span className="text-gray-200 break-all">{show.folder_path}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -798,7 +839,7 @@ export default function TVShowDetailPage() {
               )}
               {!searching && searchResults && searchResults.length > 0 && (
                 <div className="space-y-2">
-                  <div className="text-sm text-gray-400">Select the best match to use (or leave none to search as-is):</div>
+                  <div className="text-sm text-gray-400">Select the best match to use for searching (or leave none to search as-is):</div>
                   <div className="mt-3 space-y-2">
                     {searchResults.map((r, idx) => (
                       <label key={idx} className={`flex items-center gap-3 p-2 rounded ${selectedCandidate === r ? 'bg-gray-700 border border-gray-600' : 'hover:bg-gray-700/20'}`}>
