@@ -4,10 +4,12 @@ import { useTheme } from '../contexts/ThemeContext'
 import logger from '../services/logger'
 import { useNotifications } from '../contexts/NotificationContext'
 import { useNavigate } from 'react-router-dom'
+// Minimal shape for search suggestions returned by the API
+type SuggestionItem = { id: number; title: string; [key: string]: unknown }
 
 export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('')
-  const [suggestions, setSuggestions] = useState<{ movies: any[]; tvshows: any[] } | null>(null)
+  const [suggestions, setSuggestions] = useState<{ movies: SuggestionItem[]; tvshows: SuggestionItem[] } | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [suggestionsLoading, setSuggestionsLoading] = useState(false)
 
