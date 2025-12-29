@@ -548,7 +548,7 @@ export default function TVShowDetailPage() {
           <h3 className="text-white font-medium mb-3">Actions</h3>
           <div className="flex flex-wrap gap-3 items-center">
             {/* Analyze + Refresh button group (provider selection removed; TMDB is attempted first, then fallback to OMDB) */}
-            <div className="flex items-stretch">
+            <div className="flex items-stretch gap-3">
               <button
                 onClick={handleAnalyzeAll}
                 disabled={isProcessing}
