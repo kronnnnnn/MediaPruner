@@ -6,10 +6,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Database path - use data directory for persistence
-DATA_DIR = Path(__file__).parent.parent / "data"
-DATA_DIR.mkdir(exist_ok=True)
-DATABASE_URL = f"sqlite+aiosqlite:///{DATA_DIR}/mediapruner.db"
+# Use Settings for database config so env overrides apply
+from .config import settings
+
+# Ensure data dir exists
+DATA_DIR = settings.data_dir
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+DATABASE_URL = settings.database_url
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = async_sessionmaker(

@@ -30,7 +30,8 @@ class Settings(BaseSettings):
         "http://localhost:5173"]
 
     # Database
-    database_url: str = "sqlite:///./mediapruner.db"
+    # Default to async sqlite in project data dir; override with MB_DATABASE_URL for production DBs
+    database_url: str = "sqlite+aiosqlite:///./data/mediapruner.db"
 
     # File paths
     data_dir: Path = Path("./data")
