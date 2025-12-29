@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, RefreshCw, Edit2, FileText, Star, ChevronDown, ChevronUp,
-  HardDrive, Tv, Loader2, Check, X, Subtitles, FileVideo
+  HardDrive, Tv, Loader2, Check, X, Subtitles, FileVideo, Copy
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { tvShowsApi, Episode } from '../services/api'
@@ -271,6 +271,58 @@ export default function TVShowDetailPage() {
   const handleBack = () => {
     logger.buttonClick('Back to TV Shows', 'TVShowDetail')
     navigate('/tvshows')
+  }
+
+  // Convert a filesystem path to a file:// URL. Handles UNC (\\server\share), Windows drive paths, and POSIX paths.
+  const toFileUrl = (p?: string) => {
+    if (!p) return ''
+    // Normalize slashes for processing
+    if (p.startsWith('\\')) {
+      // UNC path: \\server\share\path -> file:////server/share/path
+      const without = p.replace(/^\\+/, '').replace(/\\/g, '/')
+      return encodeURI('file:////' + without)
+    }
+    if (/^[A-Za-z]:\\/.test(p)) {
+      // Windows drive letter: C:\path -> file:///C:/path
+      const replaced = p.replace(/\\/g, '/')
+      return encodeURI('file:///' + replaced)
+    }
+    if (p.startsWith('/')) {
+      // POSIX absolute path
+      return encodeURI('file://' + p)
+    }
+    // Fallback - convert backslashes to slashes
+    return encodeURI('file://' + p.replace(/\\/g, '/'))
+  }
+
+  const openFolder = (p?: string) => {
+    if (!p) return
+    const url = toFileUrl(p)
+    try {
+      // Attempt to open file:// URL in a new tab/window. On some browsers this may be blocked.
+      const newWin = window.open(url, '_blank')
+      if (!newWin) {
+        throw new Error('Popup blocked')
+      }
+    } catch (e) {
+      // Fallback: copy path to clipboard and notify user
+      try {
+        navigator.clipboard?.writeText(p)
+        showToast('Open Folder', 'Could not open directly — path copied to clipboard', 'info')
+      } catch (err) {
+        showToast('Open Folder', 'Could not open or copy path to clipboard', 'error')
+      }
+    }
+  }
+
+  const copyPath = async (p?: string) => {
+    if (!p) return
+    try {
+      await navigator.clipboard.writeText(p)
+      showToast('Copied', 'Folder path copied to clipboard', 'success')
+    } catch (e) {
+      showToast('Copy Failed', 'Could not copy path to clipboard', 'error')
+    }
   }
 
   const handleScrapeShow = async () => {
@@ -567,18 +619,33 @@ export default function TVShowDetailPage() {
             </div>
 
             {/* Status indicators */}
-            <div className="flex gap-4 mt-4 text-sm">
+            <div className="flex items-center gap-4 mt-4 text-sm">
+              <span className="font-medium text-gray-300">Metadata: </span>
               <span className={`flex items-center gap-1 ${show.scraped ? 'text-green-400' : 'text-gray-500'}`}>
                 <span className={`w-2 h-2 rounded-full ${show.scraped ? 'bg-green-400' : 'bg-gray-500'}`} />
                 {show.scraped ? 'Scraped' : 'Not Scraped'}
               </span>
             </div>
 
-            {/* Location (root folder path) */}
+            {/* Location (root folder path) with open/copy actions */}
             {show.folder_path && (
-              <div className="mt-2 text-sm text-gray-400">
+              <div className="mt-2 text-sm text-gray-400 flex items-start gap-2">
                 <span className="font-medium text-gray-300">Location: </span>
-                <span className="text-gray-200 break-all">{show.folder_path}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openFolder(show.folder_path)}
+                    className="text-gray-200 hover:underline text-left break-all"
+                  >
+                    <span className="break-all">{show.folder_path}</span>
+                  </button>
+                  <button
+                    onClick={() => copyPath(show.folder_path)}
+                    className="ml-2 p-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300"
+                    title="Copy folder path"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             )}
           </div>
