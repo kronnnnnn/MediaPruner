@@ -13,7 +13,31 @@ from .config import settings
 DATA_DIR = settings.data_dir
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+import os
+import shutil
+
 DATABASE_URL = settings.database_url
+
+# Check for legacy repo-root data file and offer optional automatic migration to backend/data
+project_root = Path(__file__).resolve().parents[1]
+legacy_db = project_root / 'data' / 'mediapruner.db'
+new_db = settings.data_dir / 'mediapruner.db'
+if legacy_db.exists() and not new_db.exists():
+    auto_move = os.getenv('MB_AUTO_MOVE_DB', 'false').lower() == 'true'
+    if auto_move:
+        try:
+            settings.data_dir.mkdir(parents=True, exist_ok=True)
+            backup = legacy_db.with_suffix('.bak')
+            shutil.copy2(legacy_db, backup)
+            shutil.move(str(legacy_db), str(new_db))
+            logger.info(f"Moved legacy DB from {legacy_db} to {new_db} (backup at {backup})")
+        except Exception as e:
+            logger.error(f"Failed to move legacy DB: {e}")
+    else:
+        logger.warning(
+            f"Found legacy DB at {legacy_db} but not at {new_db}. "
+            "Set MB_DATABASE_URL to point to the desired DB or set MB_AUTO_MOVE_DB=true to move automatically."
+        )
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = async_sessionmaker(

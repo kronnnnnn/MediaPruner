@@ -10,7 +10,8 @@ Quick start (development):
 Key environment variables
 - `MB_TMDB_API_KEY` - TMDB API key (required for TMDb operations)
 - `MB_OMDB_API_KEY` - OMDb API key (optional)
-- `MB_DATABASE_URL` - Database URL (e.g., `sqlite+aiosqlite:///./data/mediapruner.db` or a Postgres URL)
+- `MB_DATABASE_URL` - Database URL (e.g., `sqlite+aiosqlite:///./backend/data/mediapruner.db` or a Postgres URL). By default the app stores DB in `backend/data/` so it is independent of cwd.
+- `MB_AUTO_MOVE_DB` - Optional: set to `true` to automatically move an existing legacy `./data/mediapruner.db` (repo-root) into `backend/data/` at startup (safe copy + backup). Default: `false`.
 - `PUID` / `PGID` - If you need files to be owned by a specific host uid/gid (useful on Unraid)
 - `MB_DATA_DIR` / `MB_LOG_DIR` - Paths inside container for persistent storage
 

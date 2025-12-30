@@ -30,11 +30,13 @@ class Settings(BaseSettings):
         "http://localhost:5173"]
 
     # Database
-    # Default to async sqlite in project data dir; override with MB_DATABASE_URL for production DBs
-    database_url: str = "sqlite+aiosqlite:///./data/mediapruner.db"
+    # Default to the stable backend data dir (absolute path) so DB location does not depend on CWD.
+    # Override with MB_DATABASE_URL for production DBs if desired.
+    _default_data_dir = Path(__file__).parent.parent / "data"
+    database_url: str = f"sqlite+aiosqlite:///{_default_data_dir / 'mediapruner.db'}"
 
     # File paths
-    data_dir: Path = Path("./data")
+    data_dir: Path = _default_data_dir
     log_dir: Path = Path("./logs")
 
     # Logging
