@@ -21,10 +21,35 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan - startup and shutdown events"""
-    # Startup: Initialize database
-    await init_db()
-    # Initialize database logging
+    # Ensure console logging level is set for startup audit logs
     log_level = logging.DEBUG if settings.debug else logging.INFO
+    logging.basicConfig(level=log_level)
+
+    # Startup audit information
+    logger.info(f"Starting {settings.app_name} (version {settings.app_version})")
+    logger.info(f"Server host={settings.host} port={settings.port} debug={settings.debug}")
+    logger.info(f"MB_AUTO_MOVE_DB={os.getenv('MB_AUTO_MOVE_DB', 'false')} PUID={os.getenv('PUID')} PGID={os.getenv('PGID')}")
+    logger.info(f"TMDB key configured={bool(settings.tmdb_api_key)} OMDB key configured={bool(settings.omdb_api_key)}")
+    logger.info(f"Data dir: {settings.data_dir} (exists={settings.data_dir.exists()})")
+    logger.info(f"Log dir: {settings.log_dir} (exists={settings.log_dir.exists()})")
+
+    # Show which database URL will be used
+    db_url = settings.database_url
+    logger.info(f"Database URL: {db_url}")
+    # If using sqlite file, show the file path and size
+    if isinstance(db_url, str) and (db_url.startswith('sqlite') or 'sqlite' in db_url):
+        # extract path after ':///' occurrences
+        path_part = db_url.split(':///')[-1]
+        try:
+            db_path = Path(path_part)
+            logger.info(f"Resolved DB path: {db_path} (exists={db_path.exists()} size={'{:,}'.format(db_path.stat().st_size) if db_path.exists() else 'n/a'})")
+        except Exception:
+            logger.info("Resolved DB path: could not parse path from database URL")
+
+    # Initialize database
+    await init_db()
+
+    # Initialize database logging (now that DB is available)
     setup_database_logging(level=log_level)
 
 
