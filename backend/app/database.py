@@ -18,12 +18,14 @@ import shutil
 
 DATABASE_URL = settings.database_url
 
-# Check for legacy repo-root data file and offer optional automatic migration to backend/data
-project_root = Path(__file__).resolve().parents[1]
-legacy_db = project_root / 'data' / 'mediapruner.db'
-new_db = settings.data_dir / 'mediapruner.db'
-if legacy_db.exists() and not new_db.exists():
-    auto_move = os.getenv('MB_AUTO_MOVE_DB', 'false').lower() == 'true'
+def check_and_migrate_legacy_db(legacy_db: Path, new_db: Path, auto_move: bool = False) -> bool:
+    """Check for a legacy DB and optionally move it.
+
+    Returns True if a move occurred, False otherwise.
+    """
+    if not legacy_db.exists() or new_db.exists():
+        return False
+
     if auto_move:
         logger.info("MB_AUTO_MOVE_DB=true — attempting to migrate legacy DB into backend data dir")
         try:
@@ -44,13 +46,25 @@ if legacy_db.exists() and not new_db.exists():
                 logger.info(f"Moved legacy DB from {legacy_db} to {new_db} (size unknown)")
 
             logger.info("Legacy DB migration complete. You can remove the backup file if everything looks good.")
+            return True
         except Exception:
             logger.exception("Failed to move legacy DB — see traceback. You can run backend/scripts/move_db_file.py to try manual migration.")
+            return False
     else:
         logger.warning(
             f"Found legacy DB at {legacy_db} but not at {new_db}. "
             "Set MB_DATABASE_URL to point to the desired DB or set MB_AUTO_MOVE_DB=true to move automatically."
         )
+        return False
+
+# Check for legacy repo-root data file and offer optional automatic migration to backend/data
+project_root = Path(__file__).resolve().parents[1]
+legacy_db = project_root / 'data' / 'mediapruner.db'
+new_db = settings.data_dir / 'mediapruner.db'
+auto_move = os.getenv('MB_AUTO_MOVE_DB', 'false').lower() == 'true'
+_check_moved = check_and_migrate_legacy_db(legacy_db, new_db, auto_move)
+if _check_moved:
+    logger.info(f"Legacy DB migrated from {legacy_db} to {new_db}")
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = async_sessionmaker(
