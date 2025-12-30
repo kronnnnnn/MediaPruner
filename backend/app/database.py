@@ -25,14 +25,27 @@ new_db = settings.data_dir / 'mediapruner.db'
 if legacy_db.exists() and not new_db.exists():
     auto_move = os.getenv('MB_AUTO_MOVE_DB', 'false').lower() == 'true'
     if auto_move:
+        logger.info("MB_AUTO_MOVE_DB=true — attempting to migrate legacy DB into backend data dir")
         try:
             settings.data_dir.mkdir(parents=True, exist_ok=True)
             backup = legacy_db.with_suffix('.bak')
             shutil.copy2(legacy_db, backup)
+            try:
+                backup_size = backup.stat().st_size
+                logger.info(f"Created backup of legacy DB at {backup} ({backup_size} bytes)")
+            except Exception:
+                logger.info(f"Created backup of legacy DB at {backup}")
+
             shutil.move(str(legacy_db), str(new_db))
-            logger.info(f"Moved legacy DB from {legacy_db} to {new_db} (backup at {backup})")
-        except Exception as e:
-            logger.error(f"Failed to move legacy DB: {e}")
+            try:
+                new_size = Path(new_db).stat().st_size
+                logger.info(f"Moved legacy DB from {legacy_db} to {new_db} (new size {new_size} bytes)")
+            except Exception:
+                logger.info(f"Moved legacy DB from {legacy_db} to {new_db} (size unknown)")
+
+            logger.info("Legacy DB migration complete. You can remove the backup file if everything looks good.")
+        except Exception:
+            logger.exception("Failed to move legacy DB — see traceback. You can run backend/scripts/move_db_file.py to try manual migration.")
     else:
         logger.warning(
             f"Found legacy DB at {legacy_db} but not at {new_db}. "
