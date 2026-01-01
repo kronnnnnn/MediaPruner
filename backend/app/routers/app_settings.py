@@ -1,15 +1,14 @@
 """
 Settings API Router - Manages application settings stored in the database
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc, delete, func
+from sqlalchemy import select
 from pydantic import BaseModel, ConfigDict
-from typing import Optional, List
-from datetime import datetime
+from typing import Optional
 
 from app.database import get_db
-from app.models import AppSettings, LogEntry
+from app.models import AppSettings
 from app.services.tmdb import TMDBService
 
 
@@ -226,7 +225,7 @@ async def verify_omdb_api_key(
 
 @router.post("/tautulli/verify")
 async def verify_tautulli_settings(
-    data: TautulliSettingsUpdate,
+    data: "TautulliSettingsUpdate",
     db: AsyncSession = Depends(get_db)
 ):
     """Verify if the provided Tautulli settings are valid by making a test request."""
@@ -245,3 +244,9 @@ async def verify_tautulli_settings(
     finally:
         if hasattr(tautulli_service, 'close'):
             await tautulli_service.close()
+
+
+# Small Pydantic model for verifying Tautulli settings (keeps module imports minimal for linting)
+class TautulliSettingsUpdate(BaseModel):
+    host: str
+    api_key: str

@@ -1,20 +1,20 @@
+import os
+import shutil
+import logging
+from pathlib import Path
+
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import text
-from pathlib import Path
-import logging
-
-logger = logging.getLogger(__name__)
 
 # Use Settings for database config so env overrides apply
 from .config import settings
 
+logger = logging.getLogger(__name__)
+
 # Ensure data dir exists
 DATA_DIR = settings.data_dir
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-import os
-import shutil
 
 DATABASE_URL = settings.database_url
 

@@ -1,10 +1,4 @@
-import os
-from pathlib import Path
-import shutil
-import importlib
-import sys
-
-import pytest
+import logging
 
 
 def test_check_and_migrate_moves_when_enabled(tmp_path, caplog, monkeypatch):
@@ -29,7 +23,6 @@ def test_check_and_migrate_moves_when_enabled(tmp_path, caplog, monkeypatch):
 
     # Call the helper directly
     caplog.clear()
-    import logging
     caplog.set_level(logging.INFO)
     moved = database.check_and_migrate_legacy_db(legacy_db, new_db, auto_move=True)
     assert moved is True
@@ -55,7 +48,6 @@ def test_check_and_migrate_no_move_when_disabled(tmp_path, caplog):
     from app import database
 
     caplog.clear()
-    import logging
     caplog.set_level(logging.INFO)
     moved = database.check_and_migrate_legacy_db(legacy_db, new_db, auto_move=False)
     assert moved is False

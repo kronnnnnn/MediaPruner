@@ -16,7 +16,6 @@ For each candidate it runs the ffprobe_probe() helper from
 import asyncio
 import argparse
 import sys
-import os
 from pathlib import Path
 import json
 
@@ -25,10 +24,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
-from app.database import engine
-
 async def find_and_probe(fix: bool = False):
     from sqlalchemy import text
+    from app.database import engine
 
     async with engine.begin() as conn:
         rows = await conn.execute(text("SELECT id, title, file_path, media_info_scanned, media_info_failed, video_resolution, video_width, video_height FROM movies"))
