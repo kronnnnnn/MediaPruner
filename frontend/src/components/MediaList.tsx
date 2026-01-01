@@ -141,6 +141,21 @@ export default function MediaList({
     </span>
   )
 
+  const AnalyzeStatusIcon = ({ scanned, failed, title }: { scanned: boolean; failed?: boolean; title: string }) => {
+    if (failed) {
+      return (
+        <span title={title} className="text-red-500">
+          <X className="w-4 h-4" />
+        </span>
+      )
+    }
+    return (
+      <span title={title} className={scanned ? 'text-green-400' : 'text-gray-600'}>
+        {scanned ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+      </span>
+    )
+  }
+
   // Render cell content based on column ID
   const renderCell = (movie: Movie, columnId: string) => {
     switch (columnId) {
@@ -320,9 +335,8 @@ export default function MediaList({
       case 'status':
         return (
           <div className="flex items-center justify-center gap-2">
-            <StatusIcon active={movie.scraped} title={movie.scraped ? 'Scraped' : 'Not scraped'} />
-            <StatusIcon active={movie.media_info_scanned} title={movie.media_info_scanned ? 'Analyzed' : 'Not analyzed'} />
-            <StatusIcon active={movie.has_nfo} title={movie.has_nfo ? 'Has NFO' : 'No NFO'} />
+            <AnalyzeStatusIcon scanned={movie.media_info_scanned} failed={movie.media_info_failed} title={movie.media_info_failed ? 'Analyze failed' : (movie.media_info_scanned ? 'Analyzed' : 'Not analyzed')} />
+            <StatusIcon active={movie.scraped} title={movie.scraped ? 'Metadata' : 'No metadata'} />
           </div>
         )
       

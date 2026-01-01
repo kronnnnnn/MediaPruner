@@ -6,6 +6,9 @@ from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass, field, asdict
 import logging
+import shutil
+import subprocess
+import json as _json
 
 try:
     from pymediainfo import MediaInfo
@@ -76,6 +79,8 @@ class MediaInfoResult:
     # Error info
     success: bool = True
     error: Optional[str] = None
+    # Diagnostics: non-persistent extra info to help troubleshoot files
+    diagnostics: dict = field(default_factory=dict)
 
 
 def _get_channel_layout(
@@ -347,6 +352,54 @@ def analyze_file(file_path: str) -> MediaInfoResult:
         result.error = f"Error processing media info: {str(e)}"
         logger.error(f"MediaInfo processing error for {file_path}: {e}")
 
+    # If we don't have video resolution, try ffprobe as a fallback and do
+    # a quick ffmpeg decode test to surface container/codec errors.
+    try:
+        if (not result.video_resolution or result.video_width is None or result.video_height is None) and shutil.which('ffprobe'):
+            try:
+                cmd = [
+                    'ffprobe', '-v', 'error', '-print_format', 'json', '-show_streams', str(path)
+                ]
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+                if proc.returncode == 0 and proc.stdout:
+                    try:
+                        parsed = _json.loads(proc.stdout)
+                        result.diagnostics['ffprobe_streams'] = parsed.get('streams', [])
+                        # Try to find video stream width/height
+                        for s in parsed.get('streams', []):
+                            if s.get('codec_type') == 'video':
+                                w = s.get('width')
+                                h = s.get('height')
+                                if w and h and (not result.video_resolution):
+                                    result.video_width = int(w)
+                                    result.video_height = int(h)
+                                    result.video_resolution = f"{w}x{h}"
+                                    break
+                    except Exception:
+                        result.diagnostics['ffprobe_parse_error'] = proc.stdout
+                else:
+                    result.diagnostics['ffprobe_error'] = proc.stderr or 'ffprobe failed'
+            except Exception as e:
+                result.diagnostics['ffprobe_exception'] = str(e)
+
+        # Run a lightweight ffmpeg decode test to capture playback/codec errors
+        if shutil.which('ffmpeg'):
+            try:
+                cmd = ['ffmpeg', '-v', 'error', '-i', str(path), '-f', 'null', '-']
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                result.diagnostics['ffmpeg_returncode'] = proc.returncode
+                if proc.stderr:
+                    # Capture stderr lines that may indicate corrupt container/codec issues
+                    result.diagnostics['ffmpeg_stderr_tail'] = '\n'.join(proc.stderr.splitlines()[-20:])
+                    if proc.returncode != 0 and not result.error:
+                        result.success = False
+                        result.error = 'ffmpeg reported errors while probing/decoding the file. See diagnostics for details.'
+            except Exception as e:
+                result.diagnostics['ffmpeg_exception'] = str(e)
+    except Exception as e:
+        # Don't fail the whole analysis if diagnostic tooling errors out
+        logger.debug(f"Diagnostics probing failed for {file_path}: {e}")
+
     return result
 
 
@@ -372,3 +425,90 @@ def is_available() -> bool:
         return True
     except Exception:
         return False
+
+
+def ffprobe_probe(file_path: str) -> MediaInfoResult:
+    """Probe a file using ffprobe (external) to extract streams and basic metadata.
+
+    This is intended as a fallback when pymediainfo misses key fields.
+    """
+    result = MediaInfoResult()
+    path = Path(file_path)
+    try:
+        result.file_size = path.stat().st_size
+    except Exception:
+        result.file_size = 0
+
+    if not shutil.which('ffprobe'):
+        result.success = False
+        result.error = 'ffprobe not available'
+        return result
+
+    try:
+        cmd = ['ffprobe', '-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', str(path)]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        if proc.returncode != 0:
+            result.success = False
+            result.error = 'ffprobe failed'
+            result.diagnostics['ffprobe_error'] = proc.stderr
+            return result
+
+        parsed = _json.loads(proc.stdout)
+        result.diagnostics['ffprobe_streams'] = parsed.get('streams', [])
+        fmt = parsed.get('format', {})
+        if fmt.get('format_name'):
+            result.container = fmt.get('format_name')
+        if fmt.get('duration'):
+            try:
+                result.duration = int(float(fmt.get('duration')))
+            except Exception:
+                pass
+
+        # Extract video stream info
+        for s in parsed.get('streams', []):
+            if s.get('codec_type') == 'video':
+                w = s.get('width')
+                h = s.get('height')
+                if w and h:
+                    result.video_width = int(w)
+                    result.video_height = int(h)
+                    result.video_resolution = f"{w}x{h}"
+                if s.get('codec_name'):
+                    result.video_codec = s.get('codec_name')
+                if s.get('r_frame_rate'):
+                    result.video_framerate = s.get('r_frame_rate')
+                break
+
+        # Extract audio stream info (first audio)
+        for s in parsed.get('streams', []):
+            if s.get('codec_type') == 'audio':
+                result.audio_codec = s.get('codec_name')
+                # channels may be present
+                ch = s.get('channels')
+                if ch:
+                    try:
+                        result.audio_channels = _get_channel_layout(int(ch))
+                    except Exception:
+                        result.audio_channels = str(ch)
+                break
+
+        # Run ffmpeg quick decode to capture errors
+        if shutil.which('ffmpeg'):
+            try:
+                cmd = ['ffmpeg', '-v', 'error', '-i', str(path), '-f', 'null', '-']
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                result.diagnostics['ffmpeg_returncode'] = proc.returncode
+                if proc.stderr:
+                    result.diagnostics['ffmpeg_stderr_tail'] = '\n'.join(proc.stderr.splitlines()[-20:])
+                    if proc.returncode != 0:
+                        result.success = False
+                        result.error = 'ffmpeg reported errors while probing/decoding the file. See diagnostics for details.'
+            except Exception as e:
+                result.diagnostics['ffmpeg_exception'] = str(e)
+
+        return result
+    except Exception as e:
+        result.success = False
+        result.error = f'ffprobe exception: {e}'
+        result.diagnostics['ffprobe_exception'] = str(e)
+        return result

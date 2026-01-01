@@ -722,7 +722,7 @@ class QueueWorker:
             )
             task = q.scalars().first()
             if not task:
-                logger.debug("No queued tasks found")
+                # No queued tasks — intentionally do not log to avoid noisy periodic messages.
                 return False
 
             # Lock and mark running

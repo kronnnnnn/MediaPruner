@@ -4,7 +4,7 @@ Settings API Router - Manages application settings stored in the database
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, delete, func
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 
@@ -28,9 +28,7 @@ class SettingResponse(BaseModel):
     key: str
     value: Optional[str]
     description: Optional[str]
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AllSettingsResponse(BaseModel):
@@ -557,9 +555,7 @@ class LogEntryResponse(BaseModel):
     function: Optional[str]
     line_number: Optional[int]
     exception: Optional[str]
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class LogsResponse(BaseModel):

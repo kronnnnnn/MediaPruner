@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 from pathlib import Path
 from typing import Optional
 import os
@@ -43,10 +44,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_to_file: bool = True
 
-    class Config:
-        env_file = ".env"
-        env_prefix = "MB_"
-        case_sensitive = False
+    model_config = ConfigDict(env_file=".env", env_prefix="MB_", case_sensitive=False)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

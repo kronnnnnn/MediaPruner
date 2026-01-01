@@ -22,9 +22,23 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan - startup and shutdown events"""
-    # Ensure console logging level is set for startup audit logs
-    log_level = logging.DEBUG if settings.debug else logging.INFO
-    logging.basicConfig(level=log_level)
+    # Configure console logging: keep root at INFO to avoid noisy 3rd-party debug logs,
+    # but allow our application loggers to be DEBUG in debug mode.
+    root_level = logging.INFO
+    logging.basicConfig(level=root_level)
+
+    # Promote our app loggers to DEBUG when running in debug mode, but keep
+    # external libraries (sqlalchemy, aiosqlite, httpx, etc.) at INFO to avoid
+    # extremely verbose SQL/driver logs.
+    if settings.debug:
+        logging.getLogger('app').setLevel(logging.DEBUG)
+        # Silence verbose SQL engine messages by keeping sqlalchemy.engine at WARNING
+        logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+        logging.getLogger('aiosqlite').setLevel(logging.INFO)
+        logging.getLogger('httpx').setLevel(logging.INFO)
+        logging.getLogger('urllib3').setLevel(logging.INFO)
+    else:
+        logging.getLogger('app').setLevel(logging.INFO)
 
     # Startup audit information
     logger.info(f"Starting {settings.app_name} (version {settings.app_version})")
@@ -51,7 +65,7 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     # Initialize database logging (now that DB is available)
-    setup_database_logging(level=log_level)
+    setup_database_logging(level=logging.DEBUG if settings.debug else logging.INFO)
 
 
     # Recover any stale RUNNING tasks left from a previous crash
