@@ -387,7 +387,7 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
       onClick={onClose}
     >
       <div 
-        className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-lg shadow-xl transition-colors animate-mp-slide-down"
+        className="relative w-full max-w-[980px] max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-lg shadow-xl transition-colors animate-mp-slide-down"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close button */}
@@ -536,33 +536,46 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
           {/* File Info + Watch Count */}
           <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2 p-4 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
-              <h3 className="text-gray-900 dark:text-white font-medium mb-2">File Information</h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="w-4 h-4 text-blue-400" />
+                <h3 className="text-gray-900 dark:text-white font-medium">File Information</h3>
+              </div>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="col-span-3">
                   <span className="text-gray-500 dark:text-gray-400">File:</span>
                   <p className="text-gray-900 dark:text-white font-mono text-xs truncate">{movie.file_name}</p>
                 </div>
-                <div>
-                  <span className="text-gray-500 dark:text-gray-400">Size:</span>
-                  <p className="text-gray-900 dark:text-white">
-                    {movie.file_size ? `${(movie.file_size / 1024 / 1024 / 1024).toFixed(2)} GB` : 'Unknown'}
-                  </p>
-                </div>
                 {movie.file_path && (
-                  <div className="col-span-2">
+                  <div className="col-span-3">
                     <span className="text-gray-500 dark:text-gray-400">Location:</span>
                     <p className="text-gray-900 dark:text-white font-mono text-xs truncate" title={movie.file_path}>
-                      {movie.file_path.substring(0, movie.file_path.lastIndexOf('\\')) || movie.file_path.substring(0, movie.file_path.lastIndexOf('/'))}
+                      {(() => {
+                        const p = movie.file_path || ''
+                        const idx = Math.max(p.lastIndexOf('\\'), p.lastIndexOf('/'))
+                        return idx > -1 ? p.substring(0, idx) : p
+                      })()}
                     </p>
                   </div>
                 )}
+
                 <div>
-                  <span className="text-gray-500 dark:text-gray-400">Container:</span>
-                  <p className="text-gray-900 dark:text-white">{movie.container || 'Unknown'}</p>
+                  <div className="text-sm">
+                    <span className="text-gray-500 dark:text-gray-400">Size:</span>
+                    <span className="text-gray-900 dark:text-white ml-2">{movie.file_size ? `${(movie.file_size / 1024 / 1024 / 1024).toFixed(2)} GB` : 'Unknown'}</span>
+                  </div>
                 </div>
                 <div>
-                  <span className="text-gray-500 dark:text-gray-400">Duration:</span>
-                  <p className="text-gray-900 dark:text-white">{formatDuration(movie.duration) || 'Unknown'}</p>
+                  <div className="text-sm">
+                    <span className="text-gray-500 dark:text-gray-400">Container:</span>
+                    <span className="text-gray-900 dark:text-white ml-2">{movie.container || 'Unknown'}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-sm">
+                    <span className="text-gray-500 dark:text-gray-400">Duration:</span>
+                    <span className="text-gray-900 dark:text-white ml-2">{formatDuration(movie.duration) || 'Unknown'}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -706,52 +719,60 @@ export default function MovieDetail({ movieId, initialMovie, onClose, onDeleted,
 
           {/* External IDs */}
           <div className="mt-4 p-4 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
-            <h3 className="text-gray-900 dark:text-white font-medium mb-2">External IDs</h3>
+            <div className="flex items-center gap-2 mb-2">
+              <HardDrive className="w-4 h-4 text-blue-400" />
+              <h3 className="text-gray-900 dark:text-white font-medium">External IDs</h3>
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
               <div>
-                <span className="text-gray-500 dark:text-gray-400">TMDB ID:</span>
-                <p className="text-gray-900 dark:text-white">
-                  {movie.tmdb_id ? (
-                    <a
-                      href={`https://www.themoviedb.org/movie/${movie.tmdb_id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary-600 dark:text-primary-400 hover:underline"
-                    >
-                      {movie.tmdb_id}
-                    </a>
-                  ) : (
-                    'Not scraped'
-                  )}
-                </p>
+                <div className="text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">TMDB ID:</span>
+                  <span className="text-gray-900 dark:text-white ml-2">
+                    {movie.tmdb_id ? (
+                      <a
+                        href={`https://www.themoviedb.org/movie/${movie.tmdb_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary-600 dark:text-primary-400 hover:underline"
+                      >
+                        {movie.tmdb_id}
+                      </a>
+                    ) : (
+                      'Not scraped'
+                    )}
+                  </span>
+                </div>
               </div>
               <div>
-                <span className="text-gray-500 dark:text-gray-400">IMDB ID:</span>
-                <p className="text-gray-900 dark:text-white">
-                  {movie.imdb_id ? (
-                    <a
-                      href={`https://www.imdb.com/title/${movie.imdb_id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary-600 dark:text-primary-400 hover:underline"
-                    >
-                      {movie.imdb_id}
-                    </a>
-                  ) : (
-                    'Not scraped'
-                  )}
-                </p>
+                <div className="text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">IMDB ID:</span>
+                  <span className="text-gray-900 dark:text-white ml-2">
+                    {movie.imdb_id ? (
+                      <a
+                        href={`https://www.imdb.com/title/${movie.imdb_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary-600 dark:text-primary-400 hover:underline"
+                      >
+                        {movie.imdb_id}
+                      </a>
+                    ) : (
+                      'Not scraped'
+                    )}
+                  </span>
+                </div>
               </div>
               <div>
-                <span className="text-gray-500 dark:text-gray-400">Plex Rating Key:</span>
-                <p className="text-gray-900 dark:text-white">
-                  {movie.rating_key ?? (movie.option_4 && /^\d+$/.test(movie.option_4) ? movie.option_4 : null) ? (
-                    // Prefer explicit rating_key, fallback to numeric option_4
-                    <span>{movie.rating_key ?? movie.option_4}</span>
-                  ) : (
-                    'Not set'
-                  )}
-                </p>
+                <div className="text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">Plex Rating Key:</span>
+                  <span className="text-gray-900 dark:text-white ml-2">
+                    {movie.rating_key ?? (movie.option_4 && /^\d+$/.test(movie.option_4) ? movie.option_4 : null) ? (
+                      <span>{movie.rating_key ?? movie.option_4}</span>
+                    ) : (
+                      'Not set'
+                    )}
+                  </span>
+                </div>
               </div>
             </div>
           </div>

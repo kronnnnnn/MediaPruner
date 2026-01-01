@@ -332,13 +332,22 @@ export default function MediaList({
           <span className="text-gray-500">-</span>
         )
       
-      case 'status':
+      case 'status': {
+        const syncActive = (movie.watch_count !== undefined && movie.watch_count > 0) || !!movie.last_watched_date || movie.watched === true
+        const anyRun = !!(movie.media_info_scanned === true || movie.media_info_failed === true || movie.scraped === true || syncActive)
+        if (!anyRun) {
+          return <span className="text-gray-500">-</span>
+        }
+        // If MediaInfo scanned but missing key fields, treat as failed for UI until backend marks it
+        const analyzeFailed = !!(movie.media_info_failed || (movie.media_info_scanned && !movie.video_resolution && !movie.video_codec))
         return (
           <div className="flex items-center justify-center gap-2">
-            <AnalyzeStatusIcon scanned={movie.media_info_scanned} failed={movie.media_info_failed} title={movie.media_info_failed ? 'Analyze failed' : (movie.media_info_scanned ? 'Analyzed' : 'Not analyzed')} />
+            <AnalyzeStatusIcon scanned={movie.media_info_scanned} failed={analyzeFailed} title={analyzeFailed ? 'Analyze failed' : (movie.media_info_scanned ? 'Analyzed' : 'Not analyzed')} />
             <StatusIcon active={movie.scraped} title={movie.scraped ? 'Metadata' : 'No metadata'} />
+            <StatusIcon active={syncActive} title={syncActive ? 'Sync history' : 'No sync history'} />
           </div>
         )
+      }
       
       default:
         return null

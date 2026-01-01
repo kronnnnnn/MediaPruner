@@ -1243,6 +1243,12 @@ async def analyze_movie_file(
     if not info.success:
         # Mark as failed for follow-up and log details
         movie.media_info_failed = True
+        # If analysis completely failed (no container/audio/video), also mark
+        # metadata (scraped) as false so UI shows the metadata status as failed
+        try:
+            movie.scraped = False
+        except Exception:
+            pass
         await db.commit()
 
         # Insert a dedicated log entry so failures are always visible in
