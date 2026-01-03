@@ -21,13 +21,45 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install actionlint
+      - name: Install actionlint (robust)
         run: |
-          curl -sSL -o actionlint.tar.gz \
-            "https://github.com/rhysd/actionlint/releases/latest/download/actionlint_linux_amd64.tar.gz"
-          tar -xzf actionlint.tar.gz
-          sudo mv actionlint /usr/local/bin/actionlint
+          set -euo pipefail
+          URL_TGZ="https://github.com/rhysd/actionlint/releases/latest/download/actionlint_linux_amd64.tar.gz"
+          URL_BIN="https://github.com/rhysd/actionlint/releases/latest/download/actionlint_linux_amd64"
+
+          echo "Trying to download tar.gz from $URL_TGZ"
+          if curl -fsSL -o actionlint.tar.gz "$URL_TGZ"; then
+            if file actionlint.tar.gz | grep -q gzip; then
+              tar -xzf actionlint.tar.gz
+              sudo mv actionlint /usr/local/bin/actionlint
+              chmod +x /usr/local/bin/actionlint
+            else
+              echo "Downloaded file is not gzip, removing and trying raw binary fallback"
+              rm -f actionlint.tar.gz
+              if curl -fsSL -o actionlint "$URL_BIN"; then
+                sudo mv actionlint /usr/local/bin/actionlint
+                chmod +x /usr/local/bin/actionlint
+              else
+                echo "Failed to download actionlint binary" >&2
+                exit 2
+              fi
+            fi
+          else
+            echo "Tarball download failed, trying raw binary" 
+            if curl -fsSL -o actionlint "$URL_BIN"; then
+              sudo mv actionlint /usr/local/bin/actionlint
+              chmod +x /usr/local/bin/actionlint
+            else
+              echo "Failed to download actionlint binary" >&2
+              exit 2
+            fi
+          fi
 
       - name: Run actionlint
         run: |
+          set -euo pipefail
+          if ! command -v actionlint >/dev/null; then
+            echo "actionlint not installed" >&2
+            exit 2
+          fi
           actionlint .github/workflows || (echo "actionlint found issues" && exit 1)
