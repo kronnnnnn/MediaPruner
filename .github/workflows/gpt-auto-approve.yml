@@ -20,6 +20,21 @@ permissions:
   contents: read
 
 jobs:
+  debug_event:
+    name: Debug event payload
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump event payload (debug)
+        run: |
+          echo "GITHUB_EVENT_NAME=$GITHUB_EVENT_NAME"
+          echo "GITHUB_EVENT_PATH=$GITHUB_EVENT_PATH"
+          if [ -f "$GITHUB_EVENT_PATH" ]; then
+            echo "Event payload contents:";
+            cat "$GITHUB_EVENT_PATH" || true
+          else
+            echo "No event payload file at $GITHUB_EVENT_PATH"
+          fi
+
   approve:
     # Run when CI workflow_run completed successfully for a PR, or when the copilot label is added to a PR, or when manually dispatched
     if: (github.event.workflow_run && github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.event == 'pull_request' || (github.event.workflow_run.pull_requests && toJson(github.event.workflow_run.pull_requests) != '[]'))) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label && github.event.label.name == 'copilot-approved') || (github.event_name == 'workflow_dispatch')
@@ -52,6 +67,10 @@ jobs:
           echo "GITHUB_EVENT_NAME=$GITHUB_EVENT_NAME"
           echo "GITHUB_EVENT_PATH=$GITHUB_EVENT_PATH"
           cat "$GITHUB_EVENT_PATH" || true
+
+      - name: Log associated pull requests (diagnostic)
+        run: |
+          node -e "try{ const p=require(process.env.GITHUB_EVENT_PATH); const prs=(p.workflow_run && p.workflow_run.pull_requests) || []; console.log('workflow_run.pull_requests length:', prs.length); if(prs.length) console.log('PRs:', JSON.stringify(prs)); }catch(e){ console.log('Could not read event JSON:', e.message); }"
 
       - name: Approve PRs after successful CI and Copilot label
         env:
