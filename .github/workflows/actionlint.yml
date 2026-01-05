@@ -27,4 +27,4 @@ jobs:
           echo "$PWD" >> $GITHUB_PATH
 
       - name: Run actionlint
-        run: ./actionlint .github/workflows
+        run: ./actionlint
