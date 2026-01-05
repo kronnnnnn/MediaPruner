@@ -340,9 +340,10 @@ export default function MediaList({
         }
         // If MediaInfo scanned but missing key fields, treat as failed for UI until backend marks it
         const analyzeFailed = !!(movie.media_info_failed || (movie.media_info_scanned && !movie.video_resolution && !movie.video_codec))
+        const analyzeTitle = analyzeFailed ? 'Analyze failed' : (movie.media_info_scanned ? 'Analyzed' : 'Not analyzed')
         return (
           <div className="flex items-center justify-center gap-2">
-            <AnalyzeStatusIcon scanned={movie.media_info_scanned} failed={analyzeFailed} title={analyzeFailed ? 'Analyze failed' : (movie.media_info_scanned ? 'Analyzed' : 'Not analyzed')} />
+            <AnalyzeStatusIcon scanned={movie.media_info_scanned} failed={analyzeFailed} title={analyzeTitle} />
             <StatusIcon active={movie.scraped} title={movie.scraped ? 'Metadata' : 'No metadata'} />
             <StatusIcon active={syncActive} title={syncActive ? 'Sync history' : 'No sync history'} />
           </div>

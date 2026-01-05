@@ -23,7 +23,7 @@ export default function Sidebar() {
   if (queues && queues.tasks) {
     const current = queues.tasks.filter(t => {
       const s = String(t.status).toLowerCase()
-      const hasFailed = Array.isArray(t.items) && t.items.some(i => String((i as any).status).toLowerCase() === 'failed')
+      const hasFailed = Array.isArray(t.items) && t.items.some(i => String((i as { status?: unknown }).status ?? '').toLowerCase() === 'failed')
       if (hasFailed) return false
       return !['completed', 'deleted', 'canceled', 'failed'].includes(s)
     })
