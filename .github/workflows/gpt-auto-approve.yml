@@ -84,21 +84,45 @@ jobs:
             exit 0;
           fi
 
-      - name: Add copilot-approved label and comment
+      - name: Process PRs and create approval checks
         uses: actions/github-script@v7
         with:
           script: |
             const prsRaw = "${{ steps.resolve_prs.outputs.result }}";
             const prs = prsRaw ? prsRaw.split(',').map(p => parseInt(p,10)).filter(Boolean) : [];
+            
             for (const prNumber of prs) {
               console.log('Processing PR', prNumber);
-              const labelsResp = await github.rest.issues.listLabelsOnIssue({ owner: context.repo.owner, repo: context.repo.repo, issue_number: prNumber });
-              const labels = labelsResp.data.map(l => l.name);
+              
+              // Get PR details to get head SHA
+              const prResp = await github.rest.pulls.get({ owner: context.repo.owner, repo: context.repo.repo, pull_number: prNumber });
+              const headSha = prResp.data.head.sha;
+              const labels = prResp.data.labels.map(l => l.name);
+              
+              // Check if PR has copilot-approved label
               if (!labels.includes('copilot-approved')) {
-                await github.rest.issues.addLabels({ owner: context.repo.owner, repo: context.repo.repo, issue_number: prNumber, labels: ['copilot-approved'] });
-                await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: prNumber, body: 'Automated review: CI passed; added label.' });
-                console.log('Labeled PR', prNumber);
-              } else {
-                console.log('PR', prNumber, 'already has copilot-approved label');
+                console.log(`PR #${prNumber} does not have copilot-approved label; skipping`);
+                continue;
+              }
+              
+              console.log(`PR #${prNumber} has copilot-approved label; creating check`);
+              
+              // Create approval check run
+              try {
+                await github.rest.checks.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: 'mediapruner/auto-approve',
+                  head_sha: headSha,
+                  status: 'completed',
+                  conclusion: 'success',
+                  output: {
+                    title: 'Auto-approve check',
+                    summary: 'Automated approval condition met: CI passed and Copilot label detected.'
+                  }
+                });
+                console.log(`Created approval check for PR #${prNumber}`);
+              } catch (error) {
+                console.error(`Failed to create check for PR #${prNumber}:`, error.message);
               }
             }
