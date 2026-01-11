@@ -18,6 +18,7 @@ on:
 permissions:
   pull-requests: write
   contents: read
+  checks: write
 
 jobs:
   debug_event:
