@@ -36,9 +36,9 @@ jobs:
           fi
 
   approve:
-    # Run when CI workflow_run completed successfully (we'll resolve PRs inside the job),
+    # Run when Copilot Review workflow_run completed (success or skipped),
     # or when the copilot label is added to a PR, or when manually dispatched
-    if: (github.event.workflow_run && github.event.workflow_run.conclusion == 'success') || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label && github.event.label.name == 'copilot-approved') || (github.event_name == 'workflow_dispatch')
+    if: (github.event.workflow_run && (github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'skipped')) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label && github.event.label.name == 'copilot-approved') || (github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
