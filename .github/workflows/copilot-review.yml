@@ -85,9 +85,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ fromJson(steps.resolve_prs.outputs.result)[0].head_sha || github.event.workflow_run.head_sha || github.ref }}
-        with:
-          # Checkout the invoked workflow ref (branch or commit)
-          ref: ${{ github.ref }}
 
       - name: Setup Node.js
         if: steps.check_prs.outputs.skip != 'true'
