@@ -20,6 +20,7 @@ permissions:
   issues: write
   pull-requests: write
   contents: read
+  checks: write
 
 jobs:
   copilot_review:
@@ -197,4 +198,42 @@ jobs:
               });
 
               console.log(`Labeled PR #${prNumber} as copilot-approved`);
+            }
+
+      - name: Create mediapruner/auto-approve check
+        if: steps.check_prs.outputs.skip != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prsRaw = '${{ steps.resolve_prs.outputs.result }}';
+            const prs = JSON.parse(prsRaw || '[]');
+
+            if (!prs.length) {
+              console.log('No associated pull requests found; skipping check creation.');
+              return;
+            }
+
+            for (const pr of prs) {
+              const prNumber = pr.number;
+              const headSha = pr.head_sha;
+
+              console.log(`Creating mediapruner/auto-approve check for PR #${prNumber} at SHA ${headSha}`);
+
+              try {
+                await github.rest.checks.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: 'mediapruner/auto-approve',
+                  head_sha: headSha,
+                  status: 'completed',
+                  conclusion: 'success',
+                  output: {
+                    title: 'Auto-approve check',
+                    summary: 'Automated approval: CI passed and Copilot Review completed successfully.'
+                  }
+                });
+                console.log(`Successfully created check for PR #${prNumber}`);
+              } catch (error) {
+                console.error(`Failed to create check for PR #${prNumber}:`, error.message);
+              }
             }

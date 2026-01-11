@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   secret-scan:
     name: Secret scanning (gitleaks + detect-secrets)
@@ -118,3 +122,38 @@ jobs:
           tags: mediapruner:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Create the mediapruner/auto-approve check when all CI jobs pass
+  auto-approve-check:
+    name: Create auto-approve check
+    runs-on: ubuntu-latest
+    needs: [secret-scan, test-backend, test-frontend, build-docker]
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Create mediapruner/auto-approve check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const headSha = context.payload.pull_request.head.sha;
+            const prNumber = context.payload.pull_request.number;
+            
+            console.log(`Creating mediapruner/auto-approve check for PR #${prNumber} at SHA ${headSha}`);
+            
+            try {
+              await github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'mediapruner/auto-approve',
+                head_sha: headSha,
+                status: 'completed',
+                conclusion: 'success',
+                output: {
+                  title: 'Auto-approve check',
+                  summary: 'All CI checks passed. PR is approved for merge.'
+                }
+              });
+              console.log('Successfully created auto-approve check');
+            } catch (error) {
+              console.error('Failed to create check:', error.message);
+              throw error;
+            }

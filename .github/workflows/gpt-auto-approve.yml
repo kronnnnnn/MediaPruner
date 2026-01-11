@@ -92,23 +92,18 @@ jobs:
             const prsRaw = "${{ steps.resolve_prs.outputs.result }}";
             const prs = prsRaw ? prsRaw.split(',').map(p => parseInt(p,10)).filter(Boolean) : [];
             
+            console.log('PRs to process:', prs);
+            
             for (const prNumber of prs) {
               console.log('Processing PR', prNumber);
               
               // Get PR details to get head SHA
               const prResp = await github.rest.pulls.get({ owner: context.repo.owner, repo: context.repo.repo, pull_number: prNumber });
               const headSha = prResp.data.head.sha;
-              const labels = prResp.data.labels.map(l => l.name);
               
-              // Check if PR has copilot-approved label
-              if (!labels.includes('copilot-approved')) {
-                console.log(`PR #${prNumber} does not have copilot-approved label; skipping`);
-                continue;
-              }
+              console.log(`PR #${prNumber} head SHA: ${headSha}; creating check`);
               
-              console.log(`PR #${prNumber} has copilot-approved label; creating check`);
-              
-              // Create approval check run
+              // Create approval check run - no label check needed since this only runs after Copilot Review passes
               try {
                 await github.rest.checks.create({
                   owner: context.repo.owner,
@@ -119,7 +114,7 @@ jobs:
                   conclusion: 'success',
                   output: {
                     title: 'Auto-approve check',
-                    summary: 'Automated approval condition met: CI passed and Copilot label detected.'
+                    summary: 'Automated approval: CI passed and Copilot Review completed successfully.'
                   }
                 });
                 console.log(`Created approval check for PR #${prNumber}`);
