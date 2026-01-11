@@ -18,16 +18,15 @@ export default function Sidebar() {
     try { return useQueues() } catch { return null }
   })()
 
-  // Compute queued items count (remaining items) for display in sidebar when expanded
-  let queuedItemsCount = 0
+  // Compute current tasks count (tasks that are pending/running) for display in sidebar
+  let currentTasksCount = 0
   if (queues && queues.tasks) {
-    const current = queues.tasks.filter(t => {
+    currentTasksCount = queues.tasks.filter(t => {
       const s = String(t.status).toLowerCase()
       const hasFailed = Array.isArray(t.items) && t.items.some(i => String((i as { status?: unknown }).status ?? '').toLowerCase() === 'failed')
       if (hasFailed) return false
       return !['completed', 'deleted', 'canceled', 'failed'].includes(s)
-    })
-    queuedItemsCount = current.reduce((acc, t) => acc + Math.max(0, (t.total_items ?? 0) - (t.completed_items ?? 0)), 0)
+    }).length
   }
 
   const handleNavClick = (label: string, path: string) => {
@@ -75,8 +74,8 @@ export default function Sidebar() {
                 {!isCollapsed && (
                   <div className="flex items-center justify-between w-full">
                     <span className="truncate max-w-[10rem]">{item.label}</span>
-                    {item.path === '/queues' && queuedItemsCount > 0 ? (
-                      <span className="text-xs bg-primary-600 text-white px-2 py-0.5 rounded ml-2">{queuedItemsCount}</span>
+                    {item.path === '/queues' && currentTasksCount > 0 ? (
+                      <span className="text-xs bg-primary-600 text-white px-2 py-0.5 rounded ml-2">{currentTasksCount}</span>
                     ) : null}
                   </div>
                 )}
