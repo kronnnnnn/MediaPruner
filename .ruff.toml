@@ -1,0 +1,6 @@
+line-length = 300
+extend-exclude = ["frontend", "node_modules"]
+
+[lint]
+# Ignore import-after-code (E402) in test and script helpers where we adjust sys.path
+per-file-ignores = { "backend/tests/*.py" = ["E402"], "backend/scripts/*.py" = ["E402"] }

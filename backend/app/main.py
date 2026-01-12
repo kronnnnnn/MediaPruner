@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Request
@@ -21,11 +22,50 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan - startup and shutdown events"""
-    # Startup: Initialize database
+    # Configure console logging: keep root at INFO to avoid noisy 3rd-party debug logs,
+    # but allow our application loggers to be DEBUG in debug mode.
+    root_level = logging.INFO
+    logging.basicConfig(level=root_level)
+
+    # Promote our app loggers to DEBUG when running in debug mode, but keep
+    # external libraries (sqlalchemy, aiosqlite, httpx, etc.) at INFO to avoid
+    # extremely verbose SQL/driver logs.
+    if settings.debug:
+        logging.getLogger('app').setLevel(logging.DEBUG)
+        # Silence verbose SQL engine messages by keeping sqlalchemy.engine at WARNING
+        logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+        logging.getLogger('aiosqlite').setLevel(logging.INFO)
+        logging.getLogger('httpx').setLevel(logging.INFO)
+        logging.getLogger('urllib3').setLevel(logging.INFO)
+    else:
+        logging.getLogger('app').setLevel(logging.INFO)
+
+    # Startup audit information
+    logger.info(f"Starting {settings.app_name} (version {settings.app_version})")
+    logger.info(f"Server host={settings.host} port={settings.port} debug={settings.debug}")
+    logger.info(f"MB_AUTO_MOVE_DB={os.getenv('MB_AUTO_MOVE_DB', 'false')} PUID={os.getenv('PUID')} PGID={os.getenv('PGID')}")
+    logger.info(f"TMDB key configured={bool(settings.tmdb_api_key)} OMDB key configured={bool(settings.omdb_api_key)}")
+    logger.info(f"Data dir: {settings.data_dir} (exists={settings.data_dir.exists()})")
+    logger.info(f"Log dir: {settings.log_dir} (exists={settings.log_dir.exists()})")
+
+    # Show which database URL will be used
+    db_url = settings.database_url
+    logger.info(f"Database URL: {db_url}")
+    # If using sqlite file, show the file path and size
+    if isinstance(db_url, str) and (db_url.startswith('sqlite') or 'sqlite' in db_url):
+        # extract path after ':///' occurrences
+        path_part = db_url.split(':///')[-1]
+        try:
+            db_path = Path(path_part)
+            logger.info(f"Resolved DB path: {db_path} (exists={db_path.exists()} size={'{:,}'.format(db_path.stat().st_size) if db_path.exists() else 'n/a'})")
+        except Exception:
+            logger.info("Resolved DB path: could not parse path from database URL")
+
+    # Initialize database
     await init_db()
-    # Initialize database logging
-    log_level = logging.DEBUG if settings.debug else logging.INFO
-    setup_database_logging(level=log_level)
+
+    # Initialize database logging (now that DB is available)
+    setup_database_logging(level=logging.DEBUG if settings.debug else logging.INFO)
 
 
     # Recover any stale RUNNING tasks left from a previous crash

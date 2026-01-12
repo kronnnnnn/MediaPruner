@@ -141,6 +141,21 @@ export default function MediaList({
     </span>
   )
 
+  const AnalyzeStatusIcon = ({ scanned, failed, title }: { scanned: boolean; failed?: boolean; title: string }) => {
+    if (failed) {
+      return (
+        <span title={title} className="text-red-500">
+          <X className="w-4 h-4" />
+        </span>
+      )
+    }
+    return (
+      <span title={title} className={scanned ? 'text-green-400' : 'text-gray-600'}>
+        {scanned ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+      </span>
+    )
+  }
+
   // Render cell content based on column ID
   const renderCell = (movie: Movie, columnId: string) => {
     switch (columnId) {
@@ -317,14 +332,30 @@ export default function MediaList({
           <span className="text-gray-500">-</span>
         )
       
-      case 'status':
+      case 'status': {
+        const syncActive = (movie.watch_count !== undefined && movie.watch_count > 0) || !!movie.last_watched_date || movie.watched === true
+        const anyRun = !!(movie.media_info_scanned === true || movie.media_info_failed === true || movie.scraped === true || syncActive)
+        if (!anyRun) {
+          return <span className="text-gray-500">-</span>
+        }
+        // If MediaInfo scanned but missing key fields, treat as failed for UI until backend marks it
+        const analyzeFailed = !!(movie.media_info_failed || (movie.media_info_scanned && !movie.video_resolution && !movie.video_codec))
+        let analyzeTitle: string
+        if (analyzeFailed) {
+          analyzeTitle = 'Analyze failed'
+        } else if (movie.media_info_scanned) {
+          analyzeTitle = 'Analyzed'
+        } else {
+          analyzeTitle = 'Not analyzed'
+        }
         return (
           <div className="flex items-center justify-center gap-2">
-            <StatusIcon active={movie.scraped} title={movie.scraped ? 'Scraped' : 'Not scraped'} />
-            <StatusIcon active={movie.media_info_scanned} title={movie.media_info_scanned ? 'Analyzed' : 'Not analyzed'} />
-            <StatusIcon active={movie.has_nfo} title={movie.has_nfo ? 'Has NFO' : 'No NFO'} />
+            <AnalyzeStatusIcon scanned={movie.media_info_scanned} failed={analyzeFailed} title={analyzeTitle} />
+            <StatusIcon active={movie.scraped} title={movie.scraped ? 'Metadata' : 'No metadata'} />
+            <StatusIcon active={syncActive} title={syncActive ? 'Sync history' : 'No sync history'} />
           </div>
         )
+      }
       
       default:
         return null

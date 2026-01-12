@@ -972,21 +972,22 @@ export default function Movies() {
                 </select>
               </div>
 
-              {/* Watched Filter */}
-              <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Watched</label>
+              {/* Metadata Filter (renamed from Scraped) */}
+              <div className="mb-4">
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Metadata</label>
                 <select
-                  value={filters.watched}
-                  onChange={(e) => setFilters(f => ({ ...f, watched: e.target.value as Filters['watched'] }))}
-                  className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-gray-900 dark:text-white text-sm transition-colors"
+                  value={filters.scraped}
+                  onChange={(e) => {
+                    logger.filterChange('scraped', e.target.value, 'Movies')
+                    setFilters(f => ({ ...f, scraped: e.target.value as Filters['scraped'] }))
+                  }}
+                  className="w-full bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded px-2 py-1 text-sm"
                 >
                   <option value="all">All</option>
-                  <option value="yes">Watched</option>
-                  <option value="no">Unwatched</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
                 </select>
               </div>
-
-              {/* Resolution Filter */}
               <div>
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Resolution</label>
                 <select

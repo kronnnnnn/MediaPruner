@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check trigger actor
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const allowed = 'kronnnnnn';
@@ -39,7 +39,7 @@ jobs:
 
       - name: Get PR and verify checks
         id: verify
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const owner = context.repo.owner;
@@ -73,7 +73,7 @@ jobs:
             return { pr: pr.data, method, prNum };
 
       - name: Merge PR
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const owner = context.repo.owner;

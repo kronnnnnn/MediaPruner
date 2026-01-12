@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 from pathlib import Path
 from typing import Optional
 import os
@@ -30,20 +31,20 @@ class Settings(BaseSettings):
         "http://localhost:5173"]
 
     # Database
-    database_url: str = "sqlite:///./mediapruner.db"
+    # Default to the stable backend data dir (absolute path) so DB location does not depend on CWD.
+    # Override with MB_DATABASE_URL for production DBs if desired.
+    _default_data_dir = Path(__file__).parent.parent / "data"
+    database_url: str = f"sqlite+aiosqlite:///{_default_data_dir / 'mediapruner.db'}"
 
     # File paths
-    data_dir: Path = Path("./data")
+    data_dir: Path = _default_data_dir
     log_dir: Path = Path("./logs")
 
     # Logging
     log_level: str = "INFO"
     log_to_file: bool = True
 
-    class Config:
-        env_file = ".env"
-        env_prefix = "MB_"
-        case_sensitive = False
+    model_config = ConfigDict(env_file=".env", env_prefix="MB_", case_sensitive=False)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
