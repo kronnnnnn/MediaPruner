@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, Literal
 from datetime import date, datetime
 
@@ -20,8 +20,7 @@ class LibraryPathResponse(BaseModel):
     created_at: datetime
     enqueued_task_id: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Movie Schemas
@@ -120,8 +119,7 @@ class MovieResponse(MovieBase):
     last_watched_user: Optional[str] = None
     rating_key: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Queue schemas
@@ -134,8 +132,7 @@ class QueueItemResponse(BaseModel):
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class QueueTaskResponse(BaseModel):
@@ -151,8 +148,7 @@ class QueueTaskResponse(BaseModel):
     meta: Optional[str]
     items: Optional[list[QueueItemResponse]] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MovieListResponse(BaseModel):
@@ -197,8 +193,7 @@ class SeasonResponse(BaseModel):
     poster_path: Optional[str]
     episode_count: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EpisodeResponse(BaseModel):
@@ -233,8 +228,7 @@ class EpisodeResponse(BaseModel):
     subtitle_languages: Optional[str] = None
     container: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TVShowResponse(TVShowBase):
@@ -248,8 +242,7 @@ class TVShowResponse(TVShowBase):
     updated_at: datetime
     seasons: list[SeasonResponse] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TVShowListResponse(BaseModel):

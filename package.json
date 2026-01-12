@@ -4,7 +4,7 @@
   "description": "A modern web-based media management tool",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n backend,frontend -c cyan,magenta --prefix name \"npm:dev:backend\" \"node scripts/wait-for-health.js && npm run dev:frontend\"",
+    "dev": "concurrently -n backend,frontend -c cyan,magenta --prefix name \"python -m uvicorn app.main:app --reload --app-dir backend --host 0.0.0.0 --port 8000\" \"cd frontend && npm run dev\"",
     "dev:frontend": "cd frontend && npm run dev",
     "dev:backend": "node scripts/dev-backend.js",
     "build": "cd frontend && npm run build",

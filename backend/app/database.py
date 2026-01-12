@@ -1,15 +1,70 @@
+import os
+import shutil
+import logging
+from pathlib import Path
+
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import text
-from pathlib import Path
-import logging
+
+# Use Settings for database config so env overrides apply
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
-# Database path - use data directory for persistence
-DATA_DIR = Path(__file__).parent.parent / "data"
-DATA_DIR.mkdir(exist_ok=True)
-DATABASE_URL = f"sqlite+aiosqlite:///{DATA_DIR}/mediapruner.db"
+# Ensure data dir exists
+DATA_DIR = settings.data_dir
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+DATABASE_URL = settings.database_url
+
+def check_and_migrate_legacy_db(legacy_db: Path, new_db: Path, auto_move: bool = False) -> bool:
+    """Check for a legacy DB and optionally move it.
+
+    Returns True if a move occurred, False otherwise.
+    """
+    if not legacy_db.exists() or new_db.exists():
+        return False
+
+    if auto_move:
+        logger.info("MB_AUTO_MOVE_DB=true — attempting to migrate legacy DB into backend data dir")
+        try:
+            settings.data_dir.mkdir(parents=True, exist_ok=True)
+            backup = legacy_db.with_suffix('.bak')
+            shutil.copy2(legacy_db, backup)
+            try:
+                backup_size = backup.stat().st_size
+                logger.info(f"Created backup of legacy DB at {backup} ({backup_size} bytes)")
+            except Exception:
+                logger.info(f"Created backup of legacy DB at {backup}")
+
+            shutil.move(str(legacy_db), str(new_db))
+            try:
+                new_size = Path(new_db).stat().st_size
+                logger.info(f"Moved legacy DB from {legacy_db} to {new_db} (new size {new_size} bytes)")
+            except Exception:
+                logger.info(f"Moved legacy DB from {legacy_db} to {new_db} (size unknown)")
+
+            logger.info("Legacy DB migration complete. You can remove the backup file if everything looks good.")
+            return True
+        except Exception:
+            logger.exception("Failed to move legacy DB — see traceback. You can run backend/scripts/move_db_file.py to try manual migration.")
+            return False
+    else:
+        logger.warning(
+            f"Found legacy DB at {legacy_db} but not at {new_db}. "
+            "Set MB_DATABASE_URL to point to the desired DB or set MB_AUTO_MOVE_DB=true to move automatically."
+        )
+        return False
+
+# Check for legacy repo-root data file and offer optional automatic migration to backend/data
+project_root = Path(__file__).resolve().parents[1]
+legacy_db = project_root / 'data' / 'mediapruner.db'
+new_db = settings.data_dir / 'mediapruner.db'
+auto_move = os.getenv('MB_AUTO_MOVE_DB', 'false').lower() == 'true'
+_check_moved = check_and_migrate_legacy_db(legacy_db, new_db, auto_move)
+if _check_moved:
+    logger.info(f"Legacy DB migrated from {legacy_db} to {new_db}")
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = async_sessionmaker(

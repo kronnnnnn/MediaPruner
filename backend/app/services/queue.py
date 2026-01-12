@@ -150,6 +150,30 @@ async def list_tasks(limit: int = 50):
 
             tasks.append(d)
 
+        # Server-side: detect tasks that have failed items and mark them as 'failed' in the snapshot
+        try:
+            task_ids = [t['id'] for t in tasks]
+            if task_ids:
+                from sqlalchemy import select, func
+                from app.models import QueueItem, QueueStatus
+
+                q = await session.execute(
+                    select(QueueItem.task_id, func.count())
+                    .where(QueueItem.task_id.in_(task_ids))
+                    .where(QueueItem.status == QueueStatus.FAILED)
+                    .group_by(QueueItem.task_id)
+                )
+                failed_rows = q.fetchall()
+                failed_map = {r[0]: r[1] for r in failed_rows}
+                for t in tasks:
+                    if failed_map.get(t['id'], 0) > 0:
+                        # Force the snapshot to treat this task as failed so clients move it to history
+                        t['status'] = 'failed'
+                        t['has_failed_items'] = True
+        except Exception:
+            # Non-fatal; if this fails, continue without modifying statuses
+            pass
+
         # Attempt to provide a small preview for tasks by examining the first item's payload
         try:
             task_ids = [t['id'] for t in tasks]
@@ -722,7 +746,7 @@ class QueueWorker:
             )
             task = q.scalars().first()
             if not task:
-                logger.debug("No queued tasks found")
+                # No queued tasks — intentionally do not log to avoid noisy periodic messages.
                 return False
 
             # Lock and mark running

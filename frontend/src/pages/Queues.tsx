@@ -61,15 +61,15 @@ export default function Queues() {
   const currentTasks = tasks.filter(t => {
     const s = String(t.status).toLowerCase()
     const hasFailed = Array.isArray(t.items) && t.items.some((i) => String((i as unknown as Record<string, unknown>).status).toLowerCase() === 'failed')
-    // Treat a completed task with any failed items as history
-    if (s === 'completed' && hasFailed) return false
-    return !['completed', 'deleted', 'canceled'].includes(s)
+    // Any task that has failed items should be treated as history regardless of task-level status
+    if (hasFailed) return false
+    return !['completed', 'deleted', 'canceled', 'failed'].includes(s)
   })
 
   const historyTasks = tasks.filter(t => {
     const s = String(t.status).toLowerCase()
     const hasFailed = Array.isArray(t.items) && t.items.some((i) => String((i as unknown as Record<string, unknown>).status).toLowerCase() === 'failed')
-    return ['completed', 'deleted', 'failed', 'canceled'].includes(s) || (s === 'completed' && hasFailed)
+    return ['completed', 'deleted', 'failed', 'canceled'].includes(s) || hasFailed || (s === 'completed' && hasFailed)
   })
 
   const statusOrder = ['running', 'queued', 'completed', 'failed', 'canceled']

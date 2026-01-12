@@ -5,6 +5,7 @@ import httpx
 import logging
 import xml.etree.ElementTree as ET
 from typing import Optional, Dict, Any, List
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -25,19 +26,39 @@ class PlexService:
             'Accept': 'application/xml'
         }
         url = f"{self.host.rstrip('/')}{path}"
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                r = await client.get(url, params=params, headers=headers)
-                r.raise_for_status()
-                # Parse XML
-                root = ET.fromstring(r.text)
-                return root
-        except httpx.HTTPError as e:
-            logger.error(f"Plex HTTP error: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Plex unexpected error: {e}")
-            return None
+        # Use simple retry/backoff to tolerate transient network issues (e.g., ReadTimeout)
+        max_retries = 3
+        base_timeout = 10.0
+        for attempt in range(1, max_retries + 1):
+            try:
+                timeout = base_timeout * (1 + (attempt - 1) * 0.5)
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    r = await client.get(url, params=params, headers=headers)
+                    r.raise_for_status()
+                    # Parse XML
+                    root = ET.fromstring(r.text)
+                    return root
+            except httpx.HTTPError as e:
+                # If final attempt, log detailed info; otherwise warn and retry
+                if attempt >= max_retries:
+                    try:
+                        logger.error("Plex HTTP error for %s params=%s: %s", url, params, repr(e))
+                        resp = getattr(e, 'response', None)
+                        if resp is not None:
+                            try:
+                                logger.debug("Plex response status=%s body=%s", resp.status_code, resp.text)
+                            except Exception:
+                                logger.debug("Plex response present but failed to read body")
+                    except Exception:
+                        logger.exception("Plex HTTP error (logging failed)")
+                    return None
+                else:
+                    logger.warning("Plex HTTP attempt %d/%d failed for %s: %s - retrying", attempt, max_retries, url, repr(e))
+                    await asyncio.sleep(min(5, 0.5 * (2 ** (attempt - 1))))
+                    continue
+            except Exception as e:
+                logger.exception("Plex unexpected error for %s params=%s: %s", url, params, e)
+                return None
 
     async def search(self, query: str) -> List[Dict[str, Any]]:
         """Search Plex and return a list of dicts with attributes"""

@@ -910,7 +910,23 @@ async def delete_movie(
         errors.append(f"Failed to delete file/folder: {str(e)}")
 
     await db.delete(movie)
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as e:
+        # Handle rare concurrency/stale-row issues where the row was already
+        # modified or removed by another transaction. Log and continue so the
+        # delete request does not crash the server.
+        from sqlalchemy.orm.exc import StaleDataError
+        import logging
+
+        logger = logging.getLogger(__name__)
+        if isinstance(e, StaleDataError):
+            logger.warning(f"StaleDataError while deleting movie id={movie_id}: {e}")
+            await db.rollback()
+        else:
+            logger.exception(f"Unexpected error committing movie delete id={movie_id}: {e}")
+            await db.rollback()
+            raise
 
     return {
         "message": "Movie deleted successfully",
@@ -963,7 +979,20 @@ async def delete_movies_batch(
         await db.delete(movie)
         deleted += 1
 
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as e:
+        from sqlalchemy.orm.exc import StaleDataError
+        import logging
+
+        logger = logging.getLogger(__name__)
+        if isinstance(e, StaleDataError):
+            logger.warning(f"StaleDataError during batch delete: {e}")
+            await db.rollback()
+        else:
+            logger.exception(f"Unexpected error committing batch delete: {e}")
+            await db.rollback()
+            raise
 
     return {
         "message": f"Deleted {deleted} of {len(request.movie_ids)} movies",
@@ -1173,9 +1202,53 @@ async def analyze_movie_file(
         logger.error(f"Exception while analyzing movie_id={movie.id}, path={movie.file_path}: {e}")
         raise HTTPException(status_code=500, detail=f"Error analyzing file: {str(e)}")
 
+    # If MediaInfo didn't find resolution or failed, attempt ffprobe fallback
+    try:
+        need_ffprobe = (not info.success) or (not info.video_resolution and (info.video_width is None or info.video_height is None))
+        if need_ffprobe:
+            try:
+                fb = mediainfo.ffprobe_probe(movie.file_path)
+                # Merge diagnostics
+                if getattr(info, 'diagnostics', None) is None:
+                    info.diagnostics = {}
+                try:
+                    info.diagnostics.update(getattr(fb, 'diagnostics', {}) or {})
+                except Exception:
+                    pass
+
+                # If ffprobe found resolution or codec info, prefer that
+                if fb.video_resolution and not info.video_resolution:
+                    info.video_resolution = fb.video_resolution
+                    info.video_width = fb.video_width
+                    info.video_height = fb.video_height
+                if fb.video_codec and not info.video_codec:
+                    info.video_codec = fb.video_codec
+                if fb.audio_codec and not info.audio_codec:
+                    info.audio_codec = fb.audio_codec
+
+                # If MediaInfo originally failed but ffprobe returned streams, treat as success
+                if (not info.success) and (fb.video_resolution or fb.audio_codec or fb.diagnostics.get('ffprobe_streams')):
+                    info.success = True
+                    info.error = None
+                # If ffprobe detected ffmpeg errors, pass them through
+                if fb.error:
+                    info.error = fb.error
+                    info.success = fb.success
+            except Exception as e:
+                logger.debug(f"ffprobe fallback failed for movie_id={movie.id}: {e}")
+    except Exception:
+        # ensure fallback errors don't crash the endpoint
+        pass
+
     if not info.success:
         # Mark as failed for follow-up and log details
         movie.media_info_failed = True
+        # If analysis completely failed (no container/audio/video), also mark
+        # metadata (scraped) as false so UI shows the metadata status as failed
+        try:
+            movie.scraped = False
+        except Exception:
+            pass
         await db.commit()
 
         # Insert a dedicated log entry so failures are always visible in
@@ -1183,7 +1256,15 @@ async def analyze_movie_file(
         from app.models import LogEntry
         from datetime import datetime
         try:
+            import json as _json
             track_summary = getattr(info, 'error', None) or 'No tracks found'
+            diagnostics = ''
+            try:
+                if getattr(info, 'diagnostics', None):
+                    diagnostics = _json.dumps(info.diagnostics)
+            except Exception:
+                diagnostics = str(getattr(info, 'diagnostics', ''))
+
             log_entry = LogEntry(
                 timestamp=datetime.utcnow(),
                 level='WARNING',
@@ -1191,7 +1272,7 @@ async def analyze_movie_file(
                 message=f"Analyze failed for movie_id={movie.id}, path={movie.file_path}: {info.error}",
                 module='app.services.mediainfo',
                 function='analyze_file',
-                exception=track_summary,
+                exception=f"{track_summary} | diagnostics: {diagnostics}",
             )
             db.add(log_entry)
             await db.commit()
@@ -1201,7 +1282,7 @@ async def analyze_movie_file(
 
         logger.warning(f"Media analysis failed for movie_id={movie.id}, path={movie.file_path}: {info.error}")
         raise HTTPException(status_code=400,
-                            detail=info.error or "Failed to analyze file")
+                    detail=info.error or "Failed to analyze file")
 
     logger.info(f"Media analysis succeeded for movie_id={movie.id}")
     # Update movie with media info
@@ -1243,6 +1324,8 @@ async def analyze_movie_file(
             "audio_tracks": len(info.audio_tracks),
             "subtitle_count": info.subtitle_count,
             "subtitle_languages": info.subtitle_languages,
+            # Diagnostics may contain ffprobe/ffmpeg output helpful for troubleshooting
+            "diagnostics": getattr(info, 'diagnostics', {})
         }
     }
 
